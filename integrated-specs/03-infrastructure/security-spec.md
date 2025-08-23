@@ -77,22 +77,33 @@ graph TB
 | アカウントロック | 5回失敗で30分ロック | 管理者は3回 |
 | 初期パスワード | 初回ログイン時に強制変更 | - |
 
-##### 3.1.3 多要素認証（MFA）実装
+##### 3.1.3 多要素認証（MFA）実装 ★MVP必須
 ```yaml
 実装方式:
   第1要素（知識）:
     - パスワード
-    - セキュリティ質問
+    - PINコード
   
   第2要素（所持）:
-    - TOTP（Google Authenticator等）
-    - SMS（フォールバック用）
-    - ハードウェアトークン（FIDO2）
+    - TOTP（Google Authenticator/Microsoft Authenticator）
+    - SMS（フォールバック用、非推奨）
+    - ハードウェアトークン（FIDO2/WebAuthn）
+    - プッシュ通知（スマホアプリ）
   
   第3要素（生体）:
-    - 指紋認証
-    - 顔認証
-    - 虹彩認証（オプション）
+    - 指紋認証（TouchID/Windows Hello）
+    - 顔認証（FaceID/Windows Hello）
+
+実装詳細:
+  OAuth 2.0 + OpenID Connect:
+    - 認可サーバー: AWS Cognito / Azure AD B2C
+    - JWTトークン: RS256署名、有効期15分
+    - リフレッシュトークン: 7日間有効
+  
+  SSO統合:
+    - SAML 2.0 / OIDC対応
+    - Google Workspace / Microsoft 365連携
+    - 社内LDAP / Active Directory連携
 ```
 
 #### 3.2 認可（Authorization）
