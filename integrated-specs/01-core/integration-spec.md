@@ -512,25 +512,189 @@ CI/CD統合:
 
 ---
 
-### 10. 移行時の統合考慮事項
+### 10. インフラ統合アーキテクチャ ★最適化済
 
-#### 10.1 段階的統合アプローチ
+#### 10.1 コンテナ統合基盤（EKS→ECS/Fargate移行）
 
+##### 10.1.1 ECS/Fargate統合戦略
 ```yaml
-Phase 1:
-  - 基本マスターデータ統合
-  - 認証基盤統合
-  - 基本API連携
+アーキテクチャ変更の理由:
+  - コスト削減: EKSクラスター運用費（$75/月）削除
+  - 管理簡素化: Kubernetesクラスター運用不要
+  - AWS統合: ネイティブサービス連携強化
+  - 自動スケーリング: Fargateによる完全管理
 
-Phase 2:
+ECSクラスター構成:
+  クラスター名: itdo-erp-cluster
+  起動タイプ: Fargate（サーバーレス）
+  
+  サービス構成:
+    - erp-api-service（API Gateway + REST API）
+    - erp-web-service（Next.js Web Frontend）
+    - erp-worker-service（バッチ・非同期処理）
+    - erp-scheduler-service（定期処理）
+
+  タスク定義最適化:
+    CPU: 0.25〜2 vCPU（動的スケーリング）
+    メモリ: 512MB〜8GB（ワークロード適応）
+    ネットワーク: awsvpc（セキュリティグループ分離）
+```
+
+##### 10.1.2 データベース統合（MongoDB→PostgreSQL統合）
+```yaml
+統合DB戦略（Single Database Pattern）:
+  理由:
+    - 管理コスト削減: 複数DB運用費削減
+    - 整合性向上: ACID準拠トランザクション
+    - バックアップ簡素化: 統合バックアップ戦略
+    - 監視集約: 単一ポイント監視
+    
+  PostgreSQL 15 + JSONB活用:
+    - 構造化データ: リレーショナルテーブル
+    - 半構造化データ: JSONB列（MongoDB代替）
+    - 全文検索: PostgreSQL内蔵機能
+    - インデックス最適化: GINインデックス（JSONB）
+    
+  スキーマ設計:
+    - テナント分離: Schema-per-tenant
+    - データパーティション: 時系列・テナント別
+    - レプリケーション: リードレプリカ分散
+```
+
+#### 10.2 ネットワーク統合（VPCエンドポイント最適化）
+
+##### 10.2.1 VPCエンドポイント統合設計 ★コスト削減
+```yaml
+NATゲートウェイ削除によるコスト最適化:
+  削減額: 月額$90（NATゲートウェイ）→ $20（VPCエンドポイント）
+  純削減: 月額$70、年額$840
+  
+VPCエンドポイント統合構成:
+  Gateway Endpoint（無料）:
+    - itdo-erp-s3-endpoint
+      用途: ファイル・画像・バックアップ
+      接続: 全プライベートサブネット
+    
+    - itdo-erp-dynamodb-endpoint
+      用途: セッション・キャッシュ（将来）
+      接続: アプリケーション層のみ
+  
+  Interface Endpoint（有料・必要最小限）:
+    - ECS Endpoint
+      用途: タスク定義・サービス管理
+      セキュリティグループ: ECS-tasks-sg
+    
+    - ECR Endpoint（api + dkr）
+      用途: コンテナイメージ取得
+      セキュリティグループ: ECS-tasks-sg
+    
+    - CloudWatch Logs Endpoint
+      用途: アプリケーションログ出力
+      セキュリティグループ: ECS-tasks-sg
+    
+    - SSM Endpoint
+      用途: 設定パラメータ取得
+      セキュリティグループ: ECS-tasks-sg
+
+セキュリティグループ最適化:
+  ECS-tasks-sg:
+    Inbound: ALBからの443のみ
+    Outbound: 
+      - VPCエンドポイントへの443
+      - RDSへの5432（PostgreSQL）
+      - Redis（ElastiCache）への6379
+```
+
+##### 10.2.2 プライベート通信の完全な分離
+```yaml
+ゼロインターネット通信設計:
+  - 全AWSサービス通信: VPCエンドポイント経由
+  - 外部API通信: ALB→CloudFront→外部のみ
+  - 管理者アクセス: VPN + Session Manager
+  
+DNS解決最適化:
+  - Route 53 Resolver（VPC内）
+  - プライベートHosted Zone活用
+  - VPCエンドポイント専用DNS設定
+```
+
+#### 10.3 統合監視・ログアーキテクチャ
+
+##### 10.3.1 CloudWatch統合監視
+```yaml
+メトリクス統合:
+  ECSメトリクス:
+    - CPU使用率（サービス別）
+    - メモリ使用率（タスク別）
+    - ネットワークI/O（エンドポイント別）
+    - タスク起動/停止イベント
+  
+  RDSメトリクス:
+    - 接続数・CPU・メモリ
+    - スロークエリ検出
+    - レプリケーション遅延
+  
+  VPCエンドポイントメトリクス:
+    - エンドポイント別トラフィック量
+    - レスポンス時間・エラー率
+    - コスト最適化監視
+
+ログ統合戦略:
+  - 全ログ: CloudWatch Logs経由（VPCエンドポイント使用）
+  - 長期保存: S3（Lifecycle経由）
+  - 分析: Athena + QuickSight
+  - アラート: SNS + Lambda統合
+```
+
+##### 10.3.2 統合アプリケーション監視
+```yaml
+APM統合:
+  - AWS X-Ray: 分散トレーシング
+  - カスタムメトリクス: ビジネス指標
+  - エラー追跡: Sentry統合（VPCエンドポイント経由）
+  
+ダッシュボード統合:
+  - CloudWatch Dashboard: インフラ統合ビュー
+  - Grafana: アプリケーション統合監視
+  - 統合アラート: PagerDuty連携
+```
+
+#### 10.4 移行時の統合考慮事項
+
+##### 10.4.1 段階的統合アプローチ
+```yaml
+Phase 1（インフラ基盤統合）:
+  - ECS/Fargateクラスター構築
+  - VPCエンドポイント設定
+  - PostgreSQL統合DB構築
+  - 基本監視設定
+
+Phase 2（アプリケーション統合）:
+  - 基本マスターデータ統合
+  - 認証基盤統合（SSO）
+  - 基本API連携
+  - ログ・監視統合
+
+Phase 3（高度統合機能）:
   - イベント駆動連携
   - リアルタイムデータ同期
   - 外部システム連携
+  - AI/ML統合・完全自動化
+```
 
-Phase 3:
-  - 高度な統合機能
-  - AI/ML統合
-  - 完全自動化
+##### 10.4.2 統合テスト戦略
+```yaml
+インフラ統合テスト:
+  - VPCエンドポイント接続テスト
+  - ECS/Fargateデプロイテスト  
+  - データベース統合テスト
+  - 監視・アラートテスト
+
+アプリケーション統合テスト:
+  - API統合テスト（Postman/Newman）
+  - E2E統合テスト（Cypress）
+  - 負荷統合テスト（JMeter/K6）
+  - セキュリティ統合テスト
 ```
 
 ---

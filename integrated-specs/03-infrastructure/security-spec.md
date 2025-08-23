@@ -512,7 +512,256 @@ BCP訓練:
 
 ---
 
-### 11. 実装ロードマップ
+### 11. セキュリティ強化策（12項目）★高優先度
+
+#### 11.1 AWS セキュリティサービス統合
+
+##### 11.1.1 GuardDuty + Security Hub 統合監視
+```yaml
+Amazon GuardDuty:
+  有効化範囲: 全AWSアカウント・全リージョン
+  検出対象:
+    - 不審なネットワーク活動
+    - DNS攻撃・暗号通貨マイニング
+    - 侵害されたインスタンス通信
+    - 不正なAPIコール
+  
+  自動対応:
+    - Critical脅威: 即座にSecurity Group遮断
+    - High脅威: SOCアラート + 自動チケット作成
+    - Medium脅威: ログ記録 + 週次レビュー
+
+AWS Security Hub:
+  統合ダッシュボード: CIS、PCI DSS、AWS Foundational
+  自動修復: Config Rules + Lambda
+  コンプライアンススコア: 85%以上維持
+  月次セキュリティレポート自動生成
+```
+
+##### 11.1.2 WAF + Shield Advanced 実装
+```yaml
+AWS WAF:
+  適用対象: ALB、CloudFront、API Gateway
+  
+  ルールセット:
+    - AWSマネージドルール（Core、Known Bad Inputs）
+    - カスタムルール（レート制限、地域制限）
+    - OWASP Top 10対策ルール
+    - SQLインジェクション・XSS防御
+  
+  自動ブロック条件:
+    - 1分間に100回以上のリクエスト
+    - 日本国外からのアクセス（管理者除く）
+    - 既知の攻撃パターン
+
+AWS Shield Advanced:
+  DDoS保護: L3-L7対応、24時間サポート
+  攻撃時の自動コスト保護
+  DRTチームによる緊急対応
+```
+
+#### 11.2 脆弱性管理強化
+
+##### 11.2.1 自動脆弱性スキャン
+```yaml
+Amazon Inspector:
+  スキャン対象:
+    - EC2インスタンス（OS・アプリケーション）
+    - ECRコンテナイメージ
+    - Lambda関数
+  
+  スキャン頻度:
+    - Critical/High: 日次
+    - Medium: 週次
+    - Low: 月次
+  
+  自動修復:
+    - OSパッケージ更新: Systems Manager Patch Manager
+    - コンテナ再ビルド: ECR脆弱性検出時
+    - 修復SLA: Critical 24時間、High 72時間
+
+定期ペネトレーションテスト:
+  外部実施: 年2回（専門業者）
+  内部実施: 四半期1回（セキュリティチーム）
+  
+  対象範囲:
+    - 外部公開Webアプリケーション
+    - API エンドポイント
+    - VPN・リモートアクセス
+    - ワイヤレスネットワーク
+```
+
+##### 11.2.2 コード脆弱性管理
+```yaml
+SAST（Static Application Security Testing）:
+  - SonarQube Enterprise（OWASP Top 10対応）
+  - 毎プルリクエストで自動実行
+  - 脆弱性修正完了まで本番デプロイ禁止
+
+DAST（Dynamic Application Security Testing）:
+  - OWASP ZAP自動スキャン
+  - Burp Suite Enterprise（手動検証）
+  - ステージング環境で実行
+
+SCA（Software Composition Analysis）:
+  - Snyk（オープンソース脆弱性管理）
+  - 依存関係ライセンス管理
+  - 脆弱性のあるライブラリ使用禁止
+```
+
+#### 11.3 ネットワークセキュリティ強化
+
+##### 11.3.1 VPCエンドポイント活用によるコスト最適化
+```yaml
+VPCエンドポイント設定:
+  Gateway Endpoint（無料）:
+    - S3（ファイル・バックアップアクセス）
+    - DynamoDB（セッションストア）
+  
+  Interface Endpoint（有料、コスト最適化）:
+    - ECS（コンテナ管理）
+    - ECR（イメージ取得）
+    - CloudWatch（ログ・メトリクス）
+    - SSM（パラメータストア）
+    - Secrets Manager（認証情報）
+  
+  セキュリティ効果:
+    - インターネット経由通信の排除
+    - NAT Gateway費用削減（月額$90→$20）
+    - トラフィック監視・制御の一元化
+    - DNS攻撃対策（Private DNS）
+
+ネットワークセグメンテーション:
+  - プライベートサブネット完全分離
+  - セキュリティグループ最小権限
+  - NACLによる追加フィルタリング
+```
+
+##### 11.3.2 高度なネットワーク監視
+```yaml
+VPC Flow Logs:
+  - 全VPC・全ENIで有効化
+  - S3保存（Partitioned by date）
+  - Athenaによる分析・可視化
+  - 異常パターン自動検出
+
+AWS Network Firewall:
+  - IDS/IPS機能によるマルウェア検知
+  - SNIフィルタリング（C&Cサーバー通信遮断）
+  - 地理的制限（日本国外アクセス制御）
+  - 時間ベース制御（営業時間外制限）
+```
+
+#### 11.4 特権アクセス管理（PAM）
+
+##### 11.4.1 Session Manager + CloudTrail 統合
+```yaml
+AWS Systems Manager Session Manager:
+  - EC2/ECSタスクへのSSH/RDP不要
+  - セッション録画・再生機能
+  - 特定IPからのアクセス制限
+  - MFA必須設定
+
+CloudTrail詳細監査:
+  - 全APIコール記録（データイベント含む）
+  - ファイルアクセス監査（S3 Object Level）
+  - 改ざん防止（S3 Object Lock 7年間）
+  - 異常アクセスパターン検知・アラート
+
+特権アカウント管理:
+  - AWS IAM Identity Center（SSO）
+  - 時限権限付与（JIT: Just-In-Time）
+  - 承認ワークフロー（多段階承認）
+  - セッション監視・制御
+```
+
+##### 11.4.2 秘密情報管理
+```yaml
+AWS Secrets Manager:
+  - DB接続情報の自動ローテーション
+  - API キー・証明書の暗号化保存
+  - アプリケーション統合（SDK使用）
+  - アクセスログ・監査証跡
+
+Amazon KMS:
+  - カスタマーマネージドキー使用
+  - キーローテーション（年次自動）
+  - キー使用状況監視
+  - 暗号化範囲: EBS、S3、RDS、Lambda
+```
+
+#### 11.5 ゼロトラスト実装
+
+##### 11.5.1 デバイス認証・管理
+```yaml
+エンドポイントセキュリティ:
+  - Microsoft Defender for Business
+  - デバイス登録・証明書管理
+  - リモートワイプ機能
+  - ジェイルブレイク・ルート化検知
+
+条件付きアクセス:
+  - 管理対象デバイスからのみアクセス許可
+  - 地理的制限（日本国内のみ）
+  - 時間ベース制限（営業時間内）
+  - リスクベース認証（異常行動検知）
+
+ネットワーク接続制御:
+  - VPN不使用時の社内リソースアクセス禁止
+  - BYOD端末の制限された接続
+  - ゲストネットワーク完全分離
+```
+
+##### 11.5.2 継続的な信頼評価
+```yaml
+ユーザー行動分析（UEBA）:
+  - 通常と異なるアクセスパターン検知
+  - 機械学習による異常検知
+  - リスクスコア算出・自動対応
+  - 特権アカウント重点監視
+
+適応的認証:
+  - リスクレベルに応じたMFA要求
+  - 段階的な権限昇格
+  - セッション継続性の動的判断
+  - コンテキスト認識（場所・時間・デバイス）
+```
+
+#### 11.6 データ保護強化
+
+##### 11.6.1 データ分類・DLP
+```yaml
+データ分類:
+  - 機密レベル定義（Public/Internal/Confidential/Restricted）
+  - 自動タグ付け（AWS Macie使用）
+  - データライフサイクル管理
+  - 法的要件マッピング（電子帳簿保存法対応）
+
+データ損失防止（DLP）:
+  - Microsoft Purview DLP
+  - 機密データ検出・分類
+  - 外部送信ブロック・アラート
+  - クラウドアップロード制御
+```
+
+##### 11.6.2 エンドポイント保護
+```yaml
+EDR（Endpoint Detection and Response）:
+  - CrowdStrike Falcon / Microsoft Defender
+  - リアルタイム脅威検知・対応
+  - フォレンジック証跡保存
+  - 自動隔離・修復機能
+
+USBデバイス制御:
+  - 許可デバイスのみアクセス可能
+  - データコピー時の自動暗号化
+  - 操作ログ・監査証跡
+  - 紛失時のリモートワイプ
+```
+
+---
+
+### 12. 実装ロードマップ
 
 | フェーズ | 期間 | 実装内容 | 優先度 |
 |---------|------|---------|--------|
