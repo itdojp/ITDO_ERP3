@@ -27,7 +27,12 @@ async function processMessage(redis, msg) {
 
   // simulate invoice generation
   const invoiceId = `INV-${content.timesheetId}-${Date.now()}`;
-  console.log(`[consumer] invoice generated: ${invoiceId} for ${content.timesheetId}`);
+  const now = Date.now();
+  let latencyMs = null;
+  try { latencyMs = now - new Date(content.occurredAt).getTime(); } catch (_) {}
+  const latencyInfo = latencyMs != null ? ` latency=${latencyMs}ms` : '';
+  const attach = content.attachmentUrl ? ` attachmentUrl=${content.attachmentUrl}` : '';
+  console.log(`[consumer] invoice generated: ${invoiceId} for ${content.timesheetId}${latencyInfo}${attach}`);
   return { status: 'ok', invoiceId };
 }
 
@@ -76,4 +81,3 @@ main().catch((e) => {
   console.error('[consumer] error', e);
   process.exit(1);
 });
-
