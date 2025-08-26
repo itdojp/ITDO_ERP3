@@ -4,7 +4,7 @@
   "type": "module",
   "dependencies": {
     "amqplib": "^0.10.3",
-    "nanoid": "^5.0.7"
+    "nanoid": "^5.0.7",
+    "minio": "^8.0.1"
   }
 }
-

@@ -7,6 +7,7 @@
 - Redis (Idempotency-Key で重複抑止)
 - Producer (timesheet_approved を発行、timesheetIdでシャーディング)
 - Consumer (各shardを単一コンシューマで処理→invoice_generatedをログ出力)
+ - MinIO（任意）: 大きなペイロードをS3互換ストレージへ保存し、イベントは参照URLを送出
 
 前提
 - Docker / Docker Compose が利用可能
@@ -22,6 +23,8 @@ docker compose up --build
 - PRODUCER_BATCH: 送信イベント数（デフォルト100）
 - PRODUCER_RPS: 送信レート（events/s, デフォルト50）
 - FAIL_RATE: 失敗率（0.0-1.0, デフォルト0.0）→DLQ動作の検証に使用
+ - USE_MINIO: trueでMinIOを使用（デフォルトfalse）
+ - MINIO_ENDPOINT/MINIO_PORT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY/MINIO_BUCKET
 
 テスト
 - Producerログ: 送信件数とシャード割り当て
@@ -33,6 +36,7 @@ docker compose up --build
 - 再送（同一Idempotency-Key）→重複抑止（skip）
 - 同一timesheetId→同一shard→コンシューマ単一で順序維持
 - FAIL_RATE>0 でDLQへ退避→手動でリドライブ（管理画面 or rabbitmqadmin）
+ - MinIO使用時: コンソール http://localhost:9001 でオブジェクト（eventsバケット）を確認
 
 終了
 ```
@@ -41,4 +45,8 @@ docker compose down -v
 
 メモ
 - 大きなペイロードはS3互換（MinIO）での格納も可能。必要ならcomposeにMinIOサービスを追加して参照URL方式に拡張可能です。
+ - 既定でMinIOサービスは同梱。`USE_MINIO=true`でProducerがバケット作成/アップロードを行い、イベントに`attachmentUrl`を付与します。
 
+計測（レイテンシ）
+- Consumerは `occurredAt` と処理完了時刻からE2Eレイテンシを算出してログ出力（ms）。
+- ログから集計して `poc/event-backbone/metrics.md` に転記してください。
