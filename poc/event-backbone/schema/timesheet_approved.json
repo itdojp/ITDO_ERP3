@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://itdo-erp3/poc/schema/timesheet_approved.json",
+  "title": "pm.timesheet.approved",
+  "type": "object",
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "tenantId": { "type": "string" },
+    "timesheetId": { "type": "string" },
+    "employeeId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "approvedBy": { "type": "string" },
+    "hours": { "type": "number", "minimum": 0 },
+    "rateType": { "type": "string", "enum": ["standard", "overtime", "holiday", "night"] },
+    "idempotencyKey": { "type": "string" }
+  },
+  "required": ["eventId", "occurredAt", "timesheetId", "employeeId", "projectId", "approvedBy", "hours", "rateType"],
+  "additionalProperties": false
+}
+

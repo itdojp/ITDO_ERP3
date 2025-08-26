@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://itdo-erp3/poc/schema/invoice_generated.json",
+  "title": "fi.invoice.generated",
+  "type": "object",
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "tenantId": { "type": "string" },
+    "invoiceId": { "type": "string" },
+    "timesheetId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "customerId": { "type": "string" },
+    "amount": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+    "idempotencyKey": { "type": "string" }
+  },
+  "required": ["eventId", "occurredAt", "invoiceId", "timesheetId", "projectId", "customerId", "amount", "currency"],
+  "additionalProperties": false
+}
+
