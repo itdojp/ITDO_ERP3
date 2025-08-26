@@ -51,8 +51,29 @@ async function consume(redis) {
     ch.consume(q, async (msg) => {
       if (!msg) return;
       try {
-        const res = await processMessage(redis, msg);
-        if (res.status === 'ok' || res.status === 'duplicate') ch.ack(msg); else ch.reject(msg, false);
+        const payload = JSON.parse(msg.content.toString());
+        // route by event type / payload shape
+        if (payload.eventType === 'sales.credit.approved') {
+          await redis.set(`order:${payload.orderId}:credit`, 'approved', 'EX', 24 * 60 * 60);
+          console.log(`[fi-service] credit approved for order ${payload.orderId}`);
+          ch.ack(msg);
+        } else if (payload.eventType === 'sales.credit.rejected') {
+          await redis.set(`order:${payload.orderId}:credit`, 'rejected', 'EX', 24 * 60 * 60);
+          console.log(`[fi-service] credit rejected for order ${payload.orderId}`);
+          ch.ack(msg);
+        } else if (payload.eventType === 'pm.project.created') {
+          await redis.set(`order:${payload.orderId}:projectId`, payload.projectId, 'EX', 24 * 60 * 60);
+          console.log(`[fi-service] mapped order ${payload.orderId} -> project ${payload.projectId}`);
+          ch.ack(msg);
+        } else if (payload.timesheetId) {
+          // legacy timesheet -> invoice path
+          msg.content = Buffer.from(JSON.stringify(payload));
+          const res = await processMessage(redis, msg);
+          if (res.status === 'ok' || res.status === 'duplicate') ch.ack(msg); else ch.reject(msg, false);
+        } else {
+          // ignore other events for now
+          ch.ack(msg);
+        }
       } catch (e) {
         console.warn('[fi-service] error:', e.message);
         ch.reject(msg, false);
@@ -74,6 +95,12 @@ async function main() {
     const rows = await multi.exec();
     res.json(rows.map(([, v]) => v).filter(Boolean));
   });
+  app.get('/orders/:orderId/status', async (req, res) => {
+    const { orderId } = req.params;
+    const credit = await redis.get(`order:${orderId}:credit`);
+    const projectId = await redis.get(`order:${orderId}:projectId`);
+    res.json({ orderId, credit: credit || 'unknown', projectId: projectId || null });
+  });
   app.get('/invoices/:id', async (req, res) => {
     const row = await redis.hgetall(storeKey(req.params.id));
     if (!row || !row.invoiceId) return res.status(404).json({ error: 'not found' });
@@ -83,4 +110,3 @@ async function main() {
 }
 
 main().catch((e) => { console.error('[fi-service] fatal', e); process.exit(1); });
-

@@ -1,0 +1,11 @@
+{
+  "name": "sales-service",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "amqplib": "^0.10.3",
+    "express": "^4.19.2",
+    "nanoid": "^5.0.7"
+  }
+}
+
