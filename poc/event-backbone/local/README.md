@@ -60,3 +60,12 @@ API（サービス間連携の簡易テスト）
 - FIサービス（参照）:
   - `GET http://localhost:3002/invoices` → 直近の請求ドラフト一覧
   - `GET http://localhost:3002/invoices/{id}` → 個別取得
+
+- Salesサービス（受注確定）: `POST http://localhost:3003/sales/orders/confirm`
+  - body例: `{ "orderId": "SO-1001", "customerId": "C-001", "amount": 500000 }`
+  - 応答: `{ accepted: true, eventId, shard }`
+
+- Creditサービス（自動処理）: 環境変数 `CREDIT_LIMIT`（デフォルト 1,000,000）以下なら `sales.credit.approved` を発行
+
+- FIサービス（受注ステータス）:
+  - `GET http://localhost:3002/orders/{orderId}/status` → `credit`（approved/rejected/unknown）と `projectId`

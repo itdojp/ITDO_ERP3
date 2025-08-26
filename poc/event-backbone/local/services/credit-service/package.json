@@ -1,0 +1,9 @@
+{
+  "name": "credit-service",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "amqplib": "^0.10.3"
+  }
+}
+

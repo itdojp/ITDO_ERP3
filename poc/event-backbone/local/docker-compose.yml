@@ -84,3 +84,23 @@ services:
     depends_on:
       - rabbitmq
       - redis
+
+  sales-service:
+    build: ./services/sales-service
+    environment:
+      - AMQP_URL=amqp://guest:guest@rabbitmq:5672
+      - NUM_SHARDS=${NUM_SHARDS:-4}
+      - PORT=3003
+    ports:
+      - "3003:3003"
+    depends_on:
+      - rabbitmq
+
+  credit-service:
+    build: ./services/credit-service
+    environment:
+      - AMQP_URL=amqp://guest:guest@rabbitmq:5672
+      - NUM_SHARDS=${NUM_SHARDS:-4}
+      - CREDIT_LIMIT=${CREDIT_LIMIT:-1000000}
+    depends_on:
+      - rabbitmq

@@ -88,9 +88,40 @@ async function main() {
     }
   });
 
+  // consume sales.order.confirmed -> publish pm.project.created
+  for (let i = 0; i < NUM_SHARDS; i++) {
+    const cch = await conn.createChannel();
+    await cch.prefetch(1);
+    const q = `shard.${i}`;
+    cch.consume(q, async (msg) => {
+      if (!msg) return;
+      try {
+        const payload = JSON.parse(msg.content.toString());
+        if (payload.eventType === 'sales.order.confirmed') {
+          const projectId = `PRJ-${payload.orderId}`;
+          const event = {
+            eventId: msg.properties.messageId + '.project',
+            occurredAt: new Date().toISOString(),
+            eventType: 'pm.project.created',
+            tenantId: payload.tenantId,
+            orderId: payload.orderId,
+            projectId
+          };
+          cch.publish('events', `shard.${i}`, Buffer.from(JSON.stringify(event)), {
+            contentType: 'application/json', messageId: event.eventId, headers: { orderId: payload.orderId }
+          });
+          console.log(`[pm-service] project created ${projectId} for order ${payload.orderId}`);
+        }
+        cch.ack(msg);
+      } catch (e) {
+        console.warn('[pm-service] consume error', e.message);
+        cch.reject(msg, false);
+      }
+    });
+  }
+
   app.listen(PORT, () => console.log(`[pm-service] listening on :${PORT}`));
   process.on('SIGINT', () => conn.close().finally(() => process.exit(0)));
 }
 
 main().catch((e) => { console.error('[pm-service] fatal', e); process.exit(1); });
-
