@@ -1,9 +1,11 @@
 {
-  "name": "credit-service",
+  "name": "contract-service",
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
     "amqplib": "^0.10.3",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1"
   }
 }
+

@@ -105,6 +105,7 @@ services:
       - AMQP_URL=amqp://guest:guest@rabbitmq:5672
       - NUM_SHARDS=${NUM_SHARDS:-4}
       - CREDIT_LIMIT=${CREDIT_LIMIT:-1000000}
+      - PORT=3004
     depends_on:
       - rabbitmq
 
@@ -117,3 +118,16 @@ services:
       - "3005:3005"
     depends_on:
       - redis
+
+  contract-service:
+    build: ./services/contract-service
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - AMQP_URL=amqp://guest:guest@rabbitmq:5672
+      - NUM_SHARDS=${NUM_SHARDS:-4}
+      - PORT=3006
+    ports:
+      - "3006:3006"
+    depends_on:
+      - redis
+      - rabbitmq
