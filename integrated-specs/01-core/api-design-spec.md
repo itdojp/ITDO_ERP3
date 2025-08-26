@@ -215,6 +215,25 @@ GET /api/v1/projects?fields=id,name,status
 GET /api/v1/projects?include=manager,tasks
 ```
 
+#### 2.5 冪等性（Idempotency）
+
+##### 2.5.1 Idempotency-Key ヘッダー（POST/非同期アクション）
+```http
+Idempotency-Key: {uuid-v4}
+```
+
+- 目的: 二重送信による重複作成や重複課金の防止。
+- 対象: POST 作成系エンドポイント、長時間実行の非同期アクション。
+- 仕様:
+  - 同一 `Idempotency-Key` + 同一認可主体 + 同一リクエストボディ の組み合わせは、一定期間（標準24時間）同一レスポンスを返却する。
+  - サーバはキーとレスポンス内容のハッシュを保存し、競合は 409(CONFLICT) を返す。
+  - 非同期受付時は 202(ACCEPTED) とジョブIDを返し、再送も同一ジョブIDを返却する。
+
+##### 2.5.2 冪等性の実装指針
+- 作成系: 事前生成ID方式（クライアント側で生成したリソースIDを使用）または Idempotency-Key テーブルでの重複制御。
+- 更新系: PUT/PATCH はバージョン番号（`If-Match`/ETag）による楽観ロックと組み合わせる。
+- 副作用のあるアクション: 冪等トークンを必須化し、実行履歴で重複抑止。
+
 ---
 
 ### 3. GraphQL API設計
