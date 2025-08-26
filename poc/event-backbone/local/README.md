@@ -31,6 +31,7 @@ docker compose up --build
 - Consumerログ: invoice生成（冪等時はskip表示）
 - RabbitMQ管理画面: http://localhost:15672 （user: guest / pass: guest）
 - Redis: idempotencyキーを格納（`idemp:{key}`）
+- メトリクスダッシュボード: http://localhost:3005 （E2Eレイテンシ、件数の簡易表示）
 
 想定確認
 - 再送（同一Idempotency-Key）→重複抑止（skip）
