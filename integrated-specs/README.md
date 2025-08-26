@@ -115,6 +115,7 @@ integrated-specs/
 - [レビュー結果](../erp-requirements-spec-review.md)
 - [PlanO仕様書群](../PlanO/)
 - [PlanS仕様書群](../PlanS/)
+- [アーキテクチャ決定記録（ADR）](../adr/)
 
 ---
 

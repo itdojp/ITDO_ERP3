@@ -106,6 +106,24 @@ graph TB
     - 社内LDAP / Active Directory連携
 ```
 
+##### 3.1.4 IdP連携とプロビジョニング（SCIM 2.0）
+```yaml
+IdP統合:
+  プロトコル: OIDC/SAML（Azure AD または Google Workspace）
+  SSO: SP/IdP Initiatedの双方を許可
+  MFA: IdP側ポリシーで強制
+
+プロビジョニング:
+  規格: SCIM 2.0（/Users, /Groups）
+  同期: 即時（イベント）+ 定期フル同期（1日1回）
+  属性マッピング:
+    - userName -> 社内UID
+    - emails[primary] -> 会社メール
+    - name.givenName/familyName -> 氏名
+    - groups -> ロール（RBAC）
+  ライフサイクル: 新規/更新/休職/退職の自動反映（Deactivate → アクセス停止）
+```
+
 #### 3.2 認可（Authorization）
 
 ##### 3.2.1 アクセス制御モデル
@@ -124,6 +142,19 @@ graph TB
 | 一般ユーザー | ○（権限範囲） | ○（権限範囲） | × | × |
 | 参照ユーザー | ○（権限範囲） | × | × | × |
 | ゲスト | △（公開情報） | × | × | × |
+
+##### 3.2.3 行/列レベルセキュリティ（RLS/CLS）
+```yaml
+行レベル（RLS: PostgreSQL）:
+  - 方針: 会社/部門/プロジェクトに基づくアクセス制御
+  - 実装: RLSポリシー + セッションコンテキスト（current_setting('app.user_context')）
+  - 例: project.members に含まれるユーザーのみ参照可
+
+列レベル（CLS: アプリ層）:
+  - 方針: 機微情報（単価、給与、個人情報）は権限がなければマスキング
+  - 実装: シリアライザ/Resolverでフィールド単位のフィルタリング
+  - 監査: マスク解除（真値参照）時は必ず監査ログに記録
+```
 
 #### 3.3 特権管理（PAM）
 
@@ -366,6 +397,15 @@ sequenceDiagram
   "details": {...}
 }
 ```
+
+##### 7.1.3 監査ログ保持ポリシー（会計・法令）
+| ログ種別 | 保持期間 | 保管方式 | 備考 |
+|---------|----------|----------|------|
+| 監査ログ（更新操作・承認履歴） | 7年 | イミュータブル保管（S3 Object Lock/WORM） | 電子帳簿保存法対応 |
+| 会計連携ログ（仕訳・請求） | 7年 | 暗号化保管（KMS） | 追跡可能性確保 |
+| アクセスログ（Web/API） | 1年 | 低コストストレージ（Glacier等） | インシデント調査 |
+
+運用: 年次で整合性チェック（サンプル検証）、改ざん検知（整合性ハッシュ）を実施。
 
 #### 7.2 SIEM（Security Information and Event Management）
 
