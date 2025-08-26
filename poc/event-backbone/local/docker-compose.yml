@@ -107,3 +107,13 @@ services:
       - CREDIT_LIMIT=${CREDIT_LIMIT:-1000000}
     depends_on:
       - rabbitmq
+
+  metrics-dashboard:
+    build: ./services/metrics-dashboard
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=3005
+    ports:
+      - "3005:3005"
+    depends_on:
+      - redis
