@@ -36,7 +36,7 @@ docker compose up --build
 - 再送（同一Idempotency-Key）→重複抑止（skip）
 - 同一timesheetId→同一shard→コンシューマ単一で順序維持
 - FAIL_RATE>0 でDLQへ退避→手動でリドライブ（管理画面 or rabbitmqadmin）
- - MinIO使用時: コンソール http://localhost:9001 でオブジェクト（eventsバケット）を確認
+- MinIO使用時: コンソール http://localhost:9001 でオブジェクト（eventsバケット）を確認
 
 終了
 ```
@@ -50,3 +50,13 @@ docker compose down -v
 計測（レイテンシ）
 - Consumerは `occurredAt` と処理完了時刻からE2Eレイテンシを算出してログ出力（ms）。
 - ログから集計して `poc/event-backbone/metrics.md` に転記してください。
+
+API（サービス間連携の簡易テスト）
+- PMサービス（送信）: `POST http://localhost:3001/timesheets/approve`
+  - body例: `{ "timesheetId": "TS-001", "hours": 7.5, "note": "optional large note" }`
+  - ヘッダ: `Idempotency-Key: <uuid>`（省略時は自動生成）
+  - 応答: `{ accepted: true, eventId, shard }`
+
+- FIサービス（参照）:
+  - `GET http://localhost:3002/invoices` → 直近の請求ドラフト一覧
+  - `GET http://localhost:3002/invoices/{id}` → 個別取得

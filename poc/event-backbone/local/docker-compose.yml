@@ -52,3 +52,35 @@ services:
     depends_on:
       - rabbitmq
       - redis
+
+  pm-service:
+    build: ./services/pm-service
+    environment:
+      - AMQP_URL=amqp://guest:guest@rabbitmq:5672
+      - NUM_SHARDS=${NUM_SHARDS:-4}
+      - USE_MINIO=${USE_MINIO:-false}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio}
+      - MINIO_PORT=${MINIO_PORT:-9000}
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-events}
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - rabbitmq
+      - minio
+
+  fi-service:
+    build: ./services/fi-service
+    environment:
+      - AMQP_URL=amqp://guest:guest@rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - NUM_SHARDS=${NUM_SHARDS:-4}
+      - PORT=3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      - rabbitmq
+      - redis
