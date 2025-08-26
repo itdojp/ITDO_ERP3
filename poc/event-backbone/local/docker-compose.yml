@@ -78,6 +78,9 @@ services:
       - AMQP_URL=amqp://guest:guest@rabbitmq:5672
       - REDIS_URL=redis://redis:6379
       - NUM_SHARDS=${NUM_SHARDS:-4}
+      - INJECT_DELAY_MS=${INJECT_DELAY_MS:-0}
+      - INJECT_FAIL_RATE=${INJECT_FAIL_RATE:-0.0}
+      - FI_ENFORCE_CREDIT=${FI_ENFORCE_CREDIT:-true}
       - PORT=3002
     ports:
       - "3002:3002"
