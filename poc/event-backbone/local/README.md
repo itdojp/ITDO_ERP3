@@ -67,6 +67,13 @@ API（サービス間連携の簡易テスト）
   - 応答: `{ accepted: true, eventId, shard }`
 
 - Creditサービス（自動処理）: 環境変数 `CREDIT_LIMIT`（デフォルト 1,000,000）以下なら `sales.credit.approved` を発行
+  - 手動オーバーライド: `POST http://localhost:3004/credit/override` body例 `{ "orderId": "SO-1001", "amount": 800000, "approver": "manager" }`
 
 - FIサービス（受注ステータス）:
   - `GET http://localhost:3002/orders/{orderId}/status` → `credit`（approved/rejected/unknown）と `projectId`
+
+- Contractサービス（契約・更新）:
+  - 追加/更新: `POST http://localhost:3006/contracts` body例 `{ "contractId": "CT-2024-001", "customerId": "C-001", "renewalDate": "2025-09-01", "amount": 1200000 }`
+  - 一覧: `GET http://localhost:3006/contracts`
+  - リマインド発火: `POST http://localhost:3006/contracts/reminders/trigger` body例 `{ "days": 60 }` → `ckm.contract.renewal.reminder` 発行
+  - 更新: `POST http://localhost:3006/contracts/{id}/renew` body例 `{ "newDate": "2026-09-01" }` → `ckm.contract.renewed` 発行
