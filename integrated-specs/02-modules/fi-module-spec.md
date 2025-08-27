@@ -225,6 +225,24 @@
 - 委託費・経費の転嫁請求
 - 請求承認ワークフロー
 
+#### 2.6 APIエンドポイント例（FI）
+```yaml
+# 受注状態（与信・予算・プロジェクト紐付）
+GET /api/v1/fi/orders/{orderId}/status
+  response: { orderId, credit: 'approved'|'rejected'|'onhold'|'revoked'|'unknown', projectId?: string, amount?: number, budgetAllocated: boolean }
+
+# 請求生成（ガードはサーバ側で評価）
+POST /api/v1/fi/invoices
+  body: { timesheetId: string, projectId: string }
+  guard: credit approved AND budget allocated when project→order mapping exists
+```
+
+#### 2.7 サンプルイベント（FI）
+```json
+{ "type": "fi.budget.allocated", "orderId": "SO-1001", "projectId": "PRJ-SO-1001", "amount": 500000 }
+{ "type": "fi.invoice.generated", "invoiceId": "INV-2025-0001", "timesheetId": "TS-001", "projectId": "PRJ-SO-1001", "customerId": "C-001", "amount": 80000, "currency": "JPY" }
+```
+
 #### 2.4 予算管理 ★Should Have
 
 ##### 機能ID: FI-011 - 予算編成管理

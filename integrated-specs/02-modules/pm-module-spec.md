@@ -273,6 +273,25 @@
 - **原価計算連携**：タイムシート→原価計算→請求管理のIDトレーサビリティ
 - **端数処理**：15分単位、月末一括調整ルール
 
+#### 2.9 APIエンドポイント例（PM）
+```yaml
+# タイムシート承認
+PUT /api/v1/pm/timesheets/{id}/approve
+  body: { hours: number, rateType?: 'standard'|'overtime'|'holiday'|'night' }
+  emits: pm.timesheet.approved
+
+# プロジェクト取消
+POST /api/v1/pm/projects/{id}/cancel
+  emits: pm.project.cancelled
+```
+
+#### 2.10 サンプルイベント（PM）
+```json
+{ "type": "pm.project.created", "orderId": "SO-1001", "projectId": "PRJ-SO-1001" }
+{ "type": "pm.project.cancelled", "projectId": "PRJ-SO-1001" }
+{ "type": "pm.timesheet.approved", "timesheetId": "TS-001", "projectId": "PRJ-SO-1001", "employeeId": "E-001", "hours": 8, "rateType": "standard" }
+```
+
 #### 2.9 権限・監査管理 ★MVP必須
 
 ##### 機能ID: PM-015 - プロジェクト権限管理
