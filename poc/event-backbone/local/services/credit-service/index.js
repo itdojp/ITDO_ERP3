@@ -102,6 +102,28 @@ async function main() {
       res.status(500).json({ error: 'internal' });
     }
   });
+  app.post('/credit/revoke', async (req, res) => {
+    try {
+      const { orderId, customerId = 'unknown', amount = 0 } = req.body || {};
+      if (!orderId) return res.status(400).json({ error: 'orderId required' });
+      const event = {
+        eventId: `revoke-${orderId}-${Date.now()}`,
+        occurredAt: new Date().toISOString(),
+        eventType: 'sales.credit.revoked',
+        tenantId: 'demo',
+        orderId,
+        customerId,
+        amount
+      };
+      let h = 0; for (let i = 0; i < orderId.length; i++) h = (h * 31 + orderId.charCodeAt(i)) >>> 0;
+      const shard = h % NUM_SHARDS;
+      pub.publish('events', `shard.${shard}`, Buffer.from(JSON.stringify(event)), { contentType: 'application/json', messageId: event.eventId });
+      res.status(202).json({ accepted: true, eventId: event.eventId, shard });
+    } catch (e) {
+      console.error('[credit-service] revoke error', e);
+      res.status(500).json({ error: 'internal' });
+    }
+  });
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.listen(PORT, () => console.log(`[credit-service] listening on :${PORT} (CREDIT_LIMIT=${CREDIT_LIMIT})`));
 }

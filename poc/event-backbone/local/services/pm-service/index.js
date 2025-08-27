@@ -127,6 +127,28 @@ async function main() {
 
   app.listen(PORT, () => console.log(`[pm-service] listening on :${PORT}`));
   process.on('SIGINT', () => conn.close().finally(() => process.exit(0)));
+
+  // cancel a project (manual)
+  app.post('/projects/:projectId/cancel', async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const event = {
+        eventId: `proj-cancel-${projectId}-${Date.now()}`,
+        occurredAt: new Date().toISOString(),
+        eventType: 'pm.project.cancelled',
+        tenantId: 'demo',
+        projectId
+      };
+      const shard = shardFor(projectId);
+      const cch = await conn.createChannel();
+      await cch.assertExchange('events', 'direct', { durable: true });
+      cch.publish('events', `shard.${shard}`, Buffer.from(JSON.stringify(event)), { contentType: 'application/json', messageId: event.eventId });
+      res.json({ ok: true, eventId: event.eventId });
+    } catch (e) {
+      console.error('[pm-service] cancel error', e);
+      res.status(500).json({ error: 'internal' });
+    }
+  });
 }
 
 main().catch((e) => { console.error('[pm-service] fatal', e); process.exit(1); });
