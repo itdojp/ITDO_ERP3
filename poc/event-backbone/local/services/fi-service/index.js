@@ -125,6 +125,18 @@ async function consume(redis) {
           await maybeEmitBudgetAllocated(redis, pub, payload.orderId);
           console.log(`[fi-service] mapped order ${payload.orderId} -> project ${payload.projectId}`);
           ch.ack(msg);
+        } else if (payload.eventType === 'pm.project.cancelled') {
+          const orderId = await redis.get(`project:${payload.projectId}:orderId`);
+          if (orderId) {
+            await redis.del(`order:${orderId}:projectId`);
+            await redis.del(`project:${payload.projectId}:orderId`);
+            console.log(`[fi-service] unmapped project ${payload.projectId} from order ${orderId}`);
+          }
+          ch.ack(msg);
+        } else if (payload.eventType === 'sales.credit.revoked') {
+          await redis.set(`order:${payload.orderId}:credit`, 'revoked', 'EX', 24 * 60 * 60);
+          console.log(`[fi-service] credit revoked for order ${payload.orderId}`);
+          ch.ack(msg);
         } else if (payload.timesheetId) {
           // legacy timesheet -> invoice path
           msg.content = Buffer.from(JSON.stringify(payload));

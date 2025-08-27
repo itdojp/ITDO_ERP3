@@ -1,6 +1,7 @@
 import express from 'express';
 import Redis from 'ioredis';
 import fetch from 'node-fetch';
+import amqp from 'amqplib';
 
 const PORT = parseInt(process.env.PORT || '3005', 10);
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
@@ -85,6 +86,36 @@ app.get('/metrics/summary', async (_req, res) => {
   } catch (e) {
     console.error('[metrics] error', e);
     res.status(500).json({ error: 'metrics_failed' });
+  }
+});
+
+app.post('/ops/redrive', express.json(), async (req, res) => {
+  try {
+    const count = parseInt((req.body && req.body.count) || '0', 10) || Infinity;
+    const amqpUrl = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
+    const conn = await amqp.connect(amqpUrl);
+    const ch = await conn.createChannel();
+    await ch.assertExchange('events', 'direct', { durable: true });
+    let redriven = 0;
+    const numShards = parseInt(process.env.NUM_SHARDS || '4', 10);
+    for (let i = 0; i < numShards; i++) {
+      const dead = `shard.${i}.dead`;
+      await ch.assertQueue(dead, { durable: true });
+      while (redriven < count) {
+        const msg = await ch.get(dead, { noAck: false });
+        if (!msg) break;
+        // derive live routing key from dead name
+        const liveKey = `shard.${i}`;
+        ch.publish('events', liveKey, msg.content, { contentType: msg.properties.contentType || 'application/json' });
+        ch.ack(msg);
+        redriven++;
+      }
+    }
+    await conn.close();
+    res.json({ redriven });
+  } catch (e) {
+    console.error('[ops] redrive error', e);
+    res.status(500).json({ error: 'redrive_failed' });
   }
 });
 
