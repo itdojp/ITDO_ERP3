@@ -239,7 +239,7 @@ type Mutation {
   1. sales.order.confirmed
      → pm.project.created
      → hr.resource.requested
-     → fi.budget.allocated
+     → fi.budget.allocated（与信承認とプロジェクト作成の合流時に発火）
      
   2. pm.task.completed
      → pm.milestone.achieved
@@ -251,7 +251,34 @@ type Mutation {
      → pm.timesheet.approved
      → fi.cost.calculated
      → fi.project.cost.updated
+     → （ガード）project→order紐付けがある場合、sales.credit.approved かつ fi.budget.allocated が成立するまで請求生成（fi.invoice.generated）は保留
 ```
+
+##### 4.2.3 例外フロー（Exception Flows）
+```yaml
+与信超過/否決:
+  - sales.credit.rejected: 金額が与信上限を超過
+  - sales.credit.onhold: 承認待ち（社内オペレーションへ移管）
+  - sales.credit.requested: 再申請（再審査開始）
+  - sales.credit.override.approved: 管理者オーバーライド承認
+  - sales.credit.revoked: 事後取り消し（承認取り消し）
+
+プロジェクト取消:
+  - pm.project.cancelled: 当該プロジェクトのキャンセル。order↔projectのマッピングを解除。請求は停止。
+
+予算割当（合流イベント）:
+  - fi.budget.allocated: sales.credit.approved と pm.project.created の両方成立時に1回だけ発火。
+```
+
+##### 4.2.4 イベントカタログ（追加）
+| イベント | 意味 | パブリッシャー | サブスクライバー | 備考 |
+|---------|------|----------------|------------------|------|
+| sales.credit.requested | 与信再申請 | Sales/与信 | Credit, FI | 再審査開始 |
+| sales.credit.onhold | 与信保留 | Credit | FI, PM | オペレーションへ引継ぎ |
+| sales.credit.override.approved | 与信オーバーライド承認 | Credit | FI | 例外承認 |
+| sales.credit.revoked | 与信承認取り消し | Credit | FI | 以後の請求停止 |
+| pm.project.cancelled | プロジェクト取消 | PM | FI, HR, BI | 紐付解除・下流停止 |
+| fi.budget.allocated | 予算割当完了 | FI | PM, BI | 合流（credit+project） |
 
 ##### 4.2.2 イベントサブスクリプション
 | イベント | パブリッシャー | サブスクライバー | 処理内容 |

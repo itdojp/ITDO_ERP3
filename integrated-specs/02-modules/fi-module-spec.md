@@ -176,6 +176,17 @@
 - 電子インボイス（Peppol対応）［Phase 2想定／MVP除外］
 - 請求書再発行・訂正処理（修正履歴保持）
 
+###### ガード条件（与信・予算）
+- project→orderの紐付けが存在する請求については、以下が満たされるまで請求生成を保留する。
+  - 与信承認（sales.credit.approved または sales.credit.override.approved）
+  - 予算割当完了（fi.budget.allocated 発火済み）
+- 与信取り消し（sales.credit.revoked）後は、当該order関連の新規請求をブロックする。
+
+###### 例外フローの取り扱い
+- 与信保留（sales.credit.onhold）時は、請求準備を停止し、オペレーションへエスカレーション。
+- 与信再申請（sales.credit.requested）を契機に状態を再評価。
+- プロジェクト取消（pm.project.cancelled）時は、order↔projectの紐付けを解除し、未請求分は停止。
+
 **請求書項目**
 | 項目名 | 必須 | データ型 | 桁数 | 備考 |
 |--------|------|----------|------|------|

@@ -295,6 +295,15 @@ UAT実施計画:
       - エラーからの回復性
 ```
 
+##### 3.4.3 例外フローテスト（イベント駆動）
+| シナリオ | 入力イベント/操作 | 期待結果 |
+|----------|------------------|----------|
+| 与信否決→再申請→承認 | sales.order.confirmed(amount>limit) → sales.credit.rejected → sales.credit.requested → sales.credit.approved | 与信承認後に fi.budget.allocated（project成立済み）発火、請求可能状態へ遷移 |
+| 与信オーバーライド | sales.credit.override.approved | 即時に与信承認扱い、合流条件成立時に fi.budget.allocated 発火 |
+| 与信取消し | sales.credit.revoked | 以後の請求生成をブロック（guard発動） |
+| プロジェクト取消し | pm.project.cancelled | order↔project紐付け解除。請求/予算関連の後続処理は停止 |
+| DLQリドライブ | 処理失敗でDLQへ退避 → リドライブ実行 | Idempotencyにより重複生成なく正常再処理 |
+
 ---
 
 ### 4. 受入テスト基準
