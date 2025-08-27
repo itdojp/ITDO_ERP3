@@ -280,6 +280,80 @@ type Mutation {
 | pm.project.cancelled | プロジェクト取消 | PM | FI, HR, BI | 紐付解除・下流停止 |
 | fi.budget.allocated | 予算割当完了 | FI | PM, BI | 合流（credit+project） |
 
+##### 4.2.5 シーケンス図（例外を含む受注→請求）
+```mermaid
+sequenceDiagram
+    participant Sales
+    participant Credit
+    participant PM
+    participant FI
+
+    Sales->>Sales: sales.order.confirmed
+    Sales->>Credit: 審査依頼
+    alt 与信超過
+        Credit-->>Sales: sales.credit.rejected
+        Credit-->>Sales: sales.credit.onhold
+        Sales->>Credit: sales.credit.requested（再申請）
+        Credit-->>Sales: sales.credit.approved（または override.approved）
+    else 与信承認
+        Credit-->>Sales: sales.credit.approved
+    end
+
+    Sales->>PM: pm.project.created（受注確定に伴う作成）
+    par 合流
+        Credit-->>FI: credit.approved/override.approved
+        PM-->>FI: pm.project.created
+    and
+        FI-->>FI: fi.budget.allocated（credit+project成立時に1回発火）
+    end
+
+    PM->>FI: pm.timesheet.approved
+    FI-->>FI: ガード判定（credit承認＋budget割当）
+    alt ガード成立
+        FI-->>Sales: fi.invoice.generated（請求）
+    else ガード不成立
+        FI-->>FI: 保留（no-op）
+    end
+
+    opt 取消・例外
+        Credit-->>FI: sales.credit.revoked（以後ブロック）
+        PM-->>FI: pm.project.cancelled（紐付解除、停止）
+    end
+```
+
+##### 4.2.6 状態遷移図（与信/請求適格）
+```mermaid
+stateDiagram-v2
+    [*] --> CREDIT_REQUESTED
+    CREDIT_REQUESTED --> CREDIT_APPROVED: sales.credit.approved / override.approved
+    CREDIT_REQUESTED --> CREDIT_REJECTED: sales.credit.rejected
+    CREDIT_REJECTED --> CREDIT_ONHOLD: manual onhold
+    CREDIT_ONHOLD --> CREDIT_REQUESTED: sales.credit.requested
+    CREDIT_APPROVED --> CREDIT_REVOKED: sales.credit.revoked
+    CREDIT_ONHOLD --> CREDIT_REVOKED: sales.credit.revoked
+
+    note right of CREDIT_APPROVED
+      与信承認後、プロジェクト作成と合流して
+      fi.budget.allocated を一度だけ発火
+    end note
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> WAITING
+    WAITING --> NEED_CREDIT: project.created (order↔project紐付)
+    NEED_CREDIT --> NEED_PROJECT: credit.approved
+    NEED_CREDIT --> DISQUALIFIED: credit.revoked
+    NEED_PROJECT --> ELIGIBLE: budget.allocated（credit+project合流）
+    ELIGIBLE --> DISQUALIFIED: credit.revoked / project.cancelled
+    NEED_PROJECT --> DISQUALIFIED: project.cancelled
+
+    note right of ELIGIBLE
+      請求適格（timesheet.approved により
+      fi.invoice.generated へ遷移可能）
+    end note
+```
+
 ##### 4.2.2 イベントサブスクリプション
 | イベント | パブリッシャー | サブスクライバー | 処理内容 |
 |---------|---------------|----------------|----------|
