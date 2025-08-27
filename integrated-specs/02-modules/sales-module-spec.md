@@ -118,6 +118,38 @@
 **詳細要件**
 - 顧客別与信限度額設定
 - 与信残高リアルタイム監視
+
+#### 2.4 APIエンドポイント例（与信/受注確定）
+```yaml
+# 受注確定
+POST /api/v1/sales/orders/{orderId}/confirm
+  body: { customerId: string, amount: number, currency: string }
+  emits: sales.order.confirmed
+
+# 与信再申請
+POST /api/v1/credit/reapply
+  body: { orderId: string, customerId: string, amount: number }
+  emits: sales.credit.requested
+
+# 与信オーバーライド承認
+POST /api/v1/credit/override
+  body: { orderId: string, customerId: string, amount: number, approver: string }
+  emits: sales.credit.override.approved
+
+# 与信取消し
+POST /api/v1/credit/revoke
+  body: { orderId: string, customerId?: string, amount?: number }
+  emits: sales.credit.revoked
+```
+
+#### 2.5 サンプルイベント（Sales/Credit）
+```json
+{ "type": "sales.order.confirmed", "orderId": "SO-1001", "customerId": "C-001", "amount": 500000, "currency": "JPY" }
+{ "type": "sales.credit.requested", "orderId": "SO-1001", "amount": 500000 }
+{ "type": "sales.credit.approved", "orderId": "SO-1001", "amount": 500000 }
+{ "type": "sales.credit.override.approved", "orderId": "SO-1001", "amount": 800000, "approver": "manager" }
+{ "type": "sales.credit.revoked", "orderId": "SO-1001" }
+```
 - 与信超過アラート・ブロック機能
 - 与信限度額見直し周期管理
 - 外部信用調査機関連携

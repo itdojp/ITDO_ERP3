@@ -338,6 +338,68 @@ stateDiagram-v2
     end note
 ```
 
+##### 4.2.7 サンプルイベントペイロード
+```json
+// sales.order.confirmed
+{
+  "type": "sales.order.confirmed",
+  "occurredAt": "2025-09-01T10:00:00Z",
+  "orderId": "SO-1001",
+  "customerId": "C-001",
+  "amount": 500000,
+  "currency": "JPY"
+}
+
+// sales.credit.requested / approved / rejected / override.approved / revoked
+{
+  "type": "sales.credit.approved",
+  "occurredAt": "2025-09-01T10:05:00Z",
+  "orderId": "SO-1001",
+  "customerId": "C-001",
+  "amount": 500000
+}
+
+// pm.project.created / cancelled
+{
+  "type": "pm.project.created",
+  "occurredAt": "2025-09-01T10:06:00Z",
+  "orderId": "SO-1001",
+  "projectId": "PRJ-SO-1001"
+}
+
+// fi.budget.allocated（合流イベント）
+{
+  "type": "fi.budget.allocated",
+  "occurredAt": "2025-09-01T10:07:00Z",
+  "orderId": "SO-1001",
+  "projectId": "PRJ-SO-1001",
+  "amount": 500000
+}
+
+// pm.timesheet.approved（請求ガード対象）
+{
+  "type": "pm.timesheet.approved",
+  "occurredAt": "2025-09-10T09:00:00Z",
+  "timesheetId": "TS-001",
+  "projectId": "PRJ-SO-1001",
+  "employeeId": "E-001",
+  "hours": 8,
+  "rateType": "standard",
+  "idempotencyKey": "uuid-..."
+}
+
+// fi.invoice.generated（ガード成立後）
+{
+  "type": "fi.invoice.generated",
+  "occurredAt": "2025-09-10T09:01:00Z",
+  "invoiceId": "INV-2025-0001",
+  "timesheetId": "TS-001",
+  "projectId": "PRJ-SO-1001",
+  "customerId": "C-001",
+  "amount": 80000,
+  "currency": "JPY"
+}
+```
 ```mermaid
 stateDiagram-v2
     [*] --> WAITING
