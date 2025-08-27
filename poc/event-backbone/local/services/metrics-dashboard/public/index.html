@@ -33,6 +33,18 @@
         <div>Budget allocated keys: <span id="ord-budg">-</span></div>
       </div>
     </div>
+    <div class="row">
+      <div class="card">
+        <h3>Queues</h3>
+        <div>Shard ready: <span id="q-shard-ready">-</span></div>
+        <div>Shard unacked: <span id="q-shard-unacked">-</span></div>
+        <div>Dead ready: <span id="q-dead-ready">-</span></div>
+      </div>
+      <div class="card">
+        <h3>Events (top)</h3>
+        <div id="evt-list" class="muted">-</div>
+      </div>
+    </div>
     <script>
       async function load() {
         try {
@@ -47,6 +59,13 @@
           document.getElementById('lat-p99').textContent = j.latency.p99 ?? '-';
           document.getElementById('ord-cred').textContent = j.orders.creditKeys;
           document.getElementById('ord-budg').textContent = j.orders.budgetAllocatedKeys;
+          if (j.queues) {
+            document.getElementById('q-shard-ready').textContent = j.queues.shardReady ?? '-';
+            document.getElementById('q-shard-unacked').textContent = j.queues.shardUnacked ?? '-';
+            document.getElementById('q-dead-ready').textContent = j.queues.deadReady ?? '-';
+          }
+          const evt = (j.events || []).map(e => `${e.type}: ${e.count}`).join('<br/>');
+          document.getElementById('evt-list').innerHTML = evt || '-';
         } catch (e) {
           document.getElementById('status').textContent = 'Error loading metrics';
         }
@@ -56,4 +75,3 @@
     </script>
   </body>
   </html>
-

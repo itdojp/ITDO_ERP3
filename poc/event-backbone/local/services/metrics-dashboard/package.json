@@ -4,7 +4,7 @@
   "type": "module",
   "dependencies": {
     "express": "^4.19.2",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "node-fetch": "^3.3.2"
   }
 }
-

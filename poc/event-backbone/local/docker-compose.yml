@@ -114,6 +114,9 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - PORT=3005
+      - RABBIT_API_URL=http://rabbitmq:15672
+      - RABBIT_USER=guest
+      - RABBIT_PASS=guest
     ports:
       - "3005:3005"
     depends_on:

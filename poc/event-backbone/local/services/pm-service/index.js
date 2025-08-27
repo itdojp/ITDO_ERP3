@@ -2,6 +2,7 @@ import express from 'express';
 import amqp from 'amqplib';
 import { nanoid } from 'nanoid';
 import Minio from 'minio';
+import Redis from 'ioredis';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
 const NUM_SHARDS = parseInt(process.env.NUM_SHARDS || '4', 10);
@@ -48,6 +49,7 @@ async function main() {
   app.use(express.json({ limit: '2mb' }));
 
   const { conn, ch } = await setupRabbit();
+  const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
   const minioClient = new Minio.Client({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
   if (USE_MINIO) await ensureBucket(minioClient);
 
@@ -63,6 +65,7 @@ async function main() {
       const payload = {
         eventId,
         occurredAt: new Date().toISOString(),
+        eventType: 'pm.timesheet.approved',
         tenantId: 'demo',
         timesheetId,
         employeeId,
@@ -81,6 +84,7 @@ async function main() {
       ch.publish('events', `shard.${shard}`, Buffer.from(JSON.stringify(payload)), {
         contentType: 'application/json', messageId: eventId, headers: { idempotencyKey, timesheetId }
       });
+      await redis.incr('metrics:events:pm.timesheet.approved').catch(()=>{});
       res.status(202).json({ accepted: true, eventId, shard });
     } catch (e) {
       console.error('[pm-service] error', e);
@@ -110,6 +114,7 @@ async function main() {
           cch.publish('events', `shard.${i}`, Buffer.from(JSON.stringify(event)), {
             contentType: 'application/json', messageId: event.eventId, headers: { orderId: payload.orderId }
           });
+          await redis.incr('metrics:events:pm.project.created').catch(()=>{});
           console.log(`[pm-service] project created ${projectId} for order ${payload.orderId}`);
         }
         cch.ack(msg);
