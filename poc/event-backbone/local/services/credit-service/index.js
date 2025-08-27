@@ -24,7 +24,7 @@ async function main() {
       if (!msg) return;
       try {
         const payload = JSON.parse(msg.content.toString());
-        if (payload.eventType === 'sales.order.confirmed') {
+        if (payload.eventType === 'sales.order.confirmed' || payload.eventType === 'sales.credit.requested') {
           const approved = (payload.amount || 0) <= CREDIT_LIMIT;
           const event = {
             eventId: msg.properties.messageId + '.credit',
@@ -77,6 +77,28 @@ async function main() {
       res.status(202).json({ accepted: true, eventId: event.eventId, shard });
     } catch (e) {
       console.error('[credit-service] override error', e);
+      res.status(500).json({ error: 'internal' });
+    }
+  });
+  app.post('/credit/reapply', async (req, res) => {
+    try {
+      const { orderId, customerId = 'unknown', amount } = req.body || {};
+      if (!orderId || typeof amount !== 'number') return res.status(400).json({ error: 'orderId and amount required' });
+      const event = {
+        eventId: `reapply-${orderId}-${Date.now()}`,
+        occurredAt: new Date().toISOString(),
+        eventType: 'sales.credit.requested',
+        tenantId: 'demo',
+        orderId,
+        customerId,
+        amount
+      };
+      let h = 0; for (let i = 0; i < orderId.length; i++) h = (h * 31 + orderId.charCodeAt(i)) >>> 0;
+      const shard = h % NUM_SHARDS;
+      pub.publish('events', `shard.${shard}`, Buffer.from(JSON.stringify(event)), { contentType: 'application/json', messageId: event.eventId });
+      res.status(202).json({ accepted: true, eventId: event.eventId, shard });
+    } catch (e) {
+      console.error('[credit-service] reapply error', e);
       res.status(500).json({ error: 'internal' });
     }
   });

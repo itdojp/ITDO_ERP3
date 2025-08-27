@@ -51,7 +51,7 @@ async function processMessage(redis, msg) {
   if (INJECT_DELAY_MS > 0) await new Promise(r => setTimeout(r, INJECT_DELAY_MS));
   if (Math.random() < INJECT_FAIL_RATE) throw new Error('injected failure');
 
-  // Guard: if project is mapped to an order, require credit approval
+  // Guard: if project is mapped to an order, require credit approval and (optionally) budget allocation
   if (FI_ENFORCE_CREDIT && content.projectId) {
     const orderId = await redis.get(`project:${content.projectId}:orderId`);
     if (orderId) {
@@ -59,6 +59,13 @@ async function processMessage(redis, msg) {
       if (credit !== 'approved') {
         console.warn(`[fi-service] credit not approved for order ${orderId} → skip invoice`);
         return { status: 'skipped' };
+      }
+      if ((process.env.FI_REQUIRE_BUDGET || 'true').toLowerCase() === 'true') {
+        const budgetEmitted = await redis.get(`order:${orderId}:budget_emitted`);
+        if (budgetEmitted !== '1') {
+          console.warn(`[fi-service] budget not allocated for order ${orderId} → skip invoice`);
+          return { status: 'skipped' };
+        }
       }
     }
   }
