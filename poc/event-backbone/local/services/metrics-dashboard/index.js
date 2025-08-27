@@ -1,5 +1,6 @@
 import express from 'express';
 import Redis from 'ioredis';
+import fetch from 'node-fetch';
 
 const PORT = parseInt(process.env.PORT || '3005', 10);
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
@@ -46,6 +47,23 @@ async function gatherSummary() {
   // credit status counts (approx via SCAN)
   const creditApproved = await countByPattern('order:*:credit');
   const budgetAllocated = await countByPattern('order:*:budget_emitted');
+  // event counts (top N)
+  const eventCounts = await (async () => {
+    let cursor = '0';
+    const map = new Map();
+    do {
+      const res = await redis.scan(cursor, 'MATCH', 'metrics:events:*', 'COUNT', 1000);
+      cursor = res[0];
+      const keys = res[1];
+      if (keys.length) {
+        const vals = await redis.mget(keys);
+        keys.forEach((k, idx) => map.set(k.substring('metrics:events:'.length), Number(vals[idx] || 0)));
+      }
+    } while (cursor !== '0');
+    return [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0, 20).map(([type,count]) => ({ type, count }));
+  })();
+  // queue metrics via RabbitMQ management API
+  const queues = await getQueueMetrics();
   return {
     invoicesTotal: await redis.llen('invoices'),
     latency,
@@ -53,6 +71,8 @@ async function gatherSummary() {
       creditKeys: creditApproved,
       budgetAllocatedKeys: budgetAllocated
     },
+    events: eventCounts,
+    queues,
     timestamp: new Date().toISOString()
   };
 }
@@ -68,5 +88,29 @@ app.get('/metrics/summary', async (_req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`[metrics-dashboard] listening on :${PORT}`));
+async function getQueueMetrics() {
+  try {
+    const base = process.env.RABBIT_API_URL || 'http://rabbitmq:15672';
+    const user = process.env.RABBIT_USER || 'guest';
+    const pass = process.env.RABBIT_PASS || 'guest';
+    const url = `${base}/api/queues`;
+    const res = await fetch(url, { headers: { Authorization: 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64') } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arr = await res.json();
+    let shardReady = 0, shardUnacked = 0, deadReady = 0;
+    for (const q of arr) {
+      const name = q.name || '';
+      if (name.startsWith('shard.') && name.endsWith('.dead')) {
+        deadReady += q.messages || 0;
+      } else if (name.startsWith('shard.')) {
+        shardReady += q.messages || 0;
+        shardUnacked += q.messages_unacknowledged || 0;
+      }
+    }
+    return { shardReady, shardUnacked, deadReady };
+  } catch (e) {
+    return { error: 'rabbit_api_failed' };
+  }
+}
 
+app.listen(PORT, () => console.log(`[metrics-dashboard] listening on :${PORT}`));

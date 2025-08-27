@@ -1,6 +1,7 @@
 import express from 'express';
 import amqp from 'amqplib';
 import { nanoid } from 'nanoid';
+import Redis from 'ioredis';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
 const NUM_SHARDS = parseInt(process.env.NUM_SHARDS || '4', 10);
@@ -30,6 +31,7 @@ async function setupRabbit() {
 
 async function main() {
   const { conn, ch } = await setupRabbit();
+  const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
   const app = express();
   app.use(express.json({ limit: '1mb' }));
 
@@ -56,6 +58,7 @@ async function main() {
       ch.publish('events', `shard.${shard}`, Buffer.from(JSON.stringify(payload)), {
         contentType: 'application/json', messageId: eventId, headers: { idempotencyKey, orderId }
       });
+      await redis.incr('metrics:events:sales.order.confirmed').catch(()=>{});
       res.status(202).json({ accepted: true, eventId, shard });
     } catch (e) {
       console.error('[sales-service] error', e);
@@ -68,4 +71,3 @@ async function main() {
 }
 
 main().catch((e) => { console.error('[sales-service] fatal', e); process.exit(1); });
-
