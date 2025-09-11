@@ -813,6 +813,28 @@ components:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/sales/orders/{id}/cancel:
+    post:
+      tags: [sales]
+      summary: 受注キャンセル
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/v1/sales/orders/{id}/invoice:
     post:
       tags: [sales]
@@ -964,6 +986,28 @@ components:
     post:
       tags: [procurement]
       summary: 検収（入荷）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/procurement/purchase-orders/{id}/cancel:
+    post:
+      tags: [procurement]
+      summary: 発注キャンセル
       security:
         - bearerAuth: []
       parameters:
