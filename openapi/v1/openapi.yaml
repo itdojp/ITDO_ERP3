@@ -703,6 +703,50 @@ components:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/sales/orders/{id}/confirm:
+    post:
+      tags: [sales]
+      summary: 受注確定
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/sales/orders/{id}/fulfill:
+    post:
+      tags: [sales]
+      summary: 受注出荷/履行
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/v1/procurement/purchase-orders:
     get:
       tags: [procurement]
@@ -750,6 +794,50 @@ components:
     get:
       tags: [procurement]
       summary: 発注詳細
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/procurement/purchase-orders/{id}/order:
+    post:
+      tags: [procurement]
+      summary: 発注確定
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/procurement/purchase-orders/{id}/receive:
+    post:
+      tags: [procurement]
+      summary: 検収（入荷）
       security:
         - bearerAuth: []
       parameters:
