@@ -19,5 +19,8 @@
 - Invoice(id, account_id, issue_date, due_date, status, total, tax_total)
 - CostSnapshot(id, project_id, as_of_date, labor_cost, external_cost, overhead, revenue_progress)
 
-関係: Project 1—n Task, Project 1—n Timesheet, Project 1—n CostSnapshot, Contract 1—n Invoice
-
+関係:
+- Project 1—n Task
+- Project 1—n Timesheet
+- Project 1—n CostSnapshot
+- Contract 1—n Invoice
