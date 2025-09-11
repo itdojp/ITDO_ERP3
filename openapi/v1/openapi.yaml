@@ -615,6 +615,22 @@ components:
         active: { type: boolean, default: true }
         ordinal: { type: integer, description: '表示順' }
       required: [code, name]
+    LinkingOptions:
+      type: object
+      properties:
+        rounding:
+          type: object
+          properties:
+            unit:
+              type: string
+              enum: [line, document]
+              description: 行単位または帳票単位で丸め
+            mode:
+              type: string
+              enum: [half_up, half_even, truncate]
+              description: 四捨五入/銀行丸め/切り捨て
+          additionalProperties: false
+      additionalProperties: false
     PaginatedAuditLogs:
       type: object
       properties:
@@ -848,6 +864,12 @@ components:
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkingOptions'
       responses:
         '201':
           description: Created
@@ -1039,6 +1061,12 @@ components:
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkingOptions'
       responses:
         '201':
           description: Created
