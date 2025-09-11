@@ -24,3 +24,21 @@
 - 監査閲覧: `role=audit_viewer` 以上に限定（原則 読取専用）
 - 監査エクスポート: `role=audit_admin` に限定（期間/範囲指定、二要素必須）
 - 自組織のテナントデータのみアクセス可能（RLS）
+
+## 差分表現（例）
+```json
+{
+  "id": "log_123",
+  "occurred_at": "2025-09-11T10:00:00Z",
+  "action": "INVOICE_ISSUED",
+  "entity_type": "invoice",
+  "entity_id": "inv_001",
+  "changes": [
+    { "field": "status", "before": "draft", "after": "issued" },
+    { "field": "invoice_number", "before": null, "after": "A-2025-0001" }
+  ]
+}
+```
+
+### 既定の除外（例）
+- `email`, `address`, `file_uri`, `token`, `password`, `secret` など
