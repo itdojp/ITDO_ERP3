@@ -495,7 +495,18 @@ components:
         entity_id: { type: string }
         ip: { type: string }
         user_agent: { type: string }
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditChange'
       required: [id, occurred_at, action]
+    AuditChange:
+      type: object
+      properties:
+        field: { type: string }
+        before: {}
+        after: {}
+      required: [field]
     PaginatedAuditLogs:
       type: object
       properties:
