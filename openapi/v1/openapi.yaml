@@ -141,7 +141,7 @@ paths:
     get:
       tags: [compliance]
       summary: 電子取引保存の検索
-      description: ソート対象: `issue_date`, `amount`, `invoice_number`, `counterparty`（降順は `-field`）。
+      description: ソート対象: `issue_date`, `amount`, `invoice_number`, `counterparty`（降順は `-field`）。同値のときは `-id` を二次キーとして安定ソート。
       security:
         - bearerAuth: []
       parameters:
@@ -467,6 +467,15 @@ components:
       type: object
       properties:
         order_date: { type: string, format: date }
+        lines_mode:
+          type: string
+          enum: [replace, merge]
+          description: 行の更新方法（replace=全置換, merge=行のマージ/上書き）
+        lines_ops:
+          type: array
+          description: 行の差分操作（remove等）。`lines_mode=merge` 時に併用可。
+          items:
+            $ref: '#/components/schemas/LineOp'
         lines:
           type: array
           items: { $ref: '#/components/schemas/SalesOrderLine' }
@@ -484,10 +493,28 @@ components:
       type: object
       properties:
         order_date: { type: string, format: date }
+        lines_mode:
+          type: string
+          enum: [replace, merge]
+          description: 行の更新方法（replace=全置換, merge=行のマージ/上書き）
+        lines_ops:
+          type: array
+          description: 行の差分操作（remove等）。`lines_mode=merge` 時に併用可。
+          items:
+            $ref: '#/components/schemas/LineOp'
         lines:
           type: array
           items: { $ref: '#/components/schemas/PurchaseOrderLine' }
       additionalProperties: false
+    LineOp:
+      type: object
+      properties:
+        op:
+          type: string
+          enum: [remove]
+        line_id: { type: string }
+        item_code: { type: string }
+      required: [op]
     ProfitResponse:
       type: object
       properties:
@@ -599,8 +626,12 @@ components:
         action: { type: string }
         entity_type: { type: string }
         entity_id: { type: string }
-        ip: { type: string }
-        user_agent: { type: string }
+        ip:
+          type: string
+          x-sensitive: true
+        user_agent:
+          type: string
+          x-sensitive: true
         changes:
           type: array
           items:
