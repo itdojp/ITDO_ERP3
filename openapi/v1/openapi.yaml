@@ -148,7 +148,7 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
-  /api/v1/integration/ocr/invoice:process:
+  /api/v1/integration/ocr/invoice/process:
     post:
       tags: [integration]
       summary: 請求書OCR→買掛起票

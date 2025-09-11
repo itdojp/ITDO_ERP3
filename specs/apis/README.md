@@ -10,7 +10,7 @@
 - `POST /api/v1/timesheets`
 - `GET /api/v1/projects/{id}/profit`（revenue, labor_cost, external_cost, overhead, gross_profit, progress_based_revenue）
 - `POST /api/v1/compliance/invoices`（電子取引保存: メタ+PDFアップロード）
-- `POST /api/v1/integration/ocr/invoice:process`（OCR実行→買掛起票フロー）
+- `POST /api/v1/integration/ocr/invoice/process`（OCR実行→買掛起票フロー）
 
 ## セキュリティ
 - Bearerトークン（OIDC）、スコープ/ロールでAPI権限制御
