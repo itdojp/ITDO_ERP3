@@ -172,3 +172,20 @@ CREATE TABLE IF NOT EXISTS journal_exports (
 );
 
 -- Note: RLS policiesは実装段階で追加（app.tenant_id を前提）
+
+-- Audit logs (MVP)
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  before_data JSONB,
+  after_data JSONB,
+  ip TEXT,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_logs(tenant_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(tenant_id, entity_type, entity_id);
