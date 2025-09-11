@@ -20,6 +20,10 @@ tags:
     description: 電子帳簿保存法・インボイス対応
   - name: integration
     description: 外部連携（OCR等）
+  - name: sales
+    description: 販売（見積/受注/請求連動）
+  - name: procurement
+    description: 購買（発注/検収/買掛）
 paths:
   /api/v1/projects:
     get:
@@ -352,6 +356,46 @@ components:
         next_cursor:
           type: string
       required: [items]
+    SalesOrder:
+      type: object
+      properties:
+        id: { type: string }
+        order_number: { type: string }
+        account_id: { type: string }
+        order_date: { type: string, format: date }
+        status: { type: string, enum: [draft, confirmed, fulfilled, cancelled] }
+        total: { type: number }
+      required: [id, order_number, account_id, status]
+    PaginatedSalesOrders:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SalesOrder'
+        next_cursor:
+          type: string
+      required: [items]
+    PurchaseOrder:
+      type: object
+      properties:
+        id: { type: string }
+        po_number: { type: string }
+        vendor_id: { type: string }
+        order_date: { type: string, format: date }
+        status: { type: string, enum: [draft, ordered, received, cancelled] }
+        total: { type: number }
+      required: [id, po_number, vendor_id, status]
+    PaginatedPurchaseOrders:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseOrder'
+        next_cursor:
+          type: string
+      required: [items]
     ProfitResponse:
       type: object
       properties:
@@ -501,6 +545,48 @@ components:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedInvoices'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/sales/orders:
+    get:
+      tags: [sales]
+      summary: 受注一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSalesOrders'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/procurement/purchase-orders:
+    get:
+      tags: [procurement]
+      summary: 発注一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPurchaseOrders'
         default:
           $ref: '#/components/responses/Error'
     Contract:
