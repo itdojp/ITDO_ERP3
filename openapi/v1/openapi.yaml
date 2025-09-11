@@ -42,6 +42,25 @@ paths:
           $ref: '#/components/responses/Error'
 
   /api/v1/timesheets:
+    get:
+      tags: [timesheets]
+      summary: 工数一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTimesheets'
+        default:
+          $ref: '#/components/responses/Error'
     post:
       tags: [timesheets]
       summary: 工数登録
@@ -273,6 +292,16 @@ components:
           type: string
           enum: [draft, submitted, approved, rejected]
       required: [user_id, project_id, work_date, hours]
+    PaginatedTimesheets:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimesheetEntry'
+        next_cursor:
+          type: string
+      required: [items]
     ProfitResponse:
       type: object
       properties:

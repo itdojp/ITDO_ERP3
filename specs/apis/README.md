@@ -7,6 +7,7 @@
 
 ## 代表エンドポイント例
 - `GET /api/v1/projects`
+- `GET /api/v1/timesheets`
 - `POST /api/v1/timesheets`
 - `GET /api/v1/projects/{id}/profit`（revenue, labor_cost, external_cost, overhead, gross_profit, progress_based_revenue）
 - `POST /api/v1/compliance/invoices`（電子取引保存: メタ+PDFアップロード）
