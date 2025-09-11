@@ -260,7 +260,7 @@ paths:
         - name: domain
           in: query
           required: true
-          schema: { type: string, enum: [task, timesheet, invoice] }
+          schema: { type: string, enum: [task, timesheet, invoice, sales_order, purchase_order, project] }
       responses:
         '200':
           description: OK
