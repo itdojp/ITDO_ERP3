@@ -437,6 +437,7 @@ components:
     SalesOrderLine:
       type: object
       properties:
+        line_id: { type: string, description: クライアント側の行識別子（任意） }
         item_code: { type: string }
         description: { type: string }
         qty: { type: number }
@@ -446,6 +447,7 @@ components:
     PurchaseOrderLine:
       type: object
       properties:
+        line_id: { type: string, description: クライアント側の行識別子（任意） }
         item_code: { type: string }
         description: { type: string }
         qty: { type: number }
@@ -544,8 +546,12 @@ components:
         counterparty: { type: string }
         amount: { type: number }
         tax_amount: { type: number }
-        file_uri: { type: string }
-        hash: { type: string }
+        file_uri:
+          type: string
+          x-sensitive: true
+        hash:
+          type: string
+          x-sensitive: true
         timestamp: { type: string, format: date-time }
         highlights:
           type: object

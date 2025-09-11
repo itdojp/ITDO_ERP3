@@ -6,4 +6,8 @@
 - データ源: DBのlookupテーブル（task_statuses / timesheet_statuses / invoice_statuses）
 - キャッシュ: 数分〜数時間のキャッシュ可（頻繁に変化しない）
 
+パラメータ:
+- `active=true|false`（true指定で有効のみ）
+- `sort=ordinal|code|name`（降順は `-field`）
+
 今後: ドメイン拡張や無効化フラグ、並び順などを追加検討（active/ordinalは任意）。
