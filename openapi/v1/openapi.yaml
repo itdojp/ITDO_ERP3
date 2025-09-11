@@ -157,6 +157,18 @@ paths:
         - name: counterparty
           in: query
           schema: { type: string }
+        - name: match
+          in: query
+          schema: { type: string, enum: [exact, partial] }
+          description: 検索の一致種別（exact=完全一致, partial=部分一致）
+        - name: operator
+          in: query
+          schema: { type: string, enum: [and, or] }
+          description: 複数条件の結合（and/or）
+        - name: q
+          in: query
+          schema: { type: string }
+          description: 自由語検索（実装側で対象項目を定義）
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
       responses:
