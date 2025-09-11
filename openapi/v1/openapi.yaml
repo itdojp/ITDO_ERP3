@@ -31,21 +31,14 @@ paths:
         - $ref: '#/components/parameters/TenantHeader'
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/Sort'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Project'
-                  next_cursor:
-                    type: string
-                required: [items]
+                $ref: '#/components/schemas/PaginatedProjects'
         default:
           $ref: '#/components/responses/Error'
 
@@ -205,6 +198,13 @@ components:
       required: false
       schema:
         type: string
+    Sort:
+      name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+      description: 例) -created_at, name
   responses:
     Error:
       description: エラー
@@ -335,6 +335,15 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/ComplianceInvoice' }
+        next_cursor:
+          type: string
+      required: [items]
+    PaginatedProjects:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
         next_cursor:
           type: string
       required: [items]
