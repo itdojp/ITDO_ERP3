@@ -212,6 +212,7 @@ paths:
     get:
       tags: [compliance]
       summary: 監査ログ検索
+      description: 重要操作の監査ログを検索。注: changesの値は機密項目がマスキングされる場合があります。
       security:
         - bearerAuth: []
       parameters:
