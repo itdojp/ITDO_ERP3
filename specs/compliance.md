@@ -22,6 +22,7 @@
 - 一致種別: `match=exact|partial`
 - 結合: `operator=and|or`
 - 自由語: `q`（対象: `invoice_number`, `counterparty`）
+- ソート: `sort=issue_date|amount|invoice_number|counterparty`（降順は `-field`）
 
 ### レスポンス例（要約）
 ```json

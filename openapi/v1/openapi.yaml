@@ -141,6 +141,7 @@ paths:
     get:
       tags: [compliance]
       summary: 電子取引保存の検索
+      description: ソート対象: `issue_date`, `amount`, `invoice_number`, `counterparty`（降順は `-field`）。
       security:
         - bearerAuth: []
       parameters:
