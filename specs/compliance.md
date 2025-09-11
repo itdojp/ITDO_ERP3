@@ -17,6 +17,20 @@
 - POST `/api/v1/compliance/invoices` … 電子取引保存（202 Accepted）。保存ジョブ非同期実行。
 - GET `/api/v1/compliance/invoices/search` … 検索キーで一覧取得（ページング）
 
+### 検索仕様の詳細
+- 一致種別: `match=exact|partial`
+- 結合: `operator=and|or`
+- 自由語: `q`（対象: `invoice_number`, `counterparty`）
+
+### レスポンス例（要約）
+```json
+{
+  "items": [
+    { "id": "ci_001", "invoice_number": "A-2025-0001", "issue_date": "2025-09-01", "counterparty": "ABC社", "amount": 100000, "file_uri": "s3://..." }
+  ],
+  "next_cursor": "eyJpZCI6ICJjaV8wMDEifQ=="
+}
+```
+
 ## セキュリティ/監査
 - OIDC + RBAC。監査対象操作（保存/検索/閲覧/削除）は監査ログへ記録
-
