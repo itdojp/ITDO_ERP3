@@ -655,6 +655,18 @@ components:
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
         - $ref: '#/components/parameters/Sort'
+        - name: account_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, confirmed, fulfilled, cancelled] }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
       responses:
         '200':
           description: OK
@@ -764,6 +776,18 @@ components:
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
         - $ref: '#/components/parameters/Sort'
+        - name: vendor_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, ordered, received, cancelled] }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
       responses:
         '200':
           description: OK
