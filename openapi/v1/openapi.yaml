@@ -24,6 +24,8 @@ tags:
     description: 販売（見積/受注/請求連動）
   - name: procurement
     description: 購買（発注/検収/買掛）
+  - name: metadata
+    description: コード/マスタ/設定
 paths:
   /api/v1/projects:
     get:
@@ -242,6 +244,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedAuditLogs'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/status-codes:
+    get:
+      tags: [metadata]
+      summary: ステータスコード取得
+      description: ドメイン別のステータスコード一覧を返す（task|timesheet|invoice）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: domain
+          in: query
+          required: true
+          schema: { type: string, enum: [task, timesheet, invoice] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/StatusCode' }
+                required: [items]
         default:
           $ref: '#/components/responses/Error'
 components:
@@ -549,6 +579,12 @@ components:
         before: {}
         after: {}
       required: [field]
+    StatusCode:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+      required: [code, name]
     PaginatedAuditLogs:
       type: object
       properties:
