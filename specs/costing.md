@@ -10,9 +10,9 @@
 - 進行基準: cost（コスト比例）/ effort（出来高=工数比例）/ milestone（工程）
 
 ## 指標と算式（ドラフト）
-- progress_cost = 累計発生原価 / 予定原価（閾値上限=1.0）
-- progress_effort = 消化工数 / 予定工数（上限=1.0）
-- progress_milestone = 完了工程数 / 全工程数
+- progress_cost = 累計発生原価 / 予定原価（上限=1.0。予定原価=0のときは0）
+- progress_effort = 消化工数 / 予定工数（上限=1.0。予定工数=0のときは0）
+- progress_milestone = 完了工程数 / 全工程数（全工程数=0のときは0）
 - progress = 選択した進行基準（contracts.progress_method）に応じて上記いずれか
 - revenue_progress = 契約金額 × progress（検収/出来高認定ロジックは運用定義に従う）
 - gross_profit = revenue_progress − (労務費 + 外注費 + 間接費)
@@ -30,4 +30,3 @@
 - ダミーデータによるE2E計算サンプル
 - 単体テスト（進行基準の切替/境界値）
 - スナップショット更新のリトライ/順序性（Outbox/キュー）設計
-

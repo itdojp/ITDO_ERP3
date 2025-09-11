@@ -124,6 +124,8 @@ paths:
     get:
       tags: [compliance]
       summary: 電子取引保存の検索
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
         - name: date_from
