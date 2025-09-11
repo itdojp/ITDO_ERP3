@@ -585,6 +585,8 @@ components:
       properties:
         code: { type: string }
         name: { type: string }
+        active: { type: boolean, default: true }
+        ordinal: { type: integer, description: '表示順' }
       required: [code, name]
     PaginatedAuditLogs:
       type: object
