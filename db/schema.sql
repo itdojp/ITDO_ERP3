@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS cost_snapshots (
   labor_cost NUMERIC(18,2) NOT NULL DEFAULT 0,
   external_cost NUMERIC(18,2) NOT NULL DEFAULT 0,
   overhead NUMERIC(18,2) NOT NULL DEFAULT 0,
-  revenue_progress NUMERIC(7,4),
+  revenue_progress NUMERIC(5,4),
   gross_profit NUMERIC(18,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -172,3 +172,4 @@ CREATE TABLE IF NOT EXISTS journal_exports (
 );
 
 -- Note: RLS policiesは実装段階で追加（app.tenant_id を前提）
+
