@@ -765,6 +765,28 @@ components:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/sales/orders/{id}/invoice:
+    post:
+      tags: [sales]
+      summary: 受注から請求書作成
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/v1/procurement/purchase-orders:
     get:
       tags: [procurement]
@@ -883,6 +905,28 @@ components:
             application/json:
               schema:
                 $ref: '#/components/schemas/PurchaseOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/procurement/purchase-orders/{id}/bill:
+    post:
+      tags: [procurement]
+      summary: 発注から買掛（ベンダービル）作成
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorBill'
         default:
           $ref: '#/components/responses/Error'
     Contract:
