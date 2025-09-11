@@ -1,0 +1,12 @@
+{
+  "project": { "id": "P-003", "contract_amount": 300000, "planned_cost": 150000, "planned_effort": 0 },
+  "members": [ { "user_id": "U-200", "rate": 5000 } ],
+  "timesheets": [
+    { "user_id": "U-200", "project_id": "P-003", "work_date": "2025-09-04", "hours": 10 }
+  ],
+  "external_cost": 0,
+  "overhead": 0,
+  "progress_method": "milestone",
+  "total_milestones": 5,
+  "completed_milestones": 2
+}

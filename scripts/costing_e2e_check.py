@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import json, sys, math
 
-with open('examples/costing/data.json', 'r', encoding='utf-8') as f:
+path = sys.argv[1] if len(sys.argv) > 1 else 'examples/costing/data.json'
+with open(path, 'r', encoding='utf-8') as f:
     d = json.load(f)
 
 planned_cost = d['project']['planned_cost'] or 0
@@ -30,6 +31,10 @@ if progress_method == 'cost':
 elif progress_method == 'effort':
     denom = planned_effort if planned_effort else 0
     progress = clamp01(effort / denom) if denom else 0.0
+elif progress_method == 'milestone':
+    total = float(d.get('total_milestones') or 0)
+    done = float(d.get('completed_milestones') or 0)
+    progress = clamp01(done / total) if total else 0.0
 else:
     progress = 0.0
 
@@ -46,9 +51,23 @@ print(json.dumps({
 }, ensure_ascii=False))
 
 # simple expectation
-expected_labor = 80 * 5000
-assert abs(labor_cost - expected_labor) < 1e-6, 'labor_cost mismatch'
-ratio = (expected_labor + external_cost) / planned_cost if planned_cost else 0.0
-expected_progress = min(1.0, ratio)
+if path.endswith('data.json'):
+    expected_labor = 80 * 5000
+    assert abs(labor_cost - expected_labor) < 1e-6, 'labor_cost mismatch'
+
+if progress_method == 'cost':
+    ratio = (labor_cost + external_cost + overhead) / planned_cost if planned_cost else 0.0
+    expected_progress = min(1.0, ratio)
+elif progress_method == 'effort':
+    ratio = effort / planned_effort if planned_effort else 0.0
+    expected_progress = min(1.0, ratio)
+elif progress_method == 'milestone':
+    total = float(d.get('total_milestones') or 0)
+    done = float(d.get('completed_milestones') or 0)
+    ratio = done / total if total else 0.0
+    expected_progress = min(1.0, ratio)
+else:
+    expected_progress = 0.0
+
 assert round(progress, 4) == round(expected_progress, 4), 'progress mismatch'
 print('OK: costing e2e sample passed')

@@ -1,0 +1,10 @@
+{
+  "project": { "id": "P-002", "contract_amount": 200000, "planned_cost": 120000, "planned_effort": 100 },
+  "members": [ { "user_id": "U-100", "rate": 4000 } ],
+  "timesheets": [
+    { "user_id": "U-100", "project_id": "P-002", "work_date": "2025-09-03", "hours": 25 }
+  ],
+  "external_cost": 0,
+  "overhead": 0,
+  "progress_method": "effort"
+}
