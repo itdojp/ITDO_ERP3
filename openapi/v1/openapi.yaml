@@ -1,0 +1,292 @@
+openapi: 3.1.0
+info:
+  title: ITDO ERP3 API
+  version: 0.1.0
+  description: >-
+    API-firstなERPのv1スケルトン。認証はOIDC Bearer、テナントは`X-Tenant-ID`で解決。
+servers:
+  - url: https://api.example.com
+    description: Production (placeholder)
+  - url: https://stg.api.example.com
+    description: Staging (placeholder)
+tags:
+  - name: projects
+    description: プロジェクト管理（一覧/詳細/登録 等）
+  - name: timesheets
+    description: 工数登録と承認関連
+  - name: costing
+    description: 原価計算/採算取得
+  - name: compliance
+    description: 電子帳簿保存法・インボイス対応
+  - name: integration
+    description: 外部連携（OCR等）
+paths:
+  /api/v1/projects:
+    get:
+      tags: [projects]
+      summary: プロジェクト一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                  next_cursor:
+                    type: string
+                required: [items]
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/timesheets:
+    post:
+      tags: [timesheets]
+      summary: 工数登録
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimesheetEntry'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimesheetEntry'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/projects/{id}/profit:
+    get:
+      tags: [costing]
+      summary: プロジェクト採算（MVP）
+      description: revenue, labor_cost, external_cost, overhead, gross_profit, progress_based_revenue を返す
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfitResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/compliance/invoices:
+    post:
+      tags: [compliance]
+      summary: 電子取引保存（インボイス）
+      description: PDFメタと添付の登録（改ざん防止/検索キー/時刻情報を前提）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceInvoiceRequest'
+      responses:
+        '202':
+          description: Accepted
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/integration/ocr/invoice:process:
+    post:
+      tags: [integration]
+      summary: 請求書OCR→買掛起票
+      description: PDF→JSONのモック処理を想定。失敗はキュー再処理へ。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OcrInvoiceProcessRequest'
+      responses:
+        '202':
+          description: Accepted
+        default:
+          $ref: '#/components/responses/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      schema:
+        type: string
+      description: マルチテナント識別子
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    PageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+  responses:
+    Error:
+      description: エラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: string
+          required: [code, message]
+      required: [error]
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        client_id:
+          type: string
+        status:
+          type: string
+          enum: [planned, active, onhold, closed]
+        start_on:
+          type: string
+          format: date
+        end_on:
+          type: string
+          format: date
+      required: [id, name, status]
+    TimesheetEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        project_id:
+          type: string
+        task_id:
+          type: string
+        work_date:
+          type: string
+          format: date
+        hours:
+          type: number
+          minimum: 0
+        approval_status:
+          type: string
+          enum: [draft, submitted, approved, rejected]
+      required: [user_id, project_id, work_date, hours]
+    ProfitResponse:
+      type: object
+      properties:
+        revenue:
+          type: number
+        labor_cost:
+          type: number
+        external_cost:
+          type: number
+        overhead:
+          type: number
+        gross_profit:
+          type: number
+        progress_based_revenue:
+          type: number
+      required: [labor_cost, external_cost, gross_profit]
+    ComplianceInvoiceRequest:
+      type: object
+      properties:
+        invoice_number:
+          type: string
+        issue_date:
+          type: string
+          format: date
+        counterparty:
+          type: string
+        amount:
+          type: number
+        tax_amount:
+          type: number
+        file_uri:
+          type: string
+          description: PDFのストレージURI
+        hash:
+          type: string
+          description: ファイルハッシュ（改ざん検知）
+        timestamp:
+          type: string
+          format: date-time
+          description: 電帳法要件の時刻情報
+        searchable_keys:
+          type: array
+          items:
+            type: string
+      required: [invoice_number, issue_date, counterparty, amount, file_uri, hash]
+    OcrInvoiceProcessRequest:
+      type: object
+      properties:
+        file_uri:
+          type: string
+        vendor_hint:
+          type: string
+        language:
+          type: string
+          default: ja
+      required: [file_uri]
