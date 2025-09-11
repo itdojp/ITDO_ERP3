@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS tenants (
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   email TEXT NOT NULL,
   name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   code TEXT NOT NULL,
   name TEXT NOT NULL,
   qualified_invoice_number TEXT,
@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   code TEXT NOT NULL,
   name TEXT NOT NULL,
-  client_id TEXT REFERENCES accounts(id),
+  client_id TEXT REFERENCES accounts(id) ON DELETE RESTRICT,
   status TEXT NOT NULL DEFAULT 'planned',
   start_on DATE,
   end_on DATE,
@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS project_members (
   project_id TEXT NOT NULL REFERENCES projects(id),
-  user_id TEXT NOT NULL REFERENCES users(id),
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   role TEXT,
   cost_rate NUMERIC(12,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS project_members (
 
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  project_id TEXT NOT NULL REFERENCES projects(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
   name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -76,10 +76,10 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE TABLE IF NOT EXISTS timesheets (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  user_id TEXT NOT NULL REFERENCES users(id),
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  task_id TEXT REFERENCES tasks(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   work_date DATE NOT NULL,
   hours NUMERIC(6,2) NOT NULL CHECK (hours >= 0),
   approval_status TEXT NOT NULL DEFAULT 'draft',
@@ -91,8 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_timesheets_project_date ON timesheets(project_id,
 
 CREATE TABLE IF NOT EXISTS contracts (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  account_id TEXT NOT NULL REFERENCES accounts(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
   type TEXT NOT NULL,
   start_on DATE,
   end_on DATE,
@@ -105,8 +105,8 @@ CREATE TABLE IF NOT EXISTS contracts (
 
 CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  account_id TEXT NOT NULL REFERENCES accounts(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
   issue_date DATE NOT NULL,
   due_date DATE,
   status TEXT NOT NULL DEFAULT 'draft',
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 CREATE TABLE IF NOT EXISTS invoice_lines (
   id TEXT PRIMARY KEY,
-  invoice_id TEXT NOT NULL REFERENCES invoices(id),
+  invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
   item_code TEXT,
   description TEXT,
   qty NUMERIC(12,2) NOT NULL DEFAULT 1,
@@ -135,8 +135,8 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
 
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  invoice_id TEXT NOT NULL REFERENCES invoices(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
   amount NUMERIC(18,2) NOT NULL,
   paid_on DATE NOT NULL,
   method TEXT,
@@ -147,8 +147,8 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE TABLE IF NOT EXISTS cost_snapshots (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  project_id TEXT NOT NULL REFERENCES projects(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
   as_of_date DATE NOT NULL,
   labor_cost NUMERIC(18,2) NOT NULL DEFAULT 0,
   external_cost NUMERIC(18,2) NOT NULL DEFAULT 0,
@@ -163,7 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_cost_snapshots_project_date ON cost_snapshots(pro
 
 CREATE TABLE IF NOT EXISTS journal_exports (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   period TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   file_uri TEXT,
@@ -172,4 +172,3 @@ CREATE TABLE IF NOT EXISTS journal_exports (
 );
 
 -- Note: RLS policiesは実装段階で追加（app.tenant_id を前提）
-
