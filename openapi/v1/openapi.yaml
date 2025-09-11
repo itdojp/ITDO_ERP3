@@ -530,6 +530,12 @@ components:
         file_uri: { type: string }
         hash: { type: string }
         timestamp: { type: string, format: date-time }
+        highlights:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: 自由語検索などのハイライト（フィールド毎）
       required: [id, invoice_number, issue_date, counterparty, amount, file_uri]
     PaginatedComplianceInvoices:
       type: object

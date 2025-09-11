@@ -27,7 +27,8 @@
 ```json
 {
   "items": [
-    { "id": "ci_001", "invoice_number": "A-2025-0001", "issue_date": "2025-09-01", "counterparty": "ABC社", "amount": 100000, "file_uri": "s3://..." }
+    { "id": "ci_001", "invoice_number": "A-2025-0001", "issue_date": "2025-09-01", "counterparty": "ABC社", "amount": 100000, "file_uri": "s3://...",
+      "highlights": { "invoice_number": ["<em>A-2025</em>-0001"], "counterparty": ["<em>ABC</em>社"] } }
   ],
   "next_cursor": "eyJpZCI6ICJjaV8wMDEifQ=="
 }
