@@ -9,10 +9,16 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sample:
+          - examples/costing/data.json
+          - examples/costing/effort.json
+          - examples/costing/milestone.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Run E2E sample
-        run: python3 scripts/costing_e2e_check.py
+      - name: Run E2E sample ${{ matrix.sample }}
+        run: python3 scripts/costing_e2e_check.py "${{ matrix.sample }}"
