@@ -204,7 +204,7 @@ components:
       required: false
       schema:
         type: string
-      description: 例) -created_at, name
+      description: 例: -created_at, name (e.g. -created_at, name)
   responses:
     Error:
       description: エラー
@@ -343,7 +343,8 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/Project' }
+          items:
+            $ref: '#/components/schemas/Project'
         next_cursor:
           type: string
       required: [items]
