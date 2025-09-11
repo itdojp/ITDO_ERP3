@@ -460,6 +460,14 @@ components:
           type: array
           items: { $ref: '#/components/schemas/SalesOrderLine' }
       required: [account_id, lines]
+    UpdateSalesOrderRequest:
+      type: object
+      properties:
+        order_date: { type: string, format: date }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/SalesOrderLine' }
+      additionalProperties: false
     CreatePurchaseOrderRequest:
       type: object
       properties:
@@ -469,6 +477,14 @@ components:
           type: array
           items: { $ref: '#/components/schemas/PurchaseOrderLine' }
       required: [vendor_id, lines]
+    UpdatePurchaseOrderRequest:
+      type: object
+      properties:
+        order_date: { type: string, format: date }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/PurchaseOrderLine' }
+      additionalProperties: false
     ProfitResponse:
       type: object
       properties:
@@ -530,6 +546,12 @@ components:
         file_uri: { type: string }
         hash: { type: string }
         timestamp: { type: string, format: date-time }
+        highlights:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: 自由語検索などのハイライト（フィールド毎）
       required: [id, invoice_number, issue_date, counterparty, amount, file_uri]
     PaginatedComplianceInvoices:
       type: object
@@ -720,6 +742,32 @@ components:
                 $ref: '#/components/schemas/SalesOrder'
         default:
           $ref: '#/components/responses/Error'
+    patch:
+      tags: [sales]
+      summary: 受注更新
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSalesOrderRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrder'
+        default:
+          $ref: '#/components/responses/Error'
 
   /api/v1/sales/orders/{id}/confirm:
     post:
@@ -854,6 +902,32 @@ components:
           in: path
           required: true
           schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      tags: [procurement]
+      summary: 発注更新
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePurchaseOrderRequest'
       responses:
         '200':
           description: OK
