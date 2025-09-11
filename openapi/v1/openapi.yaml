@@ -450,3 +450,90 @@ components:
         next_cursor:
           type: string
       required: [items]
+  /api/v1/contracts:
+    get:
+      tags: [projects]
+      summary: 契約一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedContracts'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/invoices:
+    get:
+      tags: [compliance]
+      summary: 請求書一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInvoices'
+        default:
+          $ref: '#/components/responses/Error'
+    Contract:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        type: { type: string }
+        start_on: { type: string, format: date }
+        end_on: { type: string, format: date }
+        billing_terms: { type: object }
+        progress_method: { type: string, enum: [cost, effort, milestone] }
+      required: [id, account_id]
+
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        issue_date: { type: string, format: date }
+        due_date: { type: string, format: date }
+        status: { type: string, enum: [draft, issued, paid, cancelled] }
+        invoice_number: { type: string }
+        total: { type: number }
+        tax_total: { type: number }
+      required: [id, account_id, status, invoice_number, issue_date]
+
+    PaginatedContracts:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+        next_cursor:
+          type: string
+      required: [items]
+
+    PaginatedInvoices:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        next_cursor:
+          type: string
+      required: [items]
