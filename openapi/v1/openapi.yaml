@@ -509,6 +509,10 @@ components:
           type: string
           format: date-time
           description: 電帳法要件の時刻情報
+        timestamp_method:
+          type: string
+          enum: [tsa, system]
+          description: タイムスタンプ手段（tsa=外部TSA/RFC3161, system=システム時刻）
         searchable_keys:
           type: array
           items:
