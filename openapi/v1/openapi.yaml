@@ -11,10 +11,15 @@ servers:
     description: Staging (placeholder)
 tags:
   - name: projects
+    description: プロジェクト管理（一覧/詳細/登録 等）
   - name: timesheets
+    description: 工数登録と承認関連
   - name: costing
+    description: 原価計算/採算取得
   - name: compliance
+    description: 電子帳簿保存法・インボイス対応
   - name: integration
+    description: 外部連携（OCR等）
 paths:
   /api/v1/projects:
     get:

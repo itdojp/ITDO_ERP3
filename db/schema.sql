@@ -54,10 +54,12 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_members (
   project_id TEXT NOT NULL REFERENCES projects(id),
   user_id TEXT NOT NULL REFERENCES users(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
   role TEXT,
   cost_rate NUMERIC(12,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY(project_id, user_id)
 );
 
@@ -125,7 +127,10 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
   qty NUMERIC(12,2) NOT NULL DEFAULT 1,
   unit_price NUMERIC(18,2) NOT NULL DEFAULT 0,
   tax_rate NUMERIC(5,2),
-  tax_code TEXT
+  tax_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -148,7 +153,7 @@ CREATE TABLE IF NOT EXISTS cost_snapshots (
   labor_cost NUMERIC(18,2) NOT NULL DEFAULT 0,
   external_cost NUMERIC(18,2) NOT NULL DEFAULT 0,
   overhead NUMERIC(18,2) NOT NULL DEFAULT 0,
-  revenue_progress NUMERIC(7,4),
+  revenue_progress NUMERIC(5,4),
   gross_profit NUMERIC(18,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
