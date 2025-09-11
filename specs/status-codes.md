@@ -1,6 +1,6 @@
 # ステータスコードAPI（ドラフト）
 
-- エンドポイント: `GET /api/v1/status-codes?domain=task|timesheet|invoice`
+- エンドポイント: `GET /api/v1/status-codes?domain=task|timesheet|invoice|sales_order|purchase_order|project`
 - 目的: クライアントが列挙や表示名を動的に取得するための簡易メタデータAPI
 - レスポンス: `{ items: [{ code, name, active, ordinal }] }`
 - データ源: DBのlookupテーブル（task_statuses / timesheet_statuses / invoice_statuses）
