@@ -1,7 +1,7 @@
 # APIs (Bootstrap)
 
 ## 方針
-- API-first: OpenAPIを`/openapi`配下に配置（後続PR）。
+- API-first: OpenAPIを`/openapi`配下に配置（v1雛形追加済み）。
 - 認証/認可: OIDC + RBAC（MFA推奨）。テナントはヘッダ`X-Tenant-ID`。
 - バージョン: `/api/v1`。後方互換を基本とし、破壊的変更は次版。
 
@@ -16,3 +16,5 @@
 - Bearerトークン（OIDC）、スコープ/ロールでAPI権限制御
 - 監査ログ: 請求発行/入金登録/権限変更 等
 
+## 参照
+- OpenAPI v1: `openapi/v1/openapi.yaml`
