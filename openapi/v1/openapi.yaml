@@ -110,6 +110,41 @@ paths:
       responses:
         '202':
           description: Accepted
+        '400':
+          description: Bad Request
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/compliance/invoices/search:
+    get:
+      tags: [compliance]
+      summary: 電子取引保存の検索
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+        - name: amount_from
+          in: query
+          schema: { type: number }
+        - name: amount_to
+          in: query
+          schema: { type: number }
+        - name: counterparty
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceInvoiceSearchResult'
         default:
           $ref: '#/components/responses/Error'
 
@@ -274,6 +309,28 @@ components:
           items:
             type: string
       required: [invoice_number, issue_date, counterparty, amount, file_uri, hash]
+    ComplianceInvoice:
+      type: object
+      properties:
+        id: { type: string }
+        invoice_number: { type: string }
+        issue_date: { type: string, format: date }
+        counterparty: { type: string }
+        amount: { type: number }
+        tax_amount: { type: number }
+        file_uri: { type: string }
+        hash: { type: string }
+        timestamp: { type: string, format: date-time }
+      required: [id, invoice_number, issue_date, counterparty, amount, file_uri]
+    ComplianceInvoiceSearchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ComplianceInvoice' }
+        next_cursor:
+          type: string
+      required: [items]
     OcrInvoiceProcessRequest:
       type: object
       properties:
@@ -285,4 +342,3 @@ components:
           type: string
           default: ja
       required: [file_uri]
-
