@@ -365,6 +365,9 @@ components:
         order_date: { type: string, format: date }
         status: { type: string, enum: [draft, confirmed, fulfilled, cancelled] }
         total: { type: number }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/SalesOrderLine' }
       required: [id, order_number, account_id, status]
     PaginatedSalesOrders:
       type: object
@@ -385,6 +388,9 @@ components:
         order_date: { type: string, format: date }
         status: { type: string, enum: [draft, ordered, received, cancelled] }
         total: { type: number }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/PurchaseOrderLine' }
       required: [id, po_number, vendor_id, status]
     PaginatedPurchaseOrders:
       type: object
@@ -396,6 +402,42 @@ components:
         next_cursor:
           type: string
       required: [items]
+    SalesOrderLine:
+      type: object
+      properties:
+        item_code: { type: string }
+        description: { type: string }
+        qty: { type: number }
+        unit_price: { type: number }
+        amount: { type: number }
+      required: [qty, unit_price]
+    PurchaseOrderLine:
+      type: object
+      properties:
+        item_code: { type: string }
+        description: { type: string }
+        qty: { type: number }
+        unit_price: { type: number }
+        amount: { type: number }
+      required: [qty, unit_price]
+    CreateSalesOrderRequest:
+      type: object
+      properties:
+        account_id: { type: string }
+        order_date: { type: string, format: date }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/SalesOrderLine' }
+      required: [account_id, lines]
+    CreatePurchaseOrderRequest:
+      type: object
+      properties:
+        vendor_id: { type: string }
+        order_date: { type: string, format: date }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/PurchaseOrderLine' }
+      required: [vendor_id, lines]
     ProfitResponse:
       type: object
       properties:
@@ -579,6 +621,50 @@ components:
                 $ref: '#/components/schemas/PaginatedSalesOrders'
         default:
           $ref: '#/components/responses/Error'
+    post:
+      tags: [sales]
+      summary: 受注作成
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSalesOrderRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/sales/orders/{id}:
+    get:
+      tags: [sales]
+      summary: 受注詳細
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrder'
+        default:
+          $ref: '#/components/responses/Error'
 
   /api/v1/procurement/purchase-orders:
     get:
@@ -598,6 +684,50 @@ components:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedPurchaseOrders'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [procurement]
+      summary: 発注作成
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseOrderRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/procurement/purchase-orders/{id}:
+    get:
+      tags: [procurement]
+      summary: 発注詳細
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
         default:
           $ref: '#/components/responses/Error'
     Contract:
