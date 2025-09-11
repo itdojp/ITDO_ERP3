@@ -54,10 +54,12 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_members (
   project_id TEXT NOT NULL REFERENCES projects(id),
   user_id TEXT NOT NULL REFERENCES users(id),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
   role TEXT,
   cost_rate NUMERIC(12,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY(project_id, user_id)
 );
 
@@ -125,7 +127,10 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
   qty NUMERIC(12,2) NOT NULL DEFAULT 1,
   unit_price NUMERIC(18,2) NOT NULL DEFAULT 0,
   tax_rate NUMERIC(5,2),
-  tax_code TEXT
+  tax_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -167,4 +172,3 @@ CREATE TABLE IF NOT EXISTS journal_exports (
 );
 
 -- Note: RLS policiesは実装段階で追加（app.tenant_id を前提）
-
