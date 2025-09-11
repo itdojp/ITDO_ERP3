@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE TABLE IF NOT EXISTS project_members (
-  project_id TEXT NOT NULL REFERENCES projects(id),
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   role TEXT,
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 CREATE TABLE IF NOT EXISTS invoice_lines (
   id TEXT PRIMARY KEY,
-  invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+  invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
   item_code TEXT,
   description TEXT,
   qty NUMERIC(12,2) NOT NULL DEFAULT 1,
@@ -171,8 +171,7 @@ CREATE TABLE IF NOT EXISTS journal_exports (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Note: RLS policiesは実装段階で追加（app.tenant_id を前提）
-
+ 
 -- Audit logs (MVP)
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
