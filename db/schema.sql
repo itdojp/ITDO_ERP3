@@ -188,3 +188,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_logs(tenant_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(tenant_id, entity_type, entity_id);
+-- Status lookup tables (optional seed)
+CREATE TABLE IF NOT EXISTS task_statuses (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS timesheet_statuses (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invoice_statuses (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
