@@ -1,0 +1,33 @@
+name: Docs & SQL Lint
+
+on:
+  pull_request:
+    paths:
+      - '**/*.md'
+      - 'db/**/*.sql'
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install markdownlint-cli
+        run: npm i -g markdownlint-cli@0.40.0
+      - name: Run markdownlint
+        run: markdownlint "**/*.md" --ignore "upstream_repo/**" --config .markdownlint.json || true
+
+  sqlfluff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install sqlfluff
+        run: pip install sqlfluff==3.1.0
+      - name: Lint SQL (Postgres dialect)
+        run: sqlfluff lint db --dialect postgres --nocolor || true
+
