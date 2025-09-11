@@ -48,6 +48,7 @@ print(json.dumps({
 # simple expectation
 expected_labor = 80 * 5000
 assert abs(labor_cost - expected_labor) < 1e-6, 'labor_cost mismatch'
-assert round(progress, 4) == round((expected_labor + external_cost) / planned_cost, 4)
+ratio = (expected_labor + external_cost) / planned_cost if planned_cost else 0.0
+expected_progress = min(1.0, ratio)
+assert round(progress, 4) == round(expected_progress, 4), 'progress mismatch'
 print('OK: costing e2e sample passed')
-
