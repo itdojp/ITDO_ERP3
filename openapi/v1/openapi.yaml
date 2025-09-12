@@ -24,6 +24,12 @@ tags:
     description: 販売（見積/受注/請求連動）
   - name: procurement
     description: 購買（発注/検収/買掛）
+  - name: contracts
+    description: 契約管理（改定履歴/請求条件/更新アラート/電子署名連携）
+  - name: hr
+    description: 勤怠（打刻/36協定チェック/月次締め/外部連携）
+  - name: accounting
+    description: 会計連携（勘定科目マッピング/仕訳エクスポート）
   - name: metadata
     description: コード/マスタ/設定
 paths:
@@ -680,7 +686,7 @@ components:
       required: [items]
   /api/v1/contracts:
     get:
-      tags: [projects]
+      tags: [contracts]
       summary: 契約一覧
       security:
         - bearerAuth: []
@@ -696,6 +702,24 @@ components:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedContracts'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [contracts]
+      summary: 契約作成
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Contract'
+      responses:
+        '201':
+          description: Created
         default:
           $ref: '#/components/responses/Error'
 
@@ -1159,3 +1183,170 @@ components:
         next_cursor:
           type: string
       required: [items]
+  /api/v1/contracts/{id}:
+    get:
+      tags: [contracts]
+      summary: 契約詳細
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [contracts]
+      summary: 契約更新（改定履歴は別途記録）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Contract'
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/contracts/{id}/renewal-alert:
+    post:
+      tags: [contracts]
+      summary: 契約更新アラート設定
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/contracts/{id}/esign:
+    post:
+      tags: [contracts]
+      summary: 電子署名プロセス開始（外部連携）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/hr/timeclock:
+    post:
+      tags: [hr]
+      summary: 打刻（出勤/退勤/休憩）
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type: { type: string, enum: [in, out, break_in, break_out] }
+                occurred_at: { type: string, format: date-time }
+              required: [type]
+      responses:
+        '201': { description: Created }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/hr/attendance/close:
+    post:
+      tags: [hr]
+      summary: 月次勤怠締め
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period: { type: string, description: 'YYYY-MM' }
+              required: [period]
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/hr/36-check:
+    get:
+      tags: [hr]
+      summary: 36協定上限チェックレポート
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: period
+          in: query
+          schema: { type: string, description: 'YYYY-MM' }
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/accounting/gl-mappings:
+    get:
+      tags: [accounting]
+      summary: 勘定科目マッピング一覧
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [accounting]
+      summary: 勘定科目マッピング登録/更新
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+        default: { $ref: '#/components/responses/Error' }
+  /api/v1/accounting/journal-exports:
+    post:
+      tags: [accounting]
+      summary: 仕訳エクスポート作成
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period: { type: string, description: 'YYYY-MM' }
+              required: [period]
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
