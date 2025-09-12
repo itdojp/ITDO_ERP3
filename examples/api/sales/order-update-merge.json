@@ -1,0 +1,9 @@
+{
+  "lines_mode": "merge",
+  "lines": [
+    { "line_id": "L-1", "qty": 12, "unit_price": 4800 }
+  ],
+  "lines_ops": [
+    { "op": "remove", "item_code": "SKU-OLD" }
+  ]
+}

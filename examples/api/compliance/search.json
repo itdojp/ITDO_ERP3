@@ -1,0 +1,8 @@
+{
+  "match": "partial",
+  "operator": "and",
+  "q": "ABC",
+  "date_from": "2025-09-01",
+  "date_to": "2025-09-30",
+  "sort": "-issue_date"
+}
