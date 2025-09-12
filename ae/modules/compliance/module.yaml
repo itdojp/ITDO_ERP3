@@ -1,0 +1,18 @@
+name: compliance
+includeTags: [compliance]
+paths:
+  save: /api/v1/compliance/invoices
+  search: /api/v1/compliance/invoices/search
+filters:
+  - name: match
+  - name: operator
+  - name: q
+  - name: date_from
+  - name: date_to
+  - name: amount_from
+  - name: amount_to
+  - name: counterparty
+sort:
+  allowed: [issue_date, amount, invoice_number, counterparty]
+permissions:
+  scope: compliance

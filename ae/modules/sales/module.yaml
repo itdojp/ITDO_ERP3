@@ -1,0 +1,26 @@
+name: sales
+includeTags: [sales]
+owned_tables: [] # 注: テーブルは別モジュールで管理する場合あり
+paths:
+  list: /api/v1/sales/orders
+  create: /api/v1/sales/orders
+  get: /api/v1/sales/orders/{id}
+  update: /api/v1/sales/orders/{id}
+actions:
+  - name: confirm
+    method: POST
+    path: /api/v1/sales/orders/{id}/confirm
+  - name: fulfill
+    method: POST
+    path: /api/v1/sales/orders/{id}/fulfill
+  - name: cancel
+    method: POST
+    path: /api/v1/sales/orders/{id}/cancel
+  - name: invoice
+    method: POST
+    path: /api/v1/sales/orders/{id}/invoice
+    body: LinkingOptions
+states:
+  file: states.yaml
+permissions:
+  scope: sales

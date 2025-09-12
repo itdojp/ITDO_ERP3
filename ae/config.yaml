@@ -1,0 +1,23 @@
+apiSpec: openapi/v1/openapi.yaml
+openapi:
+  tenantHeader: X-Tenant-ID
+  auth:
+    scheme: bearer
+    format: JWT
+codegen:
+  language: typescript
+  server: nestjs
+  client: react-query
+  pagination:
+    cursorParam: cursor
+    limitParam: limit
+    nextCursorField: next_cursor
+modules:
+  - projects
+  - timesheets
+  - costing
+  - sales
+  - procurement
+  - compliance
+  - audit
+  - metadata

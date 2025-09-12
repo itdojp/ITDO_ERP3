@@ -1,0 +1,25 @@
+name: procurement
+includeTags: [procurement]
+paths:
+  list: /api/v1/procurement/purchase-orders
+  create: /api/v1/procurement/purchase-orders
+  get: /api/v1/procurement/purchase-orders/{id}
+  update: /api/v1/procurement/purchase-orders/{id}
+actions:
+  - name: order
+    method: POST
+    path: /api/v1/procurement/purchase-orders/{id}/order
+  - name: receive
+    method: POST
+    path: /api/v1/procurement/purchase-orders/{id}/receive
+  - name: cancel
+    method: POST
+    path: /api/v1/procurement/purchase-orders/{id}/cancel
+  - name: bill
+    method: POST
+    path: /api/v1/procurement/purchase-orders/{id}/bill
+    body: LinkingOptions
+states:
+  file: states.yaml
+permissions:
+  scope: procurement

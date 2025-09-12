@@ -1,0 +1,11 @@
+name: timesheets
+includeTags: [timesheets]
+owned_tables: [timesheets]
+paths:
+  list: /api/v1/timesheets
+  create: /api/v1/timesheets
+dto:
+  create:
+    required: [user_id, project_id, work_date, hours]
+permissions:
+  scope: timesheets

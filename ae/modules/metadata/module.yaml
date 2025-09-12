@@ -1,0 +1,11 @@
+name: metadata
+includeTags: [metadata]
+paths:
+  list: /api/v1/status-codes
+filters:
+  - name: domain
+  - name: active
+sort:
+  allowed: [ordinal, code, name]
+permissions:
+  scope: metadata

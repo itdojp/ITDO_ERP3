@@ -1,0 +1,8 @@
+name: audit
+includeTags: [compliance]
+paths:
+  search: /api/v1/audit/logs
+permissions:
+  scope: audit
+fields:
+  sensitive: [ip, user_agent]

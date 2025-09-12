@@ -1,0 +1,13 @@
+entity: purchase_order
+initial: draft
+states: [draft, ordered, received, cancelled]
+transitions:
+  - from: draft
+    to: ordered
+    action: order
+  - from: ordered
+    to: received
+    action: receive
+  - from: [draft, ordered]
+    to: cancelled
+    action: cancel

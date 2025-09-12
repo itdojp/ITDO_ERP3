@@ -1,0 +1,12 @@
+name: projects
+includeTags: [projects]
+owned_tables: [projects, tasks, project_members]
+paths:
+  prefix: /api/v1/projects
+generate:
+  list: true
+  get: true
+relations:
+  - from: projects.client_id
+    to: accounts.id
+    type: many-to-one

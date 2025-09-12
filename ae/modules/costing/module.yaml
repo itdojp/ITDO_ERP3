@@ -1,0 +1,10 @@
+name: costing
+includeTags: [costing]
+paths:
+  profit: /api/v1/projects/{id}/profit
+generate:
+  custom:
+    - name: getProjectProfit
+      method: GET
+      path: /api/v1/projects/{id}/profit
+      response: ProfitResponse

@@ -1,0 +1,50 @@
+roles:
+  admin:
+    - '*'
+  auditor:
+    - 'audit.*'
+  billing:
+    - 'sales.invoice'
+    - 'procurement.bill'
+    - 'invoices.read'
+  project_manager:
+    - 'projects.*'
+    - 'timesheets.read'
+  user:
+    - 'timesheets.*'
+
+scopes:
+  projects:
+    - list
+    - get
+    - create
+    - update
+  timesheets:
+    - list
+    - create
+    - get
+  sales:
+    - list
+    - get
+    - create
+    - update
+    - confirm
+    - fulfill
+    - cancel
+    - invoice
+  procurement:
+    - list
+    - get
+    - create
+    - update
+    - order
+    - receive
+    - cancel
+    - bill
+  compliance:
+    - save
+    - search
+  audit:
+    - search
+  metadata:
+    - list

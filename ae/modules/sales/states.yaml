@@ -1,0 +1,13 @@
+entity: sales_order
+initial: draft
+states: [draft, confirmed, fulfilled, cancelled]
+transitions:
+  - from: draft
+    to: confirmed
+    action: confirm
+  - from: confirmed
+    to: fulfilled
+    action: fulfill
+  - from: [draft, confirmed]
+    to: cancelled
+    action: cancel
