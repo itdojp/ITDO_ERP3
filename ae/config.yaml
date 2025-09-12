@@ -12,6 +12,15 @@ codegen:
     cursorParam: cursor
     limitParam: limit
     nextCursorField: next_cursor
+  naming:
+    entitySuffix: ''
+    dtoSuffix: 'Dto'
+    idField: 'id'
+  output:
+    server:
+      baseDir: generated/server
+    client:
+      baseDir: generated/client
 modules:
   - projects
   - timesheets

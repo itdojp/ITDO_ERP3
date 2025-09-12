@@ -6,6 +6,11 @@ paths:
   create: /api/v1/sales/orders
   get: /api/v1/sales/orders/{id}
   update: /api/v1/sales/orders/{id}
+filters:
+  - name: account_id
+  - name: status
+  - name: date_from
+  - name: date_to
 actions:
   - name: confirm
     method: POST
@@ -24,3 +29,8 @@ states:
   file: states.yaml
 permissions:
   scope: sales
+dto:
+  create:
+    schema: CreateSalesOrderRequest
+  update:
+    schema: UpdateSalesOrderRequest

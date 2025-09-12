@@ -1,0 +1,8 @@
+name: hr
+includeTags: [hr]
+paths:
+  timeclock: /api/v1/hr/timeclock
+  attendanceClose: /api/v1/hr/attendance/close
+  thirtySixCheck: /api/v1/hr/36-check
+permissions:
+  scope: hr

@@ -5,6 +5,11 @@ paths:
   create: /api/v1/procurement/purchase-orders
   get: /api/v1/procurement/purchase-orders/{id}
   update: /api/v1/procurement/purchase-orders/{id}
+filters:
+  - name: vendor_id
+  - name: status
+  - name: date_from
+  - name: date_to
 actions:
   - name: order
     method: POST
@@ -23,3 +28,8 @@ states:
   file: states.yaml
 permissions:
   scope: procurement
+dto:
+  create:
+    schema: CreatePurchaseOrderRequest
+  update:
+    schema: UpdatePurchaseOrderRequest

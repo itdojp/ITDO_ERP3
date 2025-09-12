@@ -1,0 +1,16 @@
+name: contracts
+includeTags: [contracts]
+paths:
+  list: /api/v1/contracts
+  create: /api/v1/contracts
+  get: /api/v1/contracts/{id}
+  update: /api/v1/contracts/{id}
+actions:
+  - name: renewalAlert
+    method: POST
+    path: /api/v1/contracts/{id}/renewal-alert
+  - name: esign
+    method: POST
+    path: /api/v1/contracts/{id}/esign
+permissions:
+  scope: contracts

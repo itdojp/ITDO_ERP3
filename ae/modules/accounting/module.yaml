@@ -1,0 +1,10 @@
+name: accounting
+includeTags: [accounting]
+paths:
+  mappings:
+    list: /api/v1/accounting/gl-mappings
+    upsert: /api/v1/accounting/gl-mappings
+  journalExports:
+    create: /api/v1/accounting/journal-exports
+permissions:
+  scope: accounting

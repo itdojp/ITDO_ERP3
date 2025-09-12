@@ -1,0 +1,19 @@
+planned: true
+entities:
+  SalesOrder:
+    table: sales_orders
+    pk: id
+    fields:
+      account_id: account_id
+      order_date: order_date
+      status: status
+  SalesOrderLine:
+    table: sales_order_lines
+    pk: id
+    fields:
+      sales_order_id: sales_order_id
+      line_id: client_line_id
+      item_code: item_code
+      description: description
+      qty: qty
+      unit_price: unit_price
