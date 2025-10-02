@@ -1,6 +1,6 @@
 import amqp from 'amqplib';
 import { nanoid } from 'nanoid';
-import Minio from 'minio';
+import { Client as MinioClient } from 'minio';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@localhost:5672';
 const NUM_SHARDS = parseInt(process.env.NUM_SHARDS || '4', 10);
@@ -19,7 +19,7 @@ let minioClient = null;
 
 async function ensureBucket() {
   if (!USE_MINIO) return;
-  minioClient = new Minio.Client({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
+  minioClient = new MinioClient({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
   const exists = await minioClient.bucketExists(MINIO_BUCKET).catch(() => false);
   if (!exists) await minioClient.makeBucket(MINIO_BUCKET, 'us-east-1');
 }
@@ -54,7 +54,7 @@ async function main() {
   let sent = 0;
   const interval = 1000 / Math.max(1, RPS);
 
-  const timer = setInterval(() => {
+  const timer = setInterval(async () => {
     if (sent >= BATCH) {
       clearInterval(timer);
       setTimeout(() => { conn.close().catch(()=>{}); }, 500);

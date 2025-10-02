@@ -1,7 +1,7 @@
 import express from 'express';
 import amqp from 'amqplib';
 import { nanoid } from 'nanoid';
-import Minio from 'minio';
+import { Client as MinioClient } from 'minio';
 import Redis from 'ioredis';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
@@ -50,7 +50,7 @@ async function main() {
 
   const { conn, ch } = await setupRabbit();
   const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
-  const minioClient = new Minio.Client({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
+  const minioClient = new MinioClient({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
   if (USE_MINIO) await ensureBucket(minioClient);
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
