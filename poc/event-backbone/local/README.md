@@ -18,6 +18,23 @@ cd poc/event-backbone/local
 docker compose up --build
 ```
 
+### Podmanでの最小構成起動
+
+Podman でも `podman-compose` (Podman v4+) を利用して RabbitMQ + Redis + pm-service + producer の軽量構成を起動できる。
+
+```
+cd poc/event-backbone/local
+podman compose -f podman-compose.yml up --build
+
+# MinIO を合わせて利用する場合（任意）
+podman run -d --name minio \
+  -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
+  docker.io/minio/minio:RELEASE.2024-08-17T01-24-54Z server /data --console-address ":9001"
+# その後 USE_MINIO=true を環境変数として渡し pm-service / producer を再起動
+```
+
 設定（環境変数）
 - NUM_SHARDS: シャード数（デフォルト4）
 - PRODUCER_BATCH: 送信イベント数（デフォルト100）
