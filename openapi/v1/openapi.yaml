@@ -376,8 +376,6 @@ paths:
           in: query
           schema: { type: string }
           description: 自由語検索（実装側で対象項目を定義）
-        - $ref: '#/components/parameters/PageLimit'
-        - $ref: '#/components/parameters/PageCursor'
       responses:
         '200':
           description: OK
