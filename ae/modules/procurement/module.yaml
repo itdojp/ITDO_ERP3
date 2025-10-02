@@ -1,5 +1,6 @@
 name: procurement
 includeTags: [procurement]
+owned_tables: [vendors, purchase_orders, purchase_order_lines, vendor_bills, vendor_bill_lines]
 paths:
   list: /api/v1/procurement/purchase-orders
   create: /api/v1/procurement/purchase-orders

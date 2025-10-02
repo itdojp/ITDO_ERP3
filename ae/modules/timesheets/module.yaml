@@ -4,8 +4,23 @@ owned_tables: [timesheets]
 paths:
   list: /api/v1/timesheets
   create: /api/v1/timesheets
+actions:
+  - name: submit
+    method: POST
+    path: /api/v1/timesheets/{id}/submit
+  - name: approve
+    method: POST
+    path: /api/v1/timesheets/{id}/approve
+  - name: reject
+    method: POST
+    path: /api/v1/timesheets/{id}/reject
+  - name: resubmit
+    method: POST
+    path: /api/v1/timesheets/{id}/resubmit
 dto:
   create:
     required: [user_id, project_id, work_date, hours]
+states:
+  file: states.yaml
 permissions:
   scope: timesheets

@@ -1,5 +1,13 @@
 planned: true
 entities:
+  Vendor:
+    table: vendors
+    pk: id
+    fields:
+      code: code
+      name: name
+      status: status
+      account_id: account_id
   PurchaseOrder:
     table: purchase_orders
     pk: id
@@ -7,13 +15,48 @@ entities:
       vendor_id: vendor_id
       order_date: order_date
       status: status
+      expected_date: expected_date
+      total: total
+      tax_total: tax_total
+      currency: currency
+      notes: notes
   PurchaseOrderLine:
     table: purchase_order_lines
     pk: id
     fields:
       purchase_order_id: purchase_order_id
-      line_id: client_line_id
+      line_no: line_no
+      client_line_id: client_line_id
       item_code: item_code
       description: description
       qty: qty
       unit_price: unit_price
+      amount: amount
+      tax_rate: tax_rate
+  VendorBill:
+    table: vendor_bills
+    pk: id
+    fields:
+      vendor_id: vendor_id
+      purchase_order_id: purchase_order_id
+      bill_number: bill_number
+      status: status
+      bill_date: bill_date
+      due_date: due_date
+      total: total
+      tax_total: tax_total
+      currency: currency
+      notes: notes
+  VendorBillLine:
+    table: vendor_bill_lines
+    pk: id
+    fields:
+      vendor_bill_id: vendor_bill_id
+      line_no: line_no
+      client_line_id: client_line_id
+      item_code: item_code
+      description: description
+      qty: qty
+      unit_price: unit_price
+      amount: amount
+      tax_rate: tax_rate

@@ -9,9 +9,16 @@ roles:
     - 'invoices.read'
   project_manager:
     - 'projects.*'
-    - 'timesheets.read'
+    - 'timesheets.list'
+    - 'timesheets.get'
+    - 'timesheets.approve'
+    - 'timesheets.reject'
   user:
-    - 'timesheets.*'
+    - 'timesheets.list'
+    - 'timesheets.get'
+    - 'timesheets.create'
+    - 'timesheets.submit'
+    - 'timesheets.resubmit'
 
 scopes:
   projects:
@@ -19,10 +26,18 @@ scopes:
     - get
     - create
     - update
+    - activate
+    - hold
+    - resume
+    - close
   timesheets:
     - list
     - create
     - get
+    - submit
+    - approve
+    - reject
+    - resubmit
   sales:
     - list
     - get
@@ -41,6 +56,13 @@ scopes:
     - receive
     - cancel
     - bill
+  contracts:
+    - list
+    - create
+    - get
+    - update
+    - renewalAlert
+    - esign
   compliance:
     - save
     - search

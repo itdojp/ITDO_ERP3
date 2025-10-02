@@ -53,6 +53,94 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/projects/{id}/activate:
+    post:
+      tags: [projects]
+      summary: プロジェクト開始
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/projects/{id}/hold:
+    post:
+      tags: [projects]
+      summary: プロジェクト一時停止
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: OK }
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/projects/{id}/resume:
+    post:
+      tags: [projects]
+      summary: プロジェクト再開
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/projects/{id}/close:
+    post:
+      tags: [projects]
+      summary: プロジェクト完了
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                closed_on:
+                  type: string
+                  format: date
+                comment:
+                  type: string
+      responses:
+        '200': { description: OK }
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/v1/timesheets:
     get:
       tags: [timesheets]
@@ -93,6 +181,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TimesheetEntry'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/timesheets/{id}/submit:
+    post:
+      tags: [timesheets]
+      summary: タイムシート提出
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimesheetStateChangeRequest'
+      responses:
+        '202':
+          description: Accepted
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/timesheets/{id}/approve:
+    post:
+      tags: [timesheets]
+      summary: タイムシート承認
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimesheetStateChangeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimesheetEntry'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/timesheets/{id}/reject:
+    post:
+      tags: [timesheets]
+      summary: タイムシート差戻し
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimesheetStateChangeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimesheetEntry'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/timesheets/{id}/resubmit:
+    post:
+      tags: [timesheets]
+      summary: タイムシート再提出
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimesheetStateChangeRequest'
+      responses:
+        '202':
+          description: Accepted
         default:
           $ref: '#/components/responses/Error'
 
@@ -384,6 +576,16 @@ components:
           type: string
           enum: [draft, submitted, approved, rejected]
       required: [user_id, project_id, work_date, hours]
+    TimesheetStateChangeRequest:
+      type: object
+      properties:
+        comment:
+          type: string
+          description: 承認・差戻し時の備考
+        reason_code:
+          type: string
+          description: 差戻し理由コード（オプション）
+      additionalProperties: false
     PaginatedTimesheets:
       type: object
       properties:

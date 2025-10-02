@@ -6,7 +6,24 @@ paths:
 generate:
   list: true
   get: true
+actions:
+  - name: activate
+    method: POST
+    path: /api/v1/projects/{id}/activate
+  - name: hold
+    method: POST
+    path: /api/v1/projects/{id}/hold
+  - name: resume
+    method: POST
+    path: /api/v1/projects/{id}/resume
+  - name: close
+    method: POST
+    path: /api/v1/projects/{id}/close
 relations:
   - from: projects.client_id
     to: accounts.id
     type: many-to-one
+states:
+  file: states.yaml
+permissions:
+  scope: projects

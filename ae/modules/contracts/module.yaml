@@ -1,5 +1,6 @@
 name: contracts
 includeTags: [contracts]
+owned_tables: [contracts]
 paths:
   list: /api/v1/contracts
   create: /api/v1/contracts
