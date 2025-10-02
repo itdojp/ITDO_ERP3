@@ -339,7 +339,9 @@ paths:
     get:
       tags: [compliance]
       summary: 電子取引保存の検索
-      description: ソート対象: `issue_date`, `amount`, `invoice_number`, `counterparty`（降順は `-field`）。同値のときは `-id` を二次キーとして安定ソート。
+      description: >-
+        ソート対象は `issue_date`, `amount`, `invoice_number`, `counterparty`。降順の場合は `-field`
+        を指定し、同値時は `-id` を二次キーとして安定ソートする。
       security:
         - bearerAuth: []
       parameters:
@@ -411,7 +413,8 @@ paths:
     get:
       tags: [compliance]
       summary: 監査ログ検索
-      description: 重要操作の監査ログを検索。注: changesの値は機密項目がマスキングされる場合があります。
+      description: >-
+        重要操作の監査ログを検索する。changes の値は機密項目がマスキングされる場合がある。
       security:
         - bearerAuth: []
       parameters:
@@ -509,7 +512,8 @@ components:
       required: false
       schema:
         type: string
-      description: 例: -created_at, name (e.g. -created_at, name)
+      description: >-
+        例として `-created_at, name` のように指定する（降順は先頭に `-` を付与）。
   responses:
     Error:
       description: エラー
