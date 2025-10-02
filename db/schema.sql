@@ -145,6 +145,134 @@ CREATE TABLE IF NOT EXISTS payments (
   deleted_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS vendors (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+  contact JSONB,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(tenant_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS sales_orders (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  order_number TEXT NOT NULL,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  order_date DATE,
+  total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  currency TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(tenant_id, order_number)
+);
+
+CREATE TABLE IF NOT EXISTS sales_order_lines (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  sales_order_id TEXT NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL,
+  client_line_id TEXT,
+  item_code TEXT,
+  description TEXT,
+  qty NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (qty >= 0),
+  unit_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_rate NUMERIC(5,2) CHECK (tax_rate >= 0 AND tax_rate <= 100),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(sales_order_id, line_no)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_orders_tenant_date ON sales_orders(tenant_id, order_date DESC);
+CREATE INDEX IF NOT EXISTS idx_sales_order_lines_order ON sales_order_lines(sales_order_id, line_no);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  po_number TEXT NOT NULL,
+  vendor_id TEXT NOT NULL REFERENCES vendors(id) ON DELETE RESTRICT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  order_date DATE,
+  expected_date DATE,
+  total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  currency TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(tenant_id, po_number)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  purchase_order_id TEXT NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL,
+  client_line_id TEXT,
+  item_code TEXT,
+  description TEXT,
+  qty NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (qty >= 0),
+  unit_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_rate NUMERIC(5,2) CHECK (tax_rate >= 0 AND tax_rate <= 100),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(purchase_order_id, line_no)
+);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_tenant_date ON purchase_orders(tenant_id, order_date DESC);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_lines_order ON purchase_order_lines(purchase_order_id, line_no);
+
+CREATE TABLE IF NOT EXISTS vendor_bills (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  vendor_id TEXT NOT NULL REFERENCES vendors(id) ON DELETE RESTRICT,
+  purchase_order_id TEXT REFERENCES purchase_orders(id) ON DELETE SET NULL,
+  bill_number TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  bill_date DATE,
+  due_date DATE,
+  total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_total NUMERIC(18,2) NOT NULL DEFAULT 0,
+  currency TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(tenant_id, bill_number)
+);
+
+CREATE TABLE IF NOT EXISTS vendor_bill_lines (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  vendor_bill_id TEXT NOT NULL REFERENCES vendor_bills(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL,
+  client_line_id TEXT,
+  item_code TEXT,
+  description TEXT,
+  qty NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (qty >= 0),
+  unit_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_rate NUMERIC(5,2) CHECK (tax_rate >= 0 AND tax_rate <= 100),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(vendor_bill_id, line_no)
+);
+CREATE INDEX IF NOT EXISTS idx_vendor_bills_tenant_date ON vendor_bills(tenant_id, bill_date DESC);
+CREATE INDEX IF NOT EXISTS idx_vendor_bill_lines_bill ON vendor_bill_lines(vendor_bill_id, line_no);
+
 CREATE TABLE IF NOT EXISTS cost_snapshots (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -188,6 +316,28 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_logs(tenant_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(tenant_id, entity_type, entity_id);
+
+CREATE TABLE IF NOT EXISTS compliance_invoices (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  invoice_number TEXT NOT NULL,
+  issue_date DATE NOT NULL,
+  counterparty TEXT NOT NULL,
+  amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tax_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  file_uri TEXT NOT NULL,
+  hash TEXT NOT NULL,
+  timestamp TIMESTAMPTZ,
+  timestamp_method TEXT,
+  searchable_keys TEXT[] DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(tenant_id, invoice_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_compliance_invoices_date ON compliance_invoices(issue_date DESC);
+CREATE INDEX IF NOT EXISTS idx_compliance_invoices_search ON compliance_invoices USING GIN (searchable_keys);
 -- Status lookup tables (optional seed)
 CREATE TABLE IF NOT EXISTS task_statuses (
   code TEXT PRIMARY KEY,
@@ -200,4 +350,22 @@ CREATE TABLE IF NOT EXISTS timesheet_statuses (
 CREATE TABLE IF NOT EXISTS invoice_statuses (
   code TEXT PRIMARY KEY,
   name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sales_order_statuses (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  ordinal INTEGER
+);
+CREATE TABLE IF NOT EXISTS purchase_order_statuses (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  ordinal INTEGER
+);
+CREATE TABLE IF NOT EXISTS project_statuses (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  ordinal INTEGER
 );
