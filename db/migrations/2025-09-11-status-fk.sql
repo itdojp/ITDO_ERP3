@@ -24,10 +24,20 @@ ALTER TABLE invoices
   ADD CONSTRAINT invoices_status_fk FOREIGN KEY (status)
   REFERENCES invoice_statuses(code) NOT VALID;
 
+ALTER TABLE sales_orders
+  ADD CONSTRAINT sales_orders_status_fk FOREIGN KEY (status)
+  REFERENCES sales_order_statuses(code) NOT VALID;
+
+ALTER TABLE purchase_orders
+  ADD CONSTRAINT purchase_orders_status_fk FOREIGN KEY (status)
+  REFERENCES purchase_order_statuses(code) NOT VALID;
+
 -- Validate constraints (may take time)
 ALTER TABLE tasks VALIDATE CONSTRAINT tasks_status_fk;
 ALTER TABLE timesheets VALIDATE CONSTRAINT timesheets_status_fk;
 ALTER TABLE invoices VALIDATE CONSTRAINT invoices_status_fk;
+ALTER TABLE sales_orders VALIDATE CONSTRAINT sales_orders_status_fk;
+ALTER TABLE purchase_orders VALIDATE CONSTRAINT purchase_orders_status_fk;
 
 -- Optional: drop existing CHECK constraints after validation
 -- ALTER TABLE tasks DROP CONSTRAINT tasks_status_check;
