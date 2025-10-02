@@ -1,0 +1,16 @@
+entity: project
+initial: planned
+states: [planned, active, onhold, closed]
+transitions:
+  - from: planned
+    to: active
+    action: activate
+  - from: [planned, active]
+    to: onhold
+    action: hold
+  - from: onhold
+    to: active
+    action: resume
+  - from: [planned, active, onhold]
+    to: closed
+    action: close

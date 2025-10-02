@@ -1,0 +1,11 @@
+entities:
+  Contract:
+    table: contracts
+    pk: id
+    fields:
+      account_id: account_id
+      type: type
+      start_on: start_on
+      end_on: end_on
+      billing_terms: billing_terms
+      progress_method: progress_method

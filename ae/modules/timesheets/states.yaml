@@ -1,0 +1,16 @@
+entity: timesheet
+initial: draft
+states: [draft, submitted, approved, rejected]
+transitions:
+  - from: draft
+    to: submitted
+    action: submit
+  - from: submitted
+    to: approved
+    action: approve
+  - from: submitted
+    to: rejected
+    action: reject
+  - from: rejected
+    to: submitted
+    action: resubmit

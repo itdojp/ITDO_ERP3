@@ -1,0 +1,8 @@
+extends:
+  - recommended
+
+rules:
+  struct:
+    severity: warn
+  no-unused-components:
+    severity: warn

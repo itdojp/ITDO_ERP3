@@ -1,6 +1,6 @@
 name: sales
 includeTags: [sales]
-owned_tables: [] # 注: テーブルは別モジュールで管理する場合あり
+owned_tables: [sales_orders, sales_order_lines]
 paths:
   list: /api/v1/sales/orders
   create: /api/v1/sales/orders
