@@ -1,7 +1,7 @@
 # PoC Metrics Template
 
 ## Measurement Plan
-- **環境準備**: `poc/event-backbone/local` の Podman Compose を利用し、AWS/GCP いずれの構成も `NUM_SHARDS`, `PRODUCER_BATCH` を変更して同条件に揃える。
+- **環境準備**: `poc/event-backbone/local` の Podman Compose を利用し、AWS/GCP いずれの構成も `NUM_SHARDS`, `PRODUCER_BATCH` を変更して同条件に揃える。ローカル確認は `scripts/run_podman_poc.sh` を実行するだけで完了する。
 - **ウォームアップ**: 各バッチ実行前に 1,000 件のドライランを実施し、コネクション確立時間を除外。
 - **計測**: k6 もしくは内蔵スクリプトで送信し、`producer`/`consumer` 双方のログから Latency/Throughput を収集。MinIO 利用有無で差分を確認。
 - **メトリクス収集**: CloudWatch / Cloud Monitoring / Prometheus から p50/p95/p99 を取得。コストは公式料金表に基づき 1万 / 10万 イベントの月間推定を算出。
