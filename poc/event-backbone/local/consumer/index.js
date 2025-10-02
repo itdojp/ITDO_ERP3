@@ -10,6 +10,24 @@ function randomFail() {
   return Math.random() < FAIL_RATE;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function connectRabbitWithRetry(context = 'consumer') {
+  let attempt = 0;
+  while (true) {
+    try {
+      const conn = await amqp.connect(AMQP_URL);
+      if (attempt > 0) console.log(`[${context}] connected to RabbitMQ after ${attempt} retries`);
+      return conn;
+    } catch (err) {
+      attempt += 1;
+      const delay = Math.min(10000, 1000 * attempt);
+      console.warn(`[${context}] rabbitmq connect failed (attempt ${attempt}): ${err.message}. retry in ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+}
+
 async function processMessage(redis, msg) {
   const content = JSON.parse(msg.content.toString());
   const key = content.idempotencyKey || (msg.properties.headers?.idempotencyKey);
@@ -38,7 +56,7 @@ async function processMessage(redis, msg) {
 
 async function main() {
   const redis = new Redis(REDIS_URL);
-  const conn = await amqp.connect(AMQP_URL);
+  const conn = await connectRabbitWithRetry();
   const ex = 'events';
 
   for (let i = 0; i < NUM_SHARDS; i++) {

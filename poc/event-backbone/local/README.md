@@ -10,7 +10,7 @@
  - MinIO（任意）: 大きなペイロードをS3互換ストレージへ保存し、イベントは参照URLを送出
 
 前提
-- Docker / Docker Compose が利用可能
+- Docker / Docker Compose もしくは Podman + podman-compose が利用可能
 
 起動
 ```
@@ -18,9 +18,9 @@ cd poc/event-backbone/local
 docker compose up --build
 ```
 
-### Podmanでの最小構成起動
+### Podman でのPoC起動
 
-Podman でも `podman-compose` (Podman v4+) を利用して RabbitMQ + Redis + pm-service + producer の軽量構成を起動できる。
+Podman でも `podman-compose` (Podman v4+) を利用して RabbitMQ + Redis + pm-service + producer + consumer の構成を再現できる。
 
 ```
 cd poc/event-backbone/local
@@ -35,7 +35,15 @@ podman run -d --name minio \
 # その後 USE_MINIO=true を環境変数として渡し pm-service / producer を再起動
 ```
 
-設定（環境変数）
+#### Podman向けスモークテスト
+
+以下のスクリプトは Podman 上でスタックを起動し、タイムシート承認イベントを1件発火→consumerが請求書生成ログを出力するまで待機してから停止します。
+
+```
+scripts/run_podman_poc.sh
+```
+
+#### 設定（環境変数）
 - NUM_SHARDS: シャード数（デフォルト4）
 - PRODUCER_BATCH: 送信イベント数（デフォルト100）
 - PRODUCER_RPS: 送信レート（events/s, デフォルト50）
@@ -48,7 +56,6 @@ podman run -d --name minio \
 - Consumerログ: invoice生成（冪等時はskip表示）
 - RabbitMQ管理画面: http://localhost:15672 （user: guest / pass: guest）
 - Redis: idempotencyキーを格納（`idemp:{key}`）
-- メトリクスダッシュボード: http://localhost:3005 （E2Eレイテンシ、件数の簡易表示）
 
 想定確認
 - 再送（同一Idempotency-Key）→重複抑止（skip）

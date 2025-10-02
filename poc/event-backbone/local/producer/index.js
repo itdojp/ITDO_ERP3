@@ -17,6 +17,24 @@ const MINIO_BUCKET = process.env.MINIO_BUCKET || 'events';
 
 let minioClient = null;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function connectRabbitWithRetry(context = 'producer') {
+  let attempt = 0;
+  while (true) {
+    try {
+      const conn = await amqp.connect(AMQP_URL);
+      if (attempt > 0) console.log(`[${context}] connected to RabbitMQ after ${attempt} retries`);
+      return conn;
+    } catch (err) {
+      attempt += 1;
+      const delay = Math.min(10000, 1000 * attempt);
+      console.warn(`[${context}] rabbitmq connect failed (attempt ${attempt}): ${err.message}. retry in ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+}
+
 async function ensureBucket() {
   if (!USE_MINIO) return;
   minioClient = new MinioClient({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
@@ -31,7 +49,7 @@ function shardFor(key) {
 }
 
 async function main() {
-  const conn = await amqp.connect(AMQP_URL);
+  const conn = await connectRabbitWithRetry();
   const ch = await conn.createChannel();
   const ex = 'events';
   await ch.assertExchange(ex, 'direct', { durable: true });
