@@ -13,6 +13,8 @@ cp .env.local.example .env.local  # 必要に応じて API エンドポイント
 
 ## 起動
 
+### バックエンドとフロントを個別に起動する場合
+
 1. Podman でバックエンド PoC を起動（任意）
    ```bash
    scripts/run_podman_poc.sh
@@ -22,6 +24,20 @@ cp .env.local.example .env.local  # 必要に応じて API エンドポイント
    npm run dev -- --port 4000
    ```
 3. ブラウザで `http://localhost:4000` を開くと、各PoC画面へのナビゲーションを確認できます。
+
+### Podman + UI をまとめて起動する場合
+
+バックエンド PoC と Next.js Dev Server を同時に立ち上げる補助スクリプトも用意しています（事前に `podman-compose` / `npm` / `curl` が利用可能なことを確認してください）。
+
+```bash
+scripts/run_podman_ui_poc.sh
+```
+
+環境変数 `PM_PORT` (既定 3001) と `UI_PORT` (既定 4000) を指定するとポートを変更できます。
+
+```bash
+PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
+```
 
 ## ディレクトリ構成（抜粋）
 
@@ -38,3 +54,9 @@ cp .env.local.example .env.local  # 必要に応じて API エンドポイント
 - UX検討のための操作シナリオドキュメント整備
 
 > ⚠️ このプロジェクトは PoC 目的のため、本番品質を前提としていません。
+
+## 操作シナリオ（PoC 検証観点メモ）
+- `Projects` 画面: プロジェクト一覧を確認 → 任意の行を選択 → 状態遷移ボタンで `activate/hold/resume/close` を試行し、イベントログが更新されることを確認。
+- `Timesheets` 画面: ステータスフィルタを切り替え → 行の操作ボタンで承認/差戻しを実施 → コメント入力や理由選択を試し、メッセージ表示の挙動を確認。
+- `Compliance` 画面: 期間/金額/ステータス/キーワードで検索条件を組み合わせ → 結果テーブルから行を選択 → 詳細パネルで添付プレビューを開き、モックビューアの流れを確認。
+- Podman 連携時: `scripts/run_podman_ui_poc.sh` でスタックを起動し、Real API モード (`API live` バッジ) とモックモード (`Mock data`) が自動で切り替わることを確認。
