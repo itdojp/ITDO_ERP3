@@ -1,34 +1,36 @@
-import Link from "next/link";
+import { ProjectsClient } from "@/features/projects/ProjectsClient";
+import { mockProjects } from "@/features/projects/mock-data";
+import type { ProjectListResponse } from "@/features/projects/types";
 
-export default function ProjectsPage() {
+async function fetchProjects(): Promise<ProjectListResponse> {
+  const base = process.env.POC_API_BASE ?? "http://localhost:3001";
+  try {
+    const res = await fetch(`${base}/api/v1/projects`, { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`status ${res.status}`);
+    }
+    return (await res.json()) as ProjectListResponse;
+  } catch (error) {
+    console.warn("[projects] falling back to mock data due to fetch error", error);
+    return mockProjects;
+  }
+}
+
+export default async function ProjectsPage() {
+  const data = await fetchProjects();
+
   return (
     <section className="space-y-6">
       <header className="space-y-2">
         <h2 className="text-2xl font-semibold text-white">Projects PoC</h2>
         <p className="text-sm text-slate-400">
-          プロジェクト一覧のUX検討ページです。現時点ではモックデータを表示しつつ、状態遷移や
-          外部イベントとの連携パターンを設計するための土台を提供します。
+          プロジェクトポートフォリオのUXを検討するための画面です。現時点ではモックデータを表示し、
+          状態遷移の操作感やカードレイアウトの方向性を確認できます。Podman バックエンドを起動した
+          状態では <code>/api/v1/projects</code> を通じて PoC データが表示されます。
         </p>
       </header>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-sm text-slate-300">
-        <p>
-          この画面には、以下の要素を順次追加していきます:
-        </p>
-        <ul className="mt-2 space-y-1 list-disc list-inside text-slate-400">
-          <li>プロジェクトカードの一覧/検索/フィルタ</li>
-          <li>状態遷移アクション（Activate / Hold / Resume / Close）</li>
-          <li>Sales イベント連携による自動プロジェクト生成の可視化</li>
-        </ul>
-      </div>
-
-      <p className="text-sm text-slate-500">
-        Timesheets や Compliance 画面も合わせて確認すると、案件→工数→請求までの業務体験を俯瞰できます。
-        <Link href="/timesheets" className="text-sky-400 hover:underline">
-          次は Timesheets へ
-        </Link>
-        。
-      </p>
+      <ProjectsClient initialProjects={data} />
     </section>
   );
 }
