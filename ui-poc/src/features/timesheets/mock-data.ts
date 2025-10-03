@@ -1,0 +1,51 @@
+import type { TimesheetListResponse } from "./types";
+
+export const mockTimesheets: TimesheetListResponse = {
+  items: [
+    {
+      id: "TS-001",
+      userName: "佐藤花子",
+      projectCode: "DX-2025-01",
+      projectName: "DX推進プロジェクト",
+      taskName: "要件定義ワークショップ",
+      workDate: "2025-09-12",
+      hours: 7.5,
+      approvalStatus: "submitted",
+      submittedAt: "2025-09-12T18:05:00Z",
+      note: "クライアントレビュー対応",
+    },
+    {
+      id: "TS-002",
+      userName: "鈴木次郎",
+      projectCode: "DX-2025-01",
+      projectName: "DX推進プロジェクト",
+      taskName: "PoC実装",
+      workDate: "2025-09-11",
+      hours: 6,
+      approvalStatus: "submitted",
+      submittedAt: "2025-09-11T19:10:00Z",
+    },
+    {
+      id: "TS-003",
+      userName: "田中太一",
+      projectCode: "OPS-BCP",
+      projectName: "BCP整備プログラム",
+      taskName: "ドキュメント精査",
+      workDate: "2025-09-10",
+      hours: 8,
+      approvalStatus: "rejected",
+      note: "作業内容を詳細化してください",
+    },
+    {
+      id: "TS-004",
+      userName: "高橋優子",
+      projectCode: "SAP-ROLL",
+      projectName: "SAPロールアウトフェーズ2",
+      taskName: "移行計画レビュー",
+      workDate: "2025-09-09",
+      hours: 4,
+      approvalStatus: "approved",
+      submittedAt: "2025-09-09T16:40:00Z",
+    },
+  ],
+};
