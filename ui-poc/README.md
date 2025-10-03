@@ -27,7 +27,7 @@ cp .env.local.example .env.local  # 必要に応じて API エンドポイント
 
 ### Podman + UI をまとめて起動する場合
 
-バックエンド PoC と Next.js Dev Server を同時に立ち上げる補助スクリプトも用意しています。
+バックエンド PoC と Next.js Dev Server を同時に立ち上げる補助スクリプトも用意しています（事前に `podman-compose` / `npm` / `curl` が利用可能なことを確認してください）。
 
 ```bash
 scripts/run_podman_ui_poc.sh

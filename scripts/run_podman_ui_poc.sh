@@ -18,8 +18,13 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required for health checks. Please install curl before running this script." >&2
+  exit 1
+fi
+
 cleanup() {
-  echo "\n[cleanup] Stopping UI PoC stack..."
+  printf '\n[cleanup] Stopping UI PoC stack...\n'
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" down >/dev/null 2>&1) || true
 }
 
@@ -31,12 +36,19 @@ echo "[podman] Starting backend PoC stack via podman-compose"
 podman-compose -f "${COMPOSE_FILE}" up -d --build
 
 echo "[health] Waiting for pm-service on http://localhost:${PM_PORT_VALUE}"
+pm_service_up=false
 for _ in {1..40}; do
   if curl -fsS "http://localhost:${PM_PORT_VALUE}/health" >/dev/null 2>&1; then
+    pm_service_up=true
     break
   fi
   sleep 1
 done
+
+if [ "$pm_service_up" = false ]; then
+  echo "[health] ERROR: pm-service did not become available after 40 seconds. Exiting." >&2
+  exit 2
+fi
 
 cd "${UI_DIR}"
 
