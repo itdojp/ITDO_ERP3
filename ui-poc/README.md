@@ -28,7 +28,7 @@ cp .env.local.example .env.local  # 必要に応じて API エンドポイント
 - `src/app` … App Router を用いた画面コンポーネント
   - `/projects` … プロジェクトポートフォリオ PoC（Podman 起動時は `/api/v1/projects` をフェッチ）
   - `/timesheets` … タイムシート承認 PoC（Podman 起動時は `/api/v1/timesheets` をフェッチ）
-  - `/compliance` … 電子取引検索 PoC
+  - `/compliance` … 電子取引検索 PoC（Podman 起動時は `/api/v1/compliance/invoices` をフェッチ）
 - `src/features` … 画面単位のモジュール（型定義・モックデータ・UIロジック）
 - `src/lib/api-client.ts` … API呼び出し用の簡易ラッパ
 
