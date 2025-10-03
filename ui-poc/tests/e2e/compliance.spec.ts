@@ -10,7 +10,8 @@ test.describe('Compliance PoC', () => {
     const firstRow = page.locator('table tbody tr').first();
     await expect(firstRow).toBeVisible();
 
-    const subjectText = (await firstRow.locator('td').nth(3).innerText()).trim();
+    const SUBJECT_COLUMN_INDEX = 3;
+    const subjectText = (await firstRow.locator('td').nth(SUBJECT_COLUMN_INDEX).innerText()).trim();
 
     await firstRow.click();
     await expect(page.getByRole('heading', { name: subjectText })).toBeVisible();
