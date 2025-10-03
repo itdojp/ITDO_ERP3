@@ -31,9 +31,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-events}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      PORT: ${PM_PORT:-3001}
+      PORT: ${PM_CONTAINER_PORT:-3001}
     ports:
-      - "${PM_PORT:-3001}:3001"
+      - "${PM_PORT:-3001}:${PM_CONTAINER_PORT:-3001}"
     depends_on:
       - rabbitmq
       - redis

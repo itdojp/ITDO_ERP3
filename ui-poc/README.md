@@ -33,7 +33,7 @@ cp .env.local.example .env.local  # 必要に応じて API エンドポイント
 scripts/run_podman_ui_poc.sh
 ```
 
-環境変数 `PM_PORT` (既定 3001) と `UI_PORT` (既定 4000) を指定するとポートを変更できます。
+環境変数 `PM_PORT` (ホスト側の公開ポート、既定 3001) と `UI_PORT` (既定 4000) を指定するとポートを変更できます。必要に応じて `PM_CONTAINER_PORT` でコンテナ内ポートも調整できますが、通常は既定の 3001 のままで問題ありません。
 
 ```bash
 PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
