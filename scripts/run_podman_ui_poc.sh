@@ -56,4 +56,4 @@ echo "[ui] Starting Next.js dev server on port ${UI_PORT_VALUE}"
 echo "      (API base: http://localhost:${PM_PORT_VALUE})"
 NEXT_PUBLIC_API_BASE="http://localhost:${PM_PORT_VALUE}" \
 POC_API_BASE="http://localhost:${PM_PORT_VALUE}" \
-npm run dev -- --port "${UI_PORT_VALUE}"
+npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}"
