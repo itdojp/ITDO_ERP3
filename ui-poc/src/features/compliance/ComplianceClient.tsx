@@ -23,6 +23,8 @@ const initialFormState: InvoiceSearchFormState = {
 
 type QuerySource = "api" | "mock";
 
+const TABLE_COLUMN_COUNT = 7;
+
 type ComplianceClientProps = {
   initialData: InvoiceListResponse;
 };
@@ -214,7 +216,7 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
           <tbody className="divide-y divide-slate-800">
             {invoices.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-400" colSpan={7}>
+                <td className="px-4 py-6 text-center text-slate-400" colSpan={TABLE_COLUMN_COUNT}>
                   条件に一致する請求書が見つかりませんでした。
                 </td>
               </tr>
@@ -436,7 +438,7 @@ function formatCurrency(value: number, currency: string): string {
 
 function formatDate(date: string): string {
   if (!date) return "—";
-  const parsed = new Date(`${date}T00:00:00`);
+  const parsed = parseIsoDate(date);
   if (Number.isNaN(parsed.getTime())) {
     return date;
   }
@@ -481,4 +483,8 @@ function badgeColor(status: InvoiceRecord["status"]): string {
     default:
       return "bg-slate-500/20 text-slate-200";
   }
+}
+
+function parseIsoDate(date: string): Date {
+  return new Date(`${date}T00:00:00Z`);
 }
