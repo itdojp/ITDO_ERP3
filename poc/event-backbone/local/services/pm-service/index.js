@@ -3,6 +3,9 @@ import amqp from 'amqplib';
 import { nanoid } from 'nanoid';
 import { Client as MinioClient } from 'minio';
 import Redis from 'ioredis';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import path from 'path';
 import { projectSeed, timesheetSeed, invoiceSeed, filterInvoices } from './sample-data.js';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
@@ -18,6 +21,8 @@ const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'minioadmin';
 const MINIO_BUCKET = process.env.MINIO_BUCKET || 'events';
 
 const cloneDeep = (value) => (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
+
+const STATE_FILE = process.env.PM_STATE_FILE || path.resolve(process.cwd(), 'state', 'pm-poc-state.json');
 
 const PROJECT_ACTIONS = new Set(['activate', 'hold', 'resume', 'close']);
 const PROJECT_STATUS_TRANSITIONS = {
@@ -91,6 +96,28 @@ async function ensureBucket(minioClient) {
   if (!exists) await minioClient.makeBucket(MINIO_BUCKET, 'us-east-1');
 }
 
+async function loadStateFromDisk() {
+  try {
+    if (!existsSync(STATE_FILE)) {
+      return null;
+    }
+    const raw = await readFile(STATE_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn('[pm-service] failed to load persisted state', error);
+    return null;
+  }
+}
+
+async function persistState({ projects, timesheets, invoices }) {
+  try {
+    await mkdir(path.dirname(STATE_FILE), { recursive: true });
+    await writeFile(STATE_FILE, JSON.stringify({ projects, timesheets, invoices }, null, 2));
+  } catch (error) {
+    console.warn('[pm-service] failed to persist state', error);
+  }
+}
+
 async function main() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
@@ -98,6 +125,21 @@ async function main() {
   let projects = cloneDeep(projectSeed);
   let timesheets = cloneDeep(timesheetSeed);
   const invoices = cloneDeep(invoiceSeed);
+
+  const restored = await loadStateFromDisk();
+  if (restored) {
+    if (Array.isArray(restored.projects)) {
+      projects = restored.projects;
+    }
+    if (Array.isArray(restored.timesheets)) {
+      timesheets = restored.timesheets;
+    }
+    if (Array.isArray(restored.invoices)) {
+      invoices.splice(0, invoices.length, ...restored.invoices);
+    }
+  } else {
+    void persistState({ projects, timesheets, invoices });
+  }
 
   const { conn, ch } = await setupRabbit();
   const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
@@ -169,6 +211,7 @@ async function main() {
     if (nextStatus === 'closed' && !project.endOn) {
       project.endOn = new Date().toISOString().slice(0, 10);
     }
+    void persistState({ projects, timesheets, invoices });
     res.json({ ok: true, item: project });
   });
 
@@ -216,6 +259,7 @@ async function main() {
         entry.approvedAt = nowIso;
         if (comment) entry.note = comment;
         entry.updatedAt = nowIso;
+        void persistState({ projects, timesheets, invoices });
         return res.json({ ok: true, item: entry, eventId, shard });
       }
 
@@ -229,6 +273,7 @@ async function main() {
       }
       entry.approvalStatus = nextStatus;
       entry.updatedAt = nowIso;
+      void persistState({ projects, timesheets, invoices });
       res.json({ ok: true, item: entry });
     } catch (error) {
       console.error('[pm-service] timesheet action error', error);
