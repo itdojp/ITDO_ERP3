@@ -24,6 +24,31 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
+# Checks if the UI port is already taken and suggests alternatives.
+check_ui_port() {
+  local port="$UI_PORT_VALUE"
+  local busy=0
+
+  if command -v lsof >/dev/null 2>&1; then
+    if lsof -PiTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+      busy=1
+    fi
+  elif command -v ss >/dev/null 2>&1; then
+    if ss -ltn | grep -Eq "LISTEN\\s+.*:${port}\\b"; then
+      busy=1
+    fi
+  else
+    echo "[ui] WARNING: Could not determine if port ${port} is free (requires lsof or ss)." >&2
+    return 0
+  fi
+
+  if [ "$busy" -eq 1 ]; then
+    echo "[ui] ERROR: Port ${port} is already in use on this host." >&2
+    echo "          Stop the process using the port or re-run with UI_PORT set to a free port." >&2
+    exit 3
+  fi
+}
+
 # Export variables for podman-compose so that host/container port values are respected.
 export PM_PORT="${PM_HOST_PORT}"
 export PM_CONTAINER_PORT
@@ -54,6 +79,8 @@ if [ "$pm_service_up" = false ]; then
   echo "[health] ERROR: pm-service did not become available after 40 seconds. Exiting." >&2
   exit 2
 fi
+
+check_ui_port
 
 cd "${UI_DIR}"
 
