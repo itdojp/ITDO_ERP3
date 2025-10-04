@@ -1,6 +1,7 @@
 import { ComplianceClient } from "@/features/compliance/ComplianceClient";
 import { mockInvoices } from "@/features/compliance/mock-data";
 import type { InvoiceListResponse } from "@/features/compliance/types";
+import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: InvoiceListResponse["meta"] = {
   total: 0,
@@ -27,6 +28,15 @@ async function fetchComplianceInvoices(): Promise<InvoiceListResponse> {
       throw new Error(`status ${res.status}`);
     }
     const data = (await res.json()) as Partial<InvoiceListResponse>;
+    await reportServerTelemetry({
+      component: "compliance/page",
+      event: "api_fetch_succeeded",
+      level: "info",
+      detail: {
+        items: data.items?.length ?? 0,
+        fallback: data.meta?.fallback ?? false,
+      },
+    });
     return {
       items: data.items ?? [],
       meta: {
@@ -42,6 +52,14 @@ async function fetchComplianceInvoices(): Promise<InvoiceListResponse> {
     } satisfies InvoiceListResponse;
   } catch (error) {
     console.warn("[compliance] falling back to mock data due to fetch error", error);
+    await reportServerTelemetry({
+      component: "compliance/page",
+      event: "mock_fallback",
+      level: "warn",
+      detail: {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
     return {
       ...mockInvoices,
       meta: {
