@@ -58,7 +58,8 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 ## 操作シナリオ（PoC 検証観点メモ）
 - `Projects` 画面: プロジェクト一覧を確認 → 任意の行を選択 → 状態遷移ボタンで `activate/hold/resume/close` を試行し、イベントログが更新されることを確認。
 - `Timesheets` 画面: ステータスフィルタを切り替え → 行の操作ボタンで承認/差戻しを実施 → コメント入力や理由選択を試し、メッセージ表示の挙動を確認。
-- `Compliance` 画面: 期間/金額/ステータス/キーワードで検索条件を組み合わせ → 並び順やページサイズを切り替えてリストを確認 → 結果テーブルから行を選択 → 詳細パネルで添付プレビューを開き、モックビューアの流れを確認。
+- `Compliance` 画面: 期間/金額/ステータス/キーワードで検索条件を組み合わせ → 並び順やページサイズを切り替えてリストを確認 → 結果テーブルから行を選択 → 詳細パネルで添付プレビューを開き、モックビューアの流れを確認。MinIO 連携を有効にするとダウンロードボタンから署名付きURL経由で添付ファイルを取得できます。
+- Home 画面: 「Podman Metrics Snapshot」で `/metrics/summary` のキャッシュ状況と件数分布を確認し、必要に応じてキャッシュ無効化ボタンから再取得を実行。
 - Podman 連携時: `scripts/run_podman_ui_poc.sh` でスタックを起動し、Real API モード (`API live` バッジ) とモックモード (`Mock data`) が自動で切り替わることを確認。
   - Podman スタックを起動している場合、プロジェクト/タイムシート/電子取引の PoC API が `/api/v1/...` エンドポイントからサンプルデータを返します。`/api/v1/projects`・`/api/v1/timesheets` の `POST` で追加、`DELETE /api/v1/timesheets/:id` で削除、`/metrics/summary` や `/events/recent` で状況を確認できます。
 

@@ -1,0 +1,72 @@
+name: PoC Live Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *'
+
+jobs:
+  smoke:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: minio-off
+            use_minio: "false"
+          - name: minio-on
+            use_minio: "true"
+            minio_port: "9000"
+            minio_console_port: "9001"
+            minio_public_endpoint: "localhost"
+            minio_public_port: "9000"
+    env:
+      PM_PORT: 3001
+      UI_PORT: 4000
+      TIMEOUT_SECONDS: 180
+      POLL_INTERVAL: 2
+      PLAYWRIGHT_BROWSERS_PATH: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+          python3 -m pip install --user podman-compose
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure rootless Podman
+        run: |
+          export XDG_RUNTIME_DIR="/tmp/xdg-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          podman system migrate || true
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> $GITHUB_ENV
+
+      - name: Configure MinIO environment
+        if: ${{ matrix.use_minio == 'true' }}
+        run: |
+          echo "USE_MINIO=true" >> $GITHUB_ENV
+          echo "MINIO_PORT=${{ matrix.minio_port }}" >> $GITHUB_ENV
+          echo "MINIO_CONSOLE_PORT=${{ matrix.minio_console_port }}" >> $GITHUB_ENV
+          echo "MINIO_PUBLIC_ENDPOINT=${{ matrix.minio_public_endpoint }}" >> $GITHUB_ENV
+          echo "MINIO_PUBLIC_PORT=${{ matrix.minio_public_port }}" >> $GITHUB_ENV
+
+      - name: Install UI dependencies
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+        working-directory: ui-poc
+
+      - name: Run PoC live smoke
+        env:
+          USE_MINIO: ${{ matrix.use_minio }}
+        run: |
+          ARGS="--tests-only"
+          if [ "${{ matrix.use_minio }}" = "true" ]; then
+            ARGS="$ARGS --with-minio"
+          fi
+          scripts/poc_live_smoke.sh $ARGS

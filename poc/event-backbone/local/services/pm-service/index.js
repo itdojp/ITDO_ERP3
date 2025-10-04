@@ -19,10 +19,17 @@ const MINIO_USE_SSL = (process.env.MINIO_USE_SSL || 'false').toLowerCase() === '
 const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'minioadmin';
 const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'minioadmin';
 const MINIO_BUCKET = process.env.MINIO_BUCKET || 'events';
+const MINIO_PRESIGN_SECONDS = parseInt(process.env.MINIO_PRESIGN_SECONDS || '600', 10);
+const MINIO_PUBLIC_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || 'localhost';
+const MINIO_PUBLIC_PORT = parseInt(process.env.MINIO_PUBLIC_PORT || String(MINIO_PORT), 10);
+const MINIO_MAX_RETRIES = parseInt(process.env.MINIO_MAX_RETRIES || '3', 10);
+const MINIO_RETRY_BACKOFF_MS = parseInt(process.env.MINIO_RETRY_BACKOFF_MS || '500', 10);
 
 const cloneDeep = (value) => (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 
 const STATE_FILE = process.env.PM_STATE_FILE || path.resolve(process.cwd(), 'state', 'pm-poc-state.json');
+
+const METRICS_CACHE_MS = parseInt(process.env.METRICS_CACHE_MS || '5000', 10);
 
 const PROJECT_ACTIONS = new Set(['activate', 'hold', 'resume', 'close']);
 const PROJECT_STATUS_TRANSITIONS = {
@@ -49,6 +56,104 @@ function nextTimesheetStatus(current, action) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const countByKey = (items, key) =>
+  items.reduce((acc, item) => {
+    const value = item[key] ?? 'unknown';
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+
+const buildMinioObjectUrl = (key) =>
+  `${MINIO_USE_SSL ? 'https' : 'http'}://${MINIO_PUBLIC_ENDPOINT}:${MINIO_PUBLIC_PORT}/${MINIO_BUCKET}/${key}`;
+
+const rewriteToPublicUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    parsed.protocol = MINIO_USE_SSL ? 'https' : 'http';
+    parsed.hostname = MINIO_PUBLIC_ENDPOINT;
+    parsed.port = String(MINIO_PUBLIC_PORT);
+    return parsed.toString();
+  } catch (error) {
+    console.warn('[pm-service] failed to rewrite MinIO URL', { url, error: error.message });
+    return url;
+  }
+};
+
+async function ensureObject(minioClient, key, contents, metadata = {}) {
+  for (let attempt = 1; attempt <= MINIO_MAX_RETRIES; attempt++) {
+    try {
+      await minioClient.statObject(MINIO_BUCKET, key);
+      return;
+    } catch (error) {
+      if (error.code && error.code !== 'NotFound') {
+        console.warn(`[pm-service] statObject failed for ${key} (attempt ${attempt}): ${error.message}`);
+        if (attempt === MINIO_MAX_RETRIES) throw error;
+        await sleep(MINIO_RETRY_BACKOFF_MS * attempt);
+        continue;
+      }
+    }
+
+    try {
+      const buffer = Buffer.isBuffer(contents) ? contents : Buffer.from(contents);
+      await minioClient.putObject(MINIO_BUCKET, key, buffer, {
+        'Content-Type': metadata.contentType || 'application/json',
+      });
+      console.info(`[pm-service] seeded MinIO object ${key}`);
+      return;
+    } catch (error) {
+      console.warn(`[pm-service] putObject failed for ${key} (attempt ${attempt}): ${error.message}`);
+      if (attempt === MINIO_MAX_RETRIES) throw error;
+      await sleep(MINIO_RETRY_BACKOFF_MS * attempt);
+    }
+  }
+}
+
+async function ensureComplianceAttachmentObjects(minioClient, invoices) {
+  if (!USE_MINIO) return;
+  console.info('[pm-service] ensuring MinIO compliance attachments');
+  for (const invoice of invoices) {
+    for (const attachment of invoice.attachments) {
+      const key = attachment.storageKey || `compliance/${invoice.id}/${attachment.fileName}`;
+      attachment.storageKey = key;
+      const payload = JSON.stringify({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        attachmentId: attachment.id,
+        generatedAt: new Date().toISOString(),
+        note: 'Seeded attachment placeholder for MinIO integration.',
+      });
+      try {
+        await ensureObject(minioClient, key, payload, { contentType: 'application/json' });
+      } catch (error) {
+        console.error('[pm-service] failed to seed MinIO attachment object', { key, error });
+        throw error;
+      }
+    }
+  }
+}
+
+async function attachMinioDownloadUrls(minioClient, invoices) {
+  if (!USE_MINIO) return invoices;
+  await Promise.all(
+    invoices.map(async (invoice) => {
+      await Promise.all(
+        invoice.attachments.map(async (attachment) => {
+          const key = attachment.storageKey || `compliance/${invoice.id}/${attachment.fileName}`;
+          attachment.storageKey = key;
+          try {
+            const url = await minioClient.presignedGetObject(MINIO_BUCKET, key, MINIO_PRESIGN_SECONDS);
+            attachment.downloadUrl = rewriteToPublicUrl(url);
+          } catch (error) {
+            console.warn('[pm-service] failed to presign attachment', { key, error: error.message });
+            attachment.downloadUrl = buildMinioObjectUrl(key);
+          }
+        }),
+      );
+    }),
+  );
+  return invoices;
+}
 
 async function connectRabbitWithRetry(context = 'pm-service') {
   let attempt = 0;
@@ -127,10 +232,57 @@ async function main() {
   let invoices = cloneDeep(invoiceSeed);
   let eventLog = [];
 
+  const sseClients = new Set();
+  let metricsSnapshot = null;
+
+  const computeMetricsSnapshot = () => ({
+    computedAt: Date.now(),
+    data: {
+      projects: countByKey(projects, 'status'),
+      timesheets: countByKey(timesheets, 'approvalStatus'),
+      invoices: countByKey(invoices, 'status'),
+      events: eventLog.length,
+    },
+  });
+
+  const getMetricsSnapshot = (force = false) => {
+    if (!metricsSnapshot || force || Date.now() - metricsSnapshot.computedAt > METRICS_CACHE_MS) {
+      metricsSnapshot = computeMetricsSnapshot();
+    }
+    return metricsSnapshot;
+  };
+
+  const broadcastMetrics = () => {
+    if (sseClients.size === 0) return;
+    const snapshot = getMetricsSnapshot();
+    const payload = JSON.stringify({
+      ...snapshot.data,
+      cachedAt: new Date(snapshot.computedAt).toISOString(),
+      cacheTtlMs: METRICS_CACHE_MS,
+    });
+    const message = `data: ${payload}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(message);
+      } catch (error) {
+        console.warn('[pm-service] SSE write failed', error);
+        sseClients.delete(client);
+        try {
+          client.end();
+        } catch (err) {
+          console.warn('[pm-service] SSE client close failed', err);
+        }
+      }
+    }
+  };
+
   const persistSnapshot = () =>
-    persistState({ projects, timesheets, invoices, events: eventLog }).catch((err) =>
-      console.error('[pm-service] persistState error', err),
-    );
+    persistState({ projects, timesheets, invoices, events: eventLog })
+      .then(() => {
+        getMetricsSnapshot(true);
+        broadcastMetrics();
+      })
+      .catch((err) => console.error('[pm-service] persistState error', err));
 
   const restored = await loadStateFromDisk();
   if (restored) {
@@ -150,10 +302,13 @@ async function main() {
     persistSnapshot();
   }
 
+  getMetricsSnapshot(true);
+
   const { conn, ch } = await setupRabbit();
   const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
   const minioClient = new MinioClient({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
   if (USE_MINIO) await ensureBucket(minioClient);
+  if (USE_MINIO) await ensureComplianceAttachmentObjects(minioClient, invoices);
 
   const publishTimesheetApproved = async ({ timesheetId, employeeId = 'E-001', projectId = 'P-001', hours = 8, rateType = 'standard', note, idempotencyKey }) => {
     if (!timesheetId) {
@@ -388,7 +543,7 @@ async function main() {
     }
   });
 
-  app.get('/api/v1/compliance/invoices', (req, res) => {
+  app.get('/api/v1/compliance/invoices', async (req, res) => {
     const filters = {
       keyword: req.query?.keyword,
       status: req.query?.status,
@@ -434,10 +589,18 @@ async function main() {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.min(page, totalPages);
     const startIndex = (currentPage - 1) * pageSize;
-    const items = sorted.slice(startIndex, startIndex + pageSize);
+    const slice = sorted.slice(startIndex, startIndex + pageSize);
+    let payloadItems = cloneDeep(slice);
+    if (USE_MINIO) {
+      try {
+        payloadItems = await attachMinioDownloadUrls(minioClient, payloadItems);
+      } catch (error) {
+        console.warn('[pm-service] failed to attach MinIO download URLs', error);
+      }
+    }
 
     res.json({
-      items,
+      items: payloadItems,
       meta: {
         total,
         page: currentPage,
@@ -451,24 +614,43 @@ async function main() {
     });
   });
 
-  app.get('/metrics/summary', (_req, res) => {
-    const projectStatus = projects.reduce((acc, item) => {
-      acc[item.status] = (acc[item.status] || 0) + 1;
-      return acc;
-    }, {});
-    const timesheetStatus = timesheets.reduce((acc, item) => {
-      acc[item.approvalStatus] = (acc[item.approvalStatus] || 0) + 1;
-      return acc;
-    }, {});
-    const invoiceStatus = invoices.reduce((acc, item) => {
-      acc[item.status] = (acc[item.status] || 0) + 1;
-      return acc;
-    }, {});
+  app.get('/metrics/summary', (req, res) => {
+    const refresh = String(req.query?.refresh ?? '').toLowerCase() === 'true';
+    const snapshot = getMetricsSnapshot(refresh);
+    if (refresh) broadcastMetrics();
+    const now = Date.now();
+    const stale = now - snapshot.computedAt > METRICS_CACHE_MS;
     res.json({
-      projects: projectStatus,
-      timesheets: timesheetStatus,
-      invoices: invoiceStatus,
-      events: eventLog.length,
+      ...snapshot.data,
+      cachedAt: new Date(snapshot.computedAt).toISOString(),
+      cacheTtlMs: METRICS_CACHE_MS,
+      stale,
+    });
+  });
+
+  app.get('/metrics/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    sseClients.add(res);
+    const snapshot = getMetricsSnapshot(false);
+    res.write(
+      `data: ${JSON.stringify({
+        ...snapshot.data,
+        cachedAt: new Date(snapshot.computedAt).toISOString(),
+        cacheTtlMs: METRICS_CACHE_MS,
+      })}\n\n`,
+    );
+
+    req.on('close', () => {
+      sseClients.delete(res);
+      try {
+        res.end();
+      } catch (error) {
+        console.warn('[pm-service] SSE close error', error);
+      }
     });
   });
 

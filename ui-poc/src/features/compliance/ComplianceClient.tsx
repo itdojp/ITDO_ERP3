@@ -45,6 +45,8 @@ type FetchOptions = {
   sortBy?: InvoiceSortKey;
   sortDir?: "asc" | "desc";
   preserveSelection?: boolean;
+  refresh?: boolean;
+  silent?: boolean;
 };
 
 type ComplianceClientProps = {
@@ -76,7 +78,8 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
   };
 
   const fetchInvoices = async (options: FetchOptions = {}) => {
-    setLoading(true);
+    const { refresh = false, silent = false } = options;
+    if (!silent) setLoading(true);
     setError(null);
 
     const nextSortBy = options.sortBy ?? sortBy;
@@ -91,7 +94,8 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
       sortBy: nextSortBy,
       sortDir: nextSortDir,
     });
-    const path = `/api/v1/compliance/invoices?${query}`;
+    const path = refresh ? `/api/v1/compliance/invoices?${query}&refresh=true` : `/api/v1/compliance/invoices?${query}`;
+    let result: InvoiceListResponse | null = null;
 
     try {
       const response = await apiRequest<InvoiceListResponse>({ path });
@@ -102,6 +106,7 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
         ? previousSelection
         : response.items[0]?.id ?? null;
       setSelectedId(preserved);
+      result = response;
     } catch (err) {
       console.warn("[compliance] falling back to mock data", err);
       const fallbackItems = searchMockInvoices(form);
@@ -136,9 +141,15 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
       applyMeta(fallbackMeta);
       setSelectedId(fallbackItems[0]?.id ?? null);
       setError("APIの取得に失敗したため、モックデータを表示しています。");
+      result = {
+        items: sortedFallback.slice(0, fallbackPageSize),
+        meta: fallbackMeta,
+      };
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+
+    return result;
   };
 
   const selectedInvoice = useMemo(() => {
@@ -194,6 +205,33 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
   const goToNextPage = () => {
     if (page >= meta.totalPages) return;
     void fetchInvoices({ page: page + 1 });
+  };
+
+  const handleDownload = async (invoice: InvoiceRecord, attachment: InvoiceAttachment) => {
+    const openInNewTab = (url: string | undefined) => {
+      if (!url) return false;
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        setError('ポップアップがブロックされました。ブラウザの設定を確認してください。');
+        return false;
+      }
+      return true;
+    };
+
+    const opened = openInNewTab(attachment.downloadUrl);
+    const refreshed = await fetchInvoices({ refresh: true, preserveSelection: true, silent: true });
+    if (!refreshed) {
+      if (!opened) {
+        setError('ダウンロードリンクの再生成に失敗しました。');
+      }
+      return;
+    }
+
+    const updatedInvoice = refreshed.items.find((item) => item.id === invoice.id);
+    const updatedAttachment = updatedInvoice?.attachments.find((item) => item.id === attachment.id);
+    if (!opened && !openInNewTab(updatedAttachment?.downloadUrl)) {
+      setError('ダウンロードリンクの再生成に失敗しました。');
+    }
   };
 
   return (
@@ -336,7 +374,10 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
         </div>
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400"
+        data-testid="compliance-meta"
+      >
         <div className="flex flex-wrap items-center gap-3">
           <span>ヒット件数: {meta.total.toLocaleString()} 件</span>
           <span>
@@ -354,7 +395,7 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
           </span>
           {error ? <span className="text-amber-300">{error}</span> : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-testid="compliance-pager">
           <button
             type="button"
             onClick={goToPreviousPage}
@@ -444,7 +485,9 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
         </table>
       </div>
 
-      {selectedInvoice ? <DetailPanel invoice={selectedInvoice} onPreview={setPreviewAttachment} /> : null}
+      {selectedInvoice ? (
+        <DetailPanel invoice={selectedInvoice} onPreview={setPreviewAttachment} onDownload={handleDownload} />
+      ) : null}
 
       {previewAttachment ? (
         <AttachmentPreview attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
@@ -456,9 +499,10 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
 type DetailPanelProps = {
   invoice: InvoiceRecord;
   onPreview: (attachment: InvoiceAttachment) => void;
+  onDownload: (invoice: InvoiceRecord, attachment: InvoiceAttachment) => void;
 };
 
-function DetailPanel({ invoice, onPreview }: DetailPanelProps) {
+function DetailPanel({ invoice, onPreview, onDownload }: DetailPanelProps) {
   return (
     <div className="grid gap-6 rounded-xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-200 md:grid-cols-[1.3fr_1fr]">
       <div className="space-y-4">
@@ -535,7 +579,13 @@ function DetailPanel({ invoice, onPreview }: DetailPanelProps) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-md border border-slate-800 bg-slate-800 px-3 py-1 text-xs text-slate-400"
+                  onClick={() => onDownload(invoice, attachment)}
+                  className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                    attachment.downloadUrl
+                      ? 'border-sky-500 bg-sky-500/20 text-sky-100 hover:border-sky-400 hover:bg-sky-500/30'
+                      : 'border-slate-800 bg-slate-800 text-slate-500 hover:border-slate-700'
+                  }`}
+                  data-download-url={attachment.downloadUrl ?? ''}
                 >
                   ダウンロード
                 </button>

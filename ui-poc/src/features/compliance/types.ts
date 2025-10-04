@@ -15,6 +15,7 @@ export type InvoiceAttachment = {
   mimeType: string;
   sizeLabel: string;
   previewNote?: string;
+  downloadUrl?: string;
 };
 
 export type InvoiceRecord = {
