@@ -38,6 +38,8 @@ services:
       - rabbitmq
       - redis
     restart: on-failure
+    volumes:
+      - ./services/pm-service/state:/app/state
 
   producer:
     build:
@@ -52,6 +54,8 @@ services:
     depends_on:
       - rabbitmq
     restart: on-failure
+    volumes:
+      - ./services/pm-service/state:/app/state
 
   consumer:
     build:
@@ -66,3 +70,5 @@ services:
       - rabbitmq
       - redis
     restart: on-failure
+    volumes:
+      - ./services/pm-service/state:/app/state

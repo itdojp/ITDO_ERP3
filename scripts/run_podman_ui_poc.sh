@@ -8,6 +8,9 @@ UI_DIR="${ROOT_DIR}/ui-poc"
 PM_HOST_PORT="${PM_PORT:-3001}"
 PM_CONTAINER_PORT="${PM_CONTAINER_PORT:-3001}"
 UI_PORT_VALUE="${UI_PORT:-4000}"
+UI_HEADLESS="${UI_HEADLESS:-false}"
+
+NEXT_DEV_PID=""
 
 if ! command -v podman-compose >/dev/null 2>&1; then
   echo "podman-compose is required. Install it (e.g. 'pip install podman-compose') before running." >&2
@@ -29,6 +32,9 @@ export PM_PORT="${PM_HOST_PORT}"
 export PM_CONTAINER_PORT
 
 cleanup() {
+  if [ -n "$NEXT_DEV_PID" ] && kill -0 "$NEXT_DEV_PID" 2>/dev/null; then
+    kill "$NEXT_DEV_PID" 2>/dev/null || true
+  fi
   printf '\n[cleanup] Stopping UI PoC stack...\n'
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" down >/dev/null 2>&1) || true
 }
@@ -61,4 +67,14 @@ echo "[ui] Starting Next.js dev server on port ${UI_PORT_VALUE}"
 echo "      (API base: http://localhost:${PM_HOST_PORT})"
 NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" \
 POC_API_BASE="http://localhost:${PM_HOST_PORT}" \
-npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}"
+if [ "${UI_HEADLESS}" = 'true' ]; then
+  LOG_FILE="${UI_DIR}/.next/dev.log"
+  mkdir -p "${UI_DIR}/.next"
+  echo "[ui] Launching Next.js in headless mode; logs -> ${LOG_FILE}"
+  npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}" > "${LOG_FILE}" 2>&1 &
+  NEXT_DEV_PID=$!
+  echo "[ui] Next.js dev server running (PID ${NEXT_DEV_PID}). Press Ctrl+C to stop."
+  wait ${NEXT_DEV_PID}
+else
+  npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}"
+fi
