@@ -86,6 +86,29 @@ ITDO_ERP3/
 
 仕様書の改善提案は、Issueまたはプルリクエストでお願いします。
 
+## 🧪 UI PoC テスト実行ガイド
+
+Next.js ベースの UI PoC については、以下の手順でエンドツーエンド検証と Podman スモークを実行できます。
+
+1. **Playwright E2E テスト**
+   ```bash
+   cd ui-poc
+   npm install
+   npm run test:e2e
+   ```
+   - 主要画面（Projects/Timesheets/Compliance/Telemetry など）の UI 操作とフォールバック動作を確認します。
+
+2. **Podman ライブスモーク**
+   ```bash
+   TIMEOUT_SECONDS=180 scripts/poc_live_smoke.sh --tests-only
+   ```
+   - Podman Compose で pm-service / RabbitMQ / Redis / MinIO / Grafana を起動し、ライブ API に対する Playwright シナリオとメトリクス監視を自動実行します。
+   - Slack Webhook を設定すると失敗通知も送信されます。詳細は `scripts/.env.poc_live_smoke.example` を参照してください。
+
+3. **CI 監視**
+   - GitHub Actions の **PoC Live Smoke** ワークフローでは、MinIO 有効/無効の 2 パターンで上記スモークを毎日／手動で実行できます。
+   - 実行結果と生成アーティファクト（`logs/poc-smoke/`）を確認し、ダッシュボードやアラート定義に差異がないかチェックしてください。
+
 ## 📝 ライセンス
 
 本仕様書は社内利用を前提としています。外部公開の際は事前承認が必要です。
