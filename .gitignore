@@ -18,6 +18,7 @@ Thumbs.db
 *.tmp
 *.temp
 *.log
+logs/
 
 # Node.js (将来的な開発用)
 node_modules/

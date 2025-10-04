@@ -7,16 +7,24 @@ on:
 
 jobs:
   smoke:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: minio-off
+            use_minio: "false"
+          - name: minio-on
+            use_minio: "true"
+            minio_port: "9000"
+            minio_console_port: "9001"
+            minio_public_endpoint: "localhost"
+            minio_public_port: "9000"
     env:
       PM_PORT: 3001
       UI_PORT: 4000
-      USE_MINIO: true
-      MINIO_PORT: 9000
-      MINIO_CONSOLE_PORT: 9001
-      MINIO_PUBLIC_ENDPOINT: localhost
-      MINIO_PUBLIC_PORT: 9000
       TIMEOUT_SECONDS: 180
       POLL_INTERVAL: 2
       PLAYWRIGHT_BROWSERS_PATH: 0
@@ -38,6 +46,15 @@ jobs:
           podman system migrate || true
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> $GITHUB_ENV
 
+      - name: Configure MinIO environment
+        if: ${{ matrix.use_minio == 'true' }}
+        run: |
+          echo "USE_MINIO=true" >> $GITHUB_ENV
+          echo "MINIO_PORT=${{ matrix.minio_port }}" >> $GITHUB_ENV
+          echo "MINIO_CONSOLE_PORT=${{ matrix.minio_console_port }}" >> $GITHUB_ENV
+          echo "MINIO_PUBLIC_ENDPOINT=${{ matrix.minio_public_endpoint }}" >> $GITHUB_ENV
+          echo "MINIO_PUBLIC_PORT=${{ matrix.minio_public_port }}" >> $GITHUB_ENV
+
       - name: Install UI dependencies
         run: |
           npm install
@@ -45,5 +62,11 @@ jobs:
         working-directory: ui-poc
 
       - name: Run PoC live smoke
+        env:
+          USE_MINIO: ${{ matrix.use_minio }}
         run: |
-          scripts/poc_live_smoke.sh --tests-only --with-minio
+          ARGS="--tests-only"
+          if [ "${{ matrix.use_minio }}" = "true" ]; then
+            ARGS="$ARGS --with-minio"
+          fi
+          scripts/poc_live_smoke.sh $ARGS

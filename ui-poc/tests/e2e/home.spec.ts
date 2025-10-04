@@ -6,6 +6,7 @@ test.describe('Home Navigation', () => {
 
     await expect(page.getByRole('heading', { name: 'UI PoC 概要' })).toBeVisible();
     await expect(page.getByText('Podman Metrics Snapshot')).toBeVisible();
+    await expect(page.getByTestId('metrics-refresh')).toBeVisible();
     await expect(page.getByText('ITDO ERP3 UI PoC')).toBeVisible();
 
     await page.getByRole('link', { name: 'Timesheets' }).click();

@@ -45,6 +45,8 @@ USE_MINIO=true MINIO_PORT=9000 MINIO_CONSOLE_PORT=9001 podman compose -f podman-
 
 `MINIO_PRESIGN_SECONDS`（既定 600）でURLの有効時間を調整できる。
 
+メトリクスは `/metrics/summary` のほか `/metrics/stream` から Server-Sent Events (SSE) 形式で購読可能です。ダッシュボードや通知向けに利用してください。
+
 #### Podman向けスモークテスト
 
 以下のスクリプトは Podman 上でスタックを起動し、タイムシート承認イベントを1件発火→consumerが請求書生成ログを出力するまで待機してから停止します。
@@ -92,12 +94,20 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - FAIL_RATE: 失敗率（0.0-1.0, デフォルト0.0）→DLQ動作の検証に使用
  - USE_MINIO: trueでMinIOを使用（デフォルトfalse）
  - MINIO_ENDPOINT/MINIO_PORT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY/MINIO_BUCKET
+ - MINIO_PUBLIC_ENDPOINT/MINIO_PUBLIC_PORT: 署名付きURLを生成する際の公開URL（デフォルト localhost:9000）
+ - MINIO_MAX_RETRIES/MINIO_RETRY_BACKOFF_MS: MinIOシード処理のリトライ回数/バックオフ設定
 
 テスト
 - Producerログ: 送信件数とシャード割り当て
 - Consumerログ: invoice生成（冪等時はskip表示）
 - RabbitMQ管理画面: http://localhost:15672 （user: guest / pass: guest）
 - Redis: idempotencyキーを格納（`idemp:{key}`）
+
+#### Observability (Loki + Promtail)
+- `poc/event-backbone/local/logging/promtail-config.yml` で `logs/poc-smoke/*.log` を対象に Promtail を構成しています。
+- `scripts/poc_live_smoke.sh` は失敗時に `logs/poc-smoke/` 以下へスタックログを収集し、Promtail 経由で Loki に連携されます。
+- Loki の UI は http://localhost:3100/ からアクセスできます。
+- Grafana は http://localhost:3000/ （既定ユーザー: `admin` / パスワード: `admin`） で起動し、Loki データソースと PoC Logs ダッシュボードが事前設定されています。
 
 想定確認
 - 再送（同一Idempotency-Key）→重複抑止（skip）

@@ -232,6 +232,7 @@ async function main() {
   let invoices = cloneDeep(invoiceSeed);
   let eventLog = [];
 
+  const sseClients = new Set();
   let metricsSnapshot = null;
 
   const computeMetricsSnapshot = () => ({
@@ -251,10 +252,35 @@ async function main() {
     return metricsSnapshot;
   };
 
+  const broadcastMetrics = () => {
+    if (sseClients.size === 0) return;
+    const snapshot = getMetricsSnapshot();
+    const payload = JSON.stringify({
+      ...snapshot.data,
+      cachedAt: new Date(snapshot.computedAt).toISOString(),
+      cacheTtlMs: METRICS_CACHE_MS,
+    });
+    const message = `data: ${payload}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(message);
+      } catch (error) {
+        console.warn('[pm-service] SSE write failed', error);
+        sseClients.delete(client);
+        try {
+          client.end();
+        } catch (err) {
+          console.warn('[pm-service] SSE client close failed', err);
+        }
+      }
+    }
+  };
+
   const persistSnapshot = () =>
     persistState({ projects, timesheets, invoices, events: eventLog })
       .then(() => {
         getMetricsSnapshot(true);
+        broadcastMetrics();
       })
       .catch((err) => console.error('[pm-service] persistState error', err));
 
@@ -591,6 +617,7 @@ async function main() {
   app.get('/metrics/summary', (req, res) => {
     const refresh = String(req.query?.refresh ?? '').toLowerCase() === 'true';
     const snapshot = getMetricsSnapshot(refresh);
+    if (refresh) broadcastMetrics();
     const now = Date.now();
     const stale = now - snapshot.computedAt > METRICS_CACHE_MS;
     res.json({
@@ -598,6 +625,32 @@ async function main() {
       cachedAt: new Date(snapshot.computedAt).toISOString(),
       cacheTtlMs: METRICS_CACHE_MS,
       stale,
+    });
+  });
+
+  app.get('/metrics/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    sseClients.add(res);
+    const snapshot = getMetricsSnapshot(false);
+    res.write(
+      `data: ${JSON.stringify({
+        ...snapshot.data,
+        cachedAt: new Date(snapshot.computedAt).toISOString(),
+        cacheTtlMs: METRICS_CACHE_MS,
+      })}\n\n`,
+    );
+
+    req.on('close', () => {
+      sseClients.delete(res);
+      try {
+        res.end();
+      } catch (error) {
+        console.warn('[pm-service] SSE close error', error);
+      }
     });
   });
 
