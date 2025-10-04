@@ -37,13 +37,22 @@ export type InvoiceRecord = {
   updatedAt: string;
 };
 
+export type InvoiceSortKey = "issueDate" | "updatedAt" | "amount";
+
+export type InvoiceListMeta = {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  sortBy: InvoiceSortKey;
+  sortDir: "asc" | "desc";
+  fetchedAt: string;
+  fallback: boolean;
+};
+
 export type InvoiceListResponse = {
   items: InvoiceRecord[];
-  meta: {
-    total: number;
-    fetchedAt: string;
-    fallback: boolean;
-  };
+  meta: InvoiceListMeta;
 };
 
 export type InvoiceSearchFormState = {

@@ -9,6 +9,7 @@ import type {
   InvoiceListResponse,
   InvoiceRecord,
   InvoiceSearchFormState,
+  InvoiceSortKey,
 } from "./types";
 import { STATUS_LABEL } from "./types";
 
@@ -25,19 +26,120 @@ type QuerySource = "api" | "mock";
 
 const TABLE_COLUMN_COUNT = 7;
 
+const sortKeyOptions: Array<{ value: InvoiceSortKey; label: string }> = [
+  { value: "issueDate", label: "発行日" },
+  { value: "updatedAt", label: "更新日時" },
+  { value: "amount", label: "金額" },
+];
+
+const sortDirectionOptions: Array<{ value: "asc" | "desc"; label: string }> = [
+  { value: "desc", label: "降順" },
+  { value: "asc", label: "昇順" },
+];
+
+const pageSizeOptions = [10, 25, 50];
+
+type FetchOptions = {
+  page?: number;
+  pageSize?: number;
+  sortBy?: InvoiceSortKey;
+  sortDir?: "asc" | "desc";
+  preserveSelection?: boolean;
+};
+
 type ComplianceClientProps = {
   initialData: InvoiceListResponse;
 };
 
 export function ComplianceClient({ initialData }: ComplianceClientProps) {
+  const initialMeta = initialData.meta;
   const [form, setForm] = useState<InvoiceSearchFormState>(initialFormState);
   const [invoices, setInvoices] = useState(initialData.items);
-  const [meta, setMeta] = useState(initialData.meta);
-  const [source, setSource] = useState<QuerySource>(initialData.meta.fallback ? "mock" : "api");
+  const [meta, setMeta] = useState(initialMeta);
+  const [page, setPage] = useState(initialMeta.page);
+  const [pageSize, setPageSize] = useState(initialMeta.pageSize);
+  const [sortBy, setSortBy] = useState<InvoiceSortKey>(initialMeta.sortBy);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(initialMeta.sortDir);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(initialData.items[0]?.id ?? null);
   const [previewAttachment, setPreviewAttachment] = useState<InvoiceAttachment | null>(null);
+
+  const source: QuerySource = meta.fallback ? "mock" : "api";
+
+  const applyMeta = (nextMeta: InvoiceListResponse["meta"]) => {
+    setMeta(nextMeta);
+    setPage(nextMeta.page);
+    setPageSize(nextMeta.pageSize);
+    setSortBy(nextMeta.sortBy);
+    setSortDir(nextMeta.sortDir);
+  };
+
+  const fetchInvoices = async (options: FetchOptions = {}) => {
+    setLoading(true);
+    setError(null);
+
+    const nextSortBy = options.sortBy ?? sortBy;
+    const nextSortDir = options.sortDir ?? sortDir;
+    const nextPageSize = options.pageSize ?? pageSize;
+    const nextPage = options.page ?? page;
+    const previousSelection = options.preserveSelection ? selectedId : null;
+
+    const query = buildQueryString(form, {
+      page: nextPage,
+      pageSize: nextPageSize,
+      sortBy: nextSortBy,
+      sortDir: nextSortDir,
+    });
+    const path = `/api/v1/compliance/invoices?${query}`;
+
+    try {
+      const response = await apiRequest<InvoiceListResponse>({ path });
+      setInvoices(response.items);
+      applyMeta(response.meta);
+
+      const preserved = previousSelection && response.items.some((item) => item.id === previousSelection)
+        ? previousSelection
+        : response.items[0]?.id ?? null;
+      setSelectedId(preserved);
+    } catch (err) {
+      console.warn("[compliance] falling back to mock data", err);
+      const fallbackItems = searchMockInvoices(form);
+      const sortedFallback = fallbackItems.slice().sort((a, b) => {
+        if (nextSortBy === "updatedAt") {
+          const aTime = new Date(a.updatedAt ?? a.issueDate ?? 0).getTime();
+          const bTime = new Date(b.updatedAt ?? b.issueDate ?? 0).getTime();
+          return nextSortDir === "asc" ? aTime - bTime : bTime - aTime;
+        }
+        if (nextSortBy === "amount") {
+          const delta = (a.amountIncludingTax ?? 0) - (b.amountIncludingTax ?? 0);
+          return nextSortDir === "asc" ? delta : -delta;
+        }
+        const aTime = Date.parse(`${a.issueDate}T00:00:00Z`);
+        const bTime = Date.parse(`${b.issueDate}T00:00:00Z`);
+        const delta = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+        return nextSortDir === "asc" ? delta : -delta;
+      });
+      const fallbackPage = 1;
+      const fallbackPageSize = sortedFallback.length === 0 ? nextPageSize : sortedFallback.length;
+      setInvoices(sortedFallback.slice(0, fallbackPageSize));
+      const fallbackMeta: InvoiceListResponse["meta"] = {
+        total: sortedFallback.length,
+        page: fallbackPage,
+        pageSize: fallbackPageSize,
+        totalPages: 1,
+        sortBy: nextSortBy,
+        sortDir: nextSortDir,
+        fetchedAt: new Date().toISOString(),
+        fallback: true,
+      };
+      applyMeta(fallbackMeta);
+      setSelectedId(fallbackItems[0]?.id ?? null);
+      setError("APIの取得に失敗したため、モックデータを表示しています。");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const selectedInvoice = useMemo(() => {
     if (!selectedId) return null;
@@ -54,42 +156,44 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
 
   const handleSearch: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const query = buildQueryString(form);
-    const path = query ? `/api/v1/compliance/invoices?${query}` : "/api/v1/compliance/invoices";
-
-    try {
-      const response = await apiRequest<InvoiceListResponse>({ path });
-      setInvoices(response.items);
-      setMeta(response.meta);
-      setSource(response.meta.fallback ? "mock" : "api");
-      setSelectedId(response.items[0]?.id ?? null);
-    } catch (err) {
-      console.warn("[compliance] falling back to mock data", err);
-      const fallbackItems = searchMockInvoices(form);
-      setInvoices(fallbackItems);
-      setMeta({
-        total: fallbackItems.length,
-        fetchedAt: new Date().toISOString(),
-        fallback: true,
-      });
-      setSource("mock");
-      setSelectedId(fallbackItems[0]?.id ?? null);
-      setError("APIの取得に失敗したため、モックデータを表示しています。");
-    } finally {
-      setLoading(false);
-    }
+    void fetchInvoices({ page: 1 });
   };
 
   const handleReset = () => {
     setForm(initialFormState);
     setInvoices(initialData.items);
-    setMeta(initialData.meta);
-    setSource(initialData.meta.fallback ? "mock" : "api");
+    applyMeta(initialData.meta);
     setSelectedId(initialData.items[0]?.id ?? null);
     setError(null);
+  };
+
+  const handleSortKeyChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
+    const value = event.target.value as InvoiceSortKey;
+    setSortBy(value);
+    void fetchInvoices({ page: 1, sortBy: value });
+  };
+
+  const handleSortDirChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
+    const value = event.target.value === "asc" ? "asc" : "desc";
+    setSortDir(value);
+    void fetchInvoices({ page: 1, sortDir: value });
+  };
+
+  const handlePageSizeChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
+    const nextSize = Number.parseInt(event.target.value, 10);
+    const validSize = Number.isFinite(nextSize) ? nextSize : pageSize;
+    setPageSize(validSize);
+    void fetchInvoices({ page: 1, pageSize: validSize });
+  };
+
+  const goToPreviousPage = () => {
+    if (page <= 1) return;
+    void fetchInvoices({ page: page - 1 });
+  };
+
+  const goToNextPage = () => {
+    if (page >= meta.totalPages) return;
+    void fetchInvoices({ page: page + 1 });
   };
 
   return (
@@ -183,21 +287,94 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
             条件クリア
           </button>
         </div>
+
+        <div className="flex flex-wrap items-end gap-3 md:col-span-2">
+          <label className="flex flex-col gap-2">
+            <span className="text-xs uppercase tracking-wide text-slate-400">並び順 (項目)</span>
+            <select
+              value={sortBy}
+              onChange={handleSortKeyChange}
+              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              {sortKeyOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs uppercase tracking-wide text-slate-400">並び順 (方向)</span>
+            <select
+              value={sortDir}
+              onChange={handleSortDirChange}
+              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              {sortDirectionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-xs uppercase tracking-wide text-slate-400">1ページ表示件数</span>
+            <select
+              value={pageSize}
+              onChange={handlePageSizeChange}
+              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option} 件
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </form>
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>ヒット件数: {meta.total.toLocaleString()} 件</span>
-        <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
-        <span
-          className={`rounded-full px-2 py-1 font-medium ${
-            source === "api"
-              ? "bg-emerald-500/20 text-emerald-200"
-              : "bg-amber-500/20 text-amber-200"
-          }`}
-        >
-          {source === "api" ? "API live" : "Mock data"}
-        </span>
-        {error ? <span className="text-amber-300">{error}</span> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-3">
+          <span>ヒット件数: {meta.total.toLocaleString()} 件</span>
+          <span>
+            ページ: {page} / {meta.totalPages.toLocaleString()}
+          </span>
+          <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
+          <span
+            className={`rounded-full px-2 py-1 font-medium ${
+              source === "api"
+                ? "bg-emerald-500/20 text-emerald-200"
+                : "bg-amber-500/20 text-amber-200"
+            }`}
+          >
+            {source === "api" ? "API live" : "Mock data"}
+          </span>
+          {error ? <span className="text-amber-300">{error}</span> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goToPreviousPage}
+            disabled={page <= 1 || loading}
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+          >
+            前へ
+          </button>
+          <span>
+            {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, meta.total)}
+          </span>
+          <button
+            type="button"
+            onClick={goToNextPage}
+            disabled={page >= meta.totalPages || loading}
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+          >
+            次へ
+          </button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50">
@@ -404,7 +581,10 @@ function AttachmentPreview({ attachment, onClose }: AttachmentPreviewProps) {
   );
 }
 
-function buildQueryString(filters: InvoiceSearchFormState): string {
+function buildQueryString(
+  filters: InvoiceSearchFormState,
+  options: { page: number; pageSize: number; sortBy: InvoiceSortKey; sortDir: "asc" | "desc" },
+): string {
   const params = new URLSearchParams();
   if (filters.keyword.trim()) {
     params.set("keyword", filters.keyword.trim());
@@ -424,6 +604,10 @@ function buildQueryString(filters: InvoiceSearchFormState): string {
   if (filters.maxAmount.trim()) {
     params.set("max_total", filters.maxAmount.trim());
   }
+  params.set("page", String(options.page));
+  params.set("page_size", String(options.pageSize));
+  params.set("sort_by", options.sortBy);
+  params.set("sort_dir", options.sortDir);
   return params.toString();
 }
 

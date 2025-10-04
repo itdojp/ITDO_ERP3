@@ -2,6 +2,12 @@ import { ProjectsClient } from "@/features/projects/ProjectsClient";
 import { mockProjects } from "@/features/projects/mock-data";
 import type { ProjectListResponse } from "@/features/projects/types";
 
+const defaultMeta: NonNullable<ProjectListResponse["meta"]> = {
+  total: 0,
+  fetchedAt: new Date().toISOString(),
+  fallback: true,
+};
+
 async function fetchProjects(): Promise<ProjectListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
   try {
@@ -9,10 +15,24 @@ async function fetchProjects(): Promise<ProjectListResponse> {
     if (!res.ok) {
       throw new Error(`status ${res.status}`);
     }
-    return (await res.json()) as ProjectListResponse;
+    const data = (await res.json()) as Partial<ProjectListResponse>;
+    return {
+      items: data.items ?? [],
+      meta: {
+        total: data.meta?.total ?? data.items?.length ?? 0,
+        fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
+        fallback: data.meta?.fallback ?? false,
+      },
+    } satisfies ProjectListResponse;
   } catch (error) {
     console.warn("[projects] falling back to mock data due to fetch error", error);
-    return mockProjects;
+    return {
+      ...mockProjects,
+      meta: {
+        ...defaultMeta,
+        ...mockProjects.meta,
+      },
+    };
   }
 }
 

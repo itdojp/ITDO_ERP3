@@ -48,4 +48,11 @@ export const mockTimesheets: TimesheetListResponse = {
       submittedAt: "2025-09-09T16:40:00Z",
     },
   ],
+  meta: {
+    total: 4,
+    returned: 4,
+    fetchedAt: new Date("2024-09-30T09:00:00+09:00").toISOString(),
+    fallback: true,
+    status: 'all',
+  },
 };

@@ -43,6 +43,26 @@ podman run -d --name minio \
 scripts/run_podman_poc.sh
 ```
 
+#### 永続化状態の手動確認手順
+
+pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/pm-service/state/pm-poc-state.json`）に最新データを保存します。コンテナ再起動時に状態復元が期待どおり行われることを以下の手順で確認できます。
+
+1. スタック起動: `podman compose -f podman-compose.yml up -d`
+2. サンプル変更: 別シェルで以下コマンドを実行し、新規プロジェクトとタイムシートを投入します。
+   ```bash
+   curl -X POST http://localhost:3001/api/v1/projects \
+     -H 'Content-Type: application/json' \
+     -d '{"projectCode":"POC-999","projectName":"Persist Check","status":"planned"}'
+
+   curl -X POST http://localhost:3001/api/v1/timesheets \
+     -H 'Content-Type: application/json' \
+     -d '{"projectCode":"POC-999","userName":"永続テスター","hours":5.5,"workDate":"2025-09-15"}'
+   ```
+3. 状態ファイル確認: `services/pm-service/state/pm-poc-state.json` に追加されたレコードが記録されていることを確認します。
+4. スタック停止 → 再起動: `podman compose -f podman-compose.yml down` → `podman compose -f podman-compose.yml up -d`
+5. API再取得: `curl http://localhost:3001/api/v1/projects` などで投入したデータが復元されていることを確認します。
+6. リセットが必要な場合は `scripts/reset_pm_state.sh` を実行すると状態ファイルが初期化されます。
+
 #### 設定（環境変数）
 - NUM_SHARDS: シャード数（デフォルト4）
 - PRODUCER_BATCH: 送信イベント数（デフォルト100）

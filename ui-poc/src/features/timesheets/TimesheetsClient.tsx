@@ -6,6 +6,7 @@ import type {
   ActionPayload,
   TimesheetAction,
   TimesheetEntry,
+  TimesheetListMeta,
   TimesheetListResponse,
   TimesheetStatus,
 } from "./types";
@@ -32,6 +33,8 @@ const dialogRequired: Record<TimesheetAction, boolean> = {
   resubmit: true,
 };
 
+type QuerySource = "api" | "mock";
+
 type TimesheetsClientProps = {
   initialTimesheets: TimesheetListResponse;
 };
@@ -53,11 +56,22 @@ const initialDialog: DialogState = {
 };
 
 export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
+  const initialMeta: TimesheetListMeta =
+    initialTimesheets.meta ?? {
+      total: initialTimesheets.items.length,
+      returned: initialTimesheets.items.length,
+      fetchedAt: new Date().toISOString(),
+      fallback: true,
+      status: "submitted",
+    };
   const [timesheets, setTimesheets] = useState(initialTimesheets.items);
   const [filter, setFilter] = useState<(typeof statusFilters)[number]["value"]>("submitted");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
+  const [meta, setMeta] = useState(initialMeta);
+
+  const source: QuerySource = meta.fallback ? "mock" : "api";
 
   const filtered = useMemo(() => {
     if (filter === "all") return timesheets;
@@ -88,6 +102,11 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         ),
       );
       setMessage(`${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了`);
+      setMeta((prev) => ({
+        ...prev,
+        fallback: false,
+        fetchedAt: new Date().toISOString(),
+      }));
     } catch (error) {
       console.error("timesheet action failed", error);
       setMessage(`${ACTION_LABEL[action]} に失敗しました`);
@@ -129,6 +148,20 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             {item.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>
+          表示件数: {filtered.length.toLocaleString()} / {meta.total.toLocaleString()} 件
+        </span>
+        <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
+        <span
+          className={`rounded-full px-2 py-1 font-medium ${
+            source === "api" ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"
+          }`}
+        >
+          {source === "api" ? "API live" : "Mock data"}
+        </span>
       </div>
 
       {message ? <p className="text-xs text-sky-300">{message}</p> : null}

@@ -15,6 +15,11 @@ export type ProjectSummary = {
 
 export type ProjectListResponse = {
   items: ProjectSummary[];
+  meta?: {
+    total: number;
+    fetchedAt: string;
+    fallback: boolean;
+  };
   next_cursor?: string;
 };
 

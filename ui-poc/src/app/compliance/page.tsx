@@ -2,10 +2,27 @@ import { ComplianceClient } from "@/features/compliance/ComplianceClient";
 import { mockInvoices } from "@/features/compliance/mock-data";
 import type { InvoiceListResponse } from "@/features/compliance/types";
 
+const defaultMeta: InvoiceListResponse["meta"] = {
+  total: 0,
+  page: 1,
+  pageSize: 25,
+  totalPages: 1,
+  sortBy: "issueDate",
+  sortDir: "desc",
+  fetchedAt: new Date().toISOString(),
+  fallback: true,
+};
+
 async function fetchComplianceInvoices(): Promise<InvoiceListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
   try {
-    const res = await fetch(`${base}/api/v1/compliance/invoices?limit=25`, { cache: "no-store" });
+    const params = new URLSearchParams({
+      page: "1",
+      page_size: "25",
+      sort_by: "issueDate",
+      sort_dir: "desc",
+    });
+    const res = await fetch(`${base}/api/v1/compliance/invoices?${params.toString()}`, { cache: "no-store" });
     if (!res.ok) {
       throw new Error(`status ${res.status}`);
     }
@@ -14,13 +31,24 @@ async function fetchComplianceInvoices(): Promise<InvoiceListResponse> {
       items: data.items ?? [],
       meta: {
         total: data.meta?.total ?? data.items?.length ?? 0,
+        page: data.meta?.page ?? 1,
+        pageSize: data.meta?.pageSize ?? 25,
+        totalPages: data.meta?.totalPages ?? 1,
+        sortBy: data.meta?.sortBy ?? "issueDate",
+        sortDir: data.meta?.sortDir ?? "desc",
         fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
         fallback: data.meta?.fallback ?? false,
       },
     } satisfies InvoiceListResponse;
   } catch (error) {
     console.warn("[compliance] falling back to mock data due to fetch error", error);
-    return mockInvoices;
+    return {
+      ...mockInvoices,
+      meta: {
+        ...defaultMeta,
+        ...mockInvoices.meta,
+      },
+    };
   }
 }
 
