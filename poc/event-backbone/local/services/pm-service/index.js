@@ -20,6 +20,10 @@ const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'minioadmin';
 const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'minioadmin';
 const MINIO_BUCKET = process.env.MINIO_BUCKET || 'events';
 const MINIO_PRESIGN_SECONDS = parseInt(process.env.MINIO_PRESIGN_SECONDS || '600', 10);
+const MINIO_PUBLIC_ENDPOINT = process.env.MINIO_PUBLIC_ENDPOINT || 'localhost';
+const MINIO_PUBLIC_PORT = parseInt(process.env.MINIO_PUBLIC_PORT || String(MINIO_PORT), 10);
+const MINIO_MAX_RETRIES = parseInt(process.env.MINIO_MAX_RETRIES || '3', 10);
+const MINIO_RETRY_BACKOFF_MS = parseInt(process.env.MINIO_RETRY_BACKOFF_MS || '500', 10);
 
 const cloneDeep = (value) => (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 
@@ -61,23 +65,53 @@ const countByKey = (items, key) =>
   }, {});
 
 const buildMinioObjectUrl = (key) =>
-  `${MINIO_USE_SSL ? 'https' : 'http'}://${MINIO_ENDPOINT}:${MINIO_PORT}/${MINIO_BUCKET}/${key}`;
+  `${MINIO_USE_SSL ? 'https' : 'http'}://${MINIO_PUBLIC_ENDPOINT}:${MINIO_PUBLIC_PORT}/${MINIO_BUCKET}/${key}`;
+
+const rewriteToPublicUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    parsed.protocol = MINIO_USE_SSL ? 'https' : 'http';
+    parsed.hostname = MINIO_PUBLIC_ENDPOINT;
+    parsed.port = String(MINIO_PUBLIC_PORT);
+    return parsed.toString();
+  } catch (error) {
+    console.warn('[pm-service] failed to rewrite MinIO URL', { url, error: error.message });
+    return url;
+  }
+};
 
 async function ensureObject(minioClient, key, contents, metadata = {}) {
-  try {
-    await minioClient.statObject(MINIO_BUCKET, key);
-  } catch (error) {
-    if (error.code === 'NotFound') {
+  for (let attempt = 1; attempt <= MINIO_MAX_RETRIES; attempt++) {
+    try {
+      await minioClient.statObject(MINIO_BUCKET, key);
+      return;
+    } catch (error) {
+      if (error.code && error.code !== 'NotFound') {
+        console.warn(`[pm-service] statObject failed for ${key} (attempt ${attempt}): ${error.message}`);
+        if (attempt === MINIO_MAX_RETRIES) throw error;
+        await sleep(MINIO_RETRY_BACKOFF_MS * attempt);
+        continue;
+      }
+    }
+
+    try {
       const buffer = Buffer.isBuffer(contents) ? contents : Buffer.from(contents);
-      await minioClient.putObject(MINIO_BUCKET, key, buffer, { 'Content-Type': metadata.contentType || 'application/json' });
-    } else {
-      throw error;
+      await minioClient.putObject(MINIO_BUCKET, key, buffer, {
+        'Content-Type': metadata.contentType || 'application/json',
+      });
+      console.info(`[pm-service] seeded MinIO object ${key}`);
+      return;
+    } catch (error) {
+      console.warn(`[pm-service] putObject failed for ${key} (attempt ${attempt}): ${error.message}`);
+      if (attempt === MINIO_MAX_RETRIES) throw error;
+      await sleep(MINIO_RETRY_BACKOFF_MS * attempt);
     }
   }
 }
 
 async function ensureComplianceAttachmentObjects(minioClient, invoices) {
   if (!USE_MINIO) return;
+  console.info('[pm-service] ensuring MinIO compliance attachments');
   for (const invoice of invoices) {
     for (const attachment of invoice.attachments) {
       const key = attachment.storageKey || `compliance/${invoice.id}/${attachment.fileName}`;
@@ -89,7 +123,12 @@ async function ensureComplianceAttachmentObjects(minioClient, invoices) {
         generatedAt: new Date().toISOString(),
         note: 'Seeded attachment placeholder for MinIO integration.',
       });
-      await ensureObject(minioClient, key, payload, { contentType: 'application/json' });
+      try {
+        await ensureObject(minioClient, key, payload, { contentType: 'application/json' });
+      } catch (error) {
+        console.error('[pm-service] failed to seed MinIO attachment object', { key, error });
+        throw error;
+      }
     }
   }
 }
@@ -104,7 +143,7 @@ async function attachMinioDownloadUrls(minioClient, invoices) {
           attachment.storageKey = key;
           try {
             const url = await minioClient.presignedGetObject(MINIO_BUCKET, key, MINIO_PRESIGN_SECONDS);
-            attachment.downloadUrl = url;
+            attachment.downloadUrl = rewriteToPublicUrl(url);
           } catch (error) {
             console.warn('[pm-service] failed to presign attachment', { key, error: error.message });
             attachment.downloadUrl = buildMinioObjectUrl(key);

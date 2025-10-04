@@ -101,6 +101,8 @@ check_ui_port() {
 export PM_PORT="${PM_HOST_PORT}"
 export PM_CONTAINER_PORT
 export USE_MINIO="${USE_MINIO_FLAG}"
+export MINIO_PUBLIC_ENDPOINT="${MINIO_PUBLIC_ENDPOINT:-localhost}"
+export MINIO_PUBLIC_PORT="${MINIO_PUBLIC_PORT:-9000}"
 
 cleanup() {
   if [ -n "$NEXT_DEV_PID" ] && kill -0 "$NEXT_DEV_PID" 2>/dev/null; then
@@ -115,6 +117,7 @@ trap cleanup EXIT
 cd "${PROJECT_DIR}"
 
 echo "[podman] Starting backend PoC stack via podman-compose"
+echo "[podman] USE_MINIO=${USE_MINIO_FLAG}"
 podman-compose -f "${COMPOSE_FILE}" up -d --build
 
 echo "[health] Waiting for pm-service on http://localhost:${PM_HOST_PORT}"

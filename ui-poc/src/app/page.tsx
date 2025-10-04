@@ -1,3 +1,5 @@
+import { MetricsPanel } from "@/features/metrics/MetricsPanel";
+
 export default function Home() {
   return (
     <section className="space-y-8">
@@ -34,6 +36,8 @@ export default function Home() {
           </div>
         ))}
       </div>
+
+      <MetricsPanel />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-sm text-slate-300">
         <h3 className="text-base font-semibold">ローカル実行メモ</h3>

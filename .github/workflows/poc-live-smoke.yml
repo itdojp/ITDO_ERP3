@@ -1,0 +1,49 @@
+name: PoC Live Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PM_PORT: 3001
+      UI_PORT: 4000
+      USE_MINIO: true
+      MINIO_PORT: 9000
+      MINIO_CONSOLE_PORT: 9001
+      MINIO_PUBLIC_ENDPOINT: localhost
+      MINIO_PUBLIC_PORT: 9000
+      TIMEOUT_SECONDS: 180
+      POLL_INTERVAL: 2
+      PLAYWRIGHT_BROWSERS_PATH: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+          python3 -m pip install --user podman-compose
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure rootless Podman
+        run: |
+          export XDG_RUNTIME_DIR="/tmp/xdg-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          podman system migrate || true
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> $GITHUB_ENV
+
+      - name: Install UI dependencies
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+        working-directory: ui-poc
+
+      - name: Run PoC live smoke
+        run: |
+          scripts/poc_live_smoke.sh --tests-only --with-minio

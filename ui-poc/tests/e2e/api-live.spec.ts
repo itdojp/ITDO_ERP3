@@ -15,4 +15,21 @@ test.describe('API Live Integration', () => {
     await page.goto('/compliance');
     await expect(page.getByText('API live')).toBeVisible();
   });
+
+  test('compliance download provides signed url', async ({ page, request }) => {
+    await page.goto('/compliance');
+    await expect(page.getByText('API live')).toBeVisible();
+
+    await page.locator('table tbody tr').first().click();
+    const downloadButton = page.getByRole('button', { name: 'ダウンロード' }).first();
+    await expect(downloadButton).toBeEnabled();
+    await expect(downloadButton).toHaveAttribute('data-download-url', /http:\/\//);
+
+    const apiResponse = await request.get('http://localhost:3001/api/v1/compliance/invoices');
+    expect(apiResponse.ok()).toBeTruthy();
+    const payload = await apiResponse.json();
+    expect(payload.items?.[0]?.attachments?.[0]?.downloadUrl).toMatch(/^http:\/\/localhost:\d+\//);
+
+    await downloadButton.click();
+  });
 });
