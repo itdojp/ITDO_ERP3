@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ChangeEventHandler, FormEventHandler } from "react";
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import { searchMockInvoices, statusOptions } from "./mock-data";
 import type {
@@ -13,6 +13,7 @@ import type {
   InvoiceSortKey,
 } from "./types";
 import { STATUS_LABEL } from "./types";
+import { COMPLIANCE_INVOICES_QUERY } from "./queries";
 
 const initialFormState: InvoiceSearchFormState = {
   keyword: "",
@@ -21,6 +22,37 @@ const initialFormState: InvoiceSearchFormState = {
   endDate: "",
   minAmount: "",
   maxAmount: "",
+};
+
+const parseAmountInput = (value: string) => {
+  if (!value || value.trim().length === 0) return undefined;
+  const normalized = Number(value.replace(/,/g, ""));
+  return Number.isFinite(normalized) ? normalized : undefined;
+};
+
+const buildGraphQLFilter = (
+  form: InvoiceSearchFormState,
+  params: { page: number; pageSize: number; sortBy: InvoiceSortKey; sortDir: "asc" | "desc" },
+) => {
+  return {
+    keyword: form.keyword.trim() || undefined,
+    status: form.status === "all" ? undefined : form.status,
+    startDate: form.startDate || undefined,
+    endDate: form.endDate || undefined,
+    minAmount: parseAmountInput(form.minAmount),
+    maxAmount: parseAmountInput(form.maxAmount),
+    page: params.page,
+    pageSize: params.pageSize,
+    sortBy: params.sortBy,
+    sortDir: params.sortDir,
+  };
+};
+
+const resolveSelection = (items: InvoiceRecord[], previous: string | null) => {
+  if (previous && items.some((item) => item.id === previous)) {
+    return previous;
+  }
+  return items[0]?.id ?? null;
 };
 
 type QuerySource = "api" | "mock";
@@ -89,6 +121,13 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
     const nextPage = options.page ?? page;
     const previousSelection = options.preserveSelection ? selectedId : null;
 
+    const graphqlFilter = buildGraphQLFilter(form, {
+      page: nextPage,
+      pageSize: nextPageSize,
+      sortBy: nextSortBy,
+      sortDir: nextSortDir,
+    });
+
     const query = buildQueryString(form, {
       page: nextPage,
       pageSize: nextPageSize,
@@ -96,85 +135,141 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
       sortDir: nextSortDir,
     });
     const path = refresh ? `/api/v1/compliance/invoices?${query}&refresh=true` : `/api/v1/compliance/invoices?${query}`;
-    let result: InvoiceListResponse | null = null;
 
     try {
-      const response = await apiRequest<InvoiceListResponse>({ path });
-      setInvoices(response.items);
-      applyMeta(response.meta);
-      reportClientTelemetry({
-        component: "compliance/client",
-        event: "api_fetch_succeeded",
-        level: response.meta?.fallback ? "warn" : "info",
-        detail: {
-          fallback: response.meta?.fallback ?? false,
-          items: response.items.length,
-          page: response.meta?.page,
-        },
-      });
+      try {
+        const gql = await graphqlRequest<{
+          complianceInvoices?: {
+            items?: InvoiceRecord[];
+            meta?: InvoiceListResponse["meta"];
+          };
+        }>({
+          query: COMPLIANCE_INVOICES_QUERY,
+          variables: { filter: graphqlFilter },
+        });
+        const connection = gql.complianceInvoices;
+        if (!connection) {
+          throw new Error('graphql response missing complianceInvoices');
+        }
+        const items = Array.isArray(connection.items) ? connection.items : [];
+        const metaPayload = connection.meta ?? {};
+        const normalizedMeta: InvoiceListResponse["meta"] = {
+          total: metaPayload.total ?? items.length,
+          page: metaPayload.page ?? graphqlFilter.page ?? 1,
+          pageSize: metaPayload.pageSize ?? graphqlFilter.pageSize ?? items.length,
+          totalPages: metaPayload.totalPages ?? 1,
+          sortBy: (metaPayload.sortBy as InvoiceSortKey | undefined) ?? nextSortBy,
+          sortDir: (metaPayload.sortDir as "asc" | "desc" | undefined) ?? nextSortDir,
+          fetchedAt: metaPayload.fetchedAt ?? new Date().toISOString(),
+          fallback: metaPayload.fallback ?? false,
+        };
 
-      const preserved = previousSelection && response.items.some((item) => item.id === previousSelection)
-        ? previousSelection
-        : response.items[0]?.id ?? null;
-      setSelectedId(preserved);
-      result = response;
-    } catch (err) {
-      console.warn("[compliance] falling back to mock data", err);
-      reportClientTelemetry({
-        component: "compliance/client",
-        event: "mock_fallback",
-        level: "warn",
-        detail: {
-          error: err instanceof Error ? err.message : String(err),
-          query: {
-            keyword: form.keyword,
-            status: form.status,
-            sortBy: nextSortBy,
-            sortDir: nextSortDir,
+        setInvoices(items);
+        applyMeta(normalizedMeta);
+        setSelectedId(resolveSelection(items, previousSelection));
+        reportClientTelemetry({
+          component: "compliance/client",
+          event: "graphql_fetch_succeeded",
+          level: normalizedMeta.fallback ? "warn" : "info",
+          detail: {
+            source: "graphql",
+            fallback: normalizedMeta.fallback,
+            items: items.length,
+            page: normalizedMeta.page,
           },
-        },
-      });
-      const fallbackItems = searchMockInvoices(form);
-      const sortedFallback = fallbackItems.slice().sort((a, b) => {
-        if (nextSortBy === "updatedAt") {
-          const aTime = new Date(a.updatedAt ?? a.issueDate ?? 0).getTime();
-          const bTime = new Date(b.updatedAt ?? b.issueDate ?? 0).getTime();
-          return nextSortDir === "asc" ? aTime - bTime : bTime - aTime;
-        }
-        if (nextSortBy === "amount") {
-          const delta = (a.amountIncludingTax ?? 0) - (b.amountIncludingTax ?? 0);
+        });
+
+        return { items, meta: normalizedMeta } satisfies InvoiceListResponse;
+      } catch (gqlError) {
+        console.warn("[compliance] GraphQL fetch failed, fallback to REST", gqlError);
+        reportClientTelemetry({
+          component: "compliance/client",
+          event: "graphql_fetch_failed",
+          level: "warn",
+          detail: {
+            source: "graphql",
+            error: gqlError instanceof Error ? gqlError.message : String(gqlError),
+            query: {
+              keyword: form.keyword,
+              status: form.status,
+              sortBy: nextSortBy,
+              sortDir: nextSortDir,
+            },
+          },
+        });
+      }
+
+      try {
+        const response = await apiRequest<InvoiceListResponse>({ path });
+        setInvoices(response.items);
+        applyMeta(response.meta);
+        setSelectedId(resolveSelection(response.items, previousSelection));
+        reportClientTelemetry({
+          component: "compliance/client",
+          event: "api_fetch_succeeded",
+          level: response.meta?.fallback ? "warn" : "info",
+          detail: {
+            source: "rest",
+            fallback: response.meta?.fallback ?? false,
+            items: response.items.length,
+            page: response.meta?.page,
+          },
+        });
+        return response;
+      } catch (restError) {
+        console.warn("[compliance] falling back to mock data", restError);
+        reportClientTelemetry({
+          component: "compliance/client",
+          event: "mock_fallback",
+          level: "warn",
+          detail: {
+            source: "mock",
+            error: restError instanceof Error ? restError.message : String(restError),
+            query: {
+              keyword: form.keyword,
+              status: form.status,
+              sortBy: nextSortBy,
+              sortDir: nextSortDir,
+            },
+          },
+        });
+        const fallbackItems = searchMockInvoices(form);
+        const sortedFallback = fallbackItems.slice().sort((a, b) => {
+          if (nextSortBy === "updatedAt") {
+            const aTime = new Date(a.updatedAt ?? a.issueDate ?? 0).getTime();
+            const bTime = new Date(b.updatedAt ?? b.issueDate ?? 0).getTime();
+            return nextSortDir === "asc" ? aTime - bTime : bTime - aTime;
+          }
+          if (nextSortBy === "amount") {
+            const delta = (a.amountIncludingTax ?? 0) - (b.amountIncludingTax ?? 0);
+            return nextSortDir === "asc" ? delta : -delta;
+          }
+          const aTime = Date.parse(`${a.issueDate}T00:00:00Z`);
+          const bTime = Date.parse(`${b.issueDate}T00:00:00Z`);
+          const delta = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
           return nextSortDir === "asc" ? delta : -delta;
-        }
-        const aTime = Date.parse(`${a.issueDate}T00:00:00Z`);
-        const bTime = Date.parse(`${b.issueDate}T00:00:00Z`);
-        const delta = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
-        return nextSortDir === "asc" ? delta : -delta;
-      });
-      const fallbackPage = 1;
-      const fallbackPageSize = sortedFallback.length === 0 ? nextPageSize : sortedFallback.length;
-      setInvoices(sortedFallback.slice(0, fallbackPageSize));
-      const fallbackMeta: InvoiceListResponse["meta"] = {
-        total: sortedFallback.length,
-        page: fallbackPage,
-        pageSize: fallbackPageSize,
-        totalPages: 1,
-        sortBy: nextSortBy,
-        sortDir: nextSortDir,
-        fetchedAt: new Date().toISOString(),
-        fallback: true,
-      };
-      applyMeta(fallbackMeta);
-      setSelectedId(fallbackItems[0]?.id ?? null);
-      setError("APIの取得に失敗したため、モックデータを表示しています。");
-      result = {
-        items: sortedFallback.slice(0, fallbackPageSize),
-        meta: fallbackMeta,
-      };
+        });
+        const fallbackPage = 1;
+        const fallbackPageSize = sortedFallback.length === 0 ? nextPageSize : sortedFallback.length;
+        setInvoices(sortedFallback.slice(0, fallbackPageSize));
+        const fallbackMeta: InvoiceListResponse["meta"] = {
+          total: sortedFallback.length,
+          page: fallbackPage,
+          pageSize: fallbackPageSize,
+          totalPages: 1,
+          sortBy: nextSortBy,
+          sortDir: nextSortDir,
+          fetchedAt: new Date().toISOString(),
+          fallback: true,
+        };
+        applyMeta(fallbackMeta);
+        setSelectedId(sortedFallback[0]?.id ?? null);
+        setError("APIの取得に失敗したため、モックデータを表示しています。");
+        return { items: sortedFallback.slice(0, fallbackPageSize), meta: fallbackMeta };
+      }
     } finally {
       if (!silent) setLoading(false);
     }
-
-    return result;
   };
 
   const selectedInvoice = useMemo(() => {
