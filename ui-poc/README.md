@@ -55,6 +55,31 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 
 > ⚠️ このプロジェクトは PoC 目的のため、本番品質を前提としていません。
 
+## GraphQL プロトタイプ
+- バックエンド PoC (`pm-service`) には `http://localhost:3001/graphql` で GraphQL エンドポイントが追加されています。
+- GraphiQL が有効な場合は、以下のようなクエリで REST と同等のデータを取得できます。
+  ```graphql
+  {
+    metricsSummary {
+      projects
+      timesheets
+      invoices
+      cachedAt
+      stale
+    }
+    projects(status: "active") {
+      id
+      name
+      status
+    }
+  }
+  ```
+- Projects 画面には GraphQL 経由の「プロジェクト追加」フォームを実装しており、作成・状態遷移は GraphQL ミューテーションを優先的に利用します（失敗時は REST にフォールバック）。
+- Timesheets 画面にも GraphQL のクイック追加フォームと、承認/差戻しアクションの GraphQL 呼び出しが組み込まれています。
+- Compliance 画面は GraphQL クエリ `complianceInvoices` を優先利用しており、ページネーション/フィルタ結果のメタ情報を取得できます。
+- GraphQL / REST の両経路は Idempotency-Key をサポートしており、UI クライアント側ではフォールバック時に `reportClientTelemetry` / `reportServerTelemetry` を発火して動作状況を記録します。Podman スタックが起動していれば Telemetry イベントは Loki へ転送され、`scripts/show_telemetry.js` で最新イベントを確認できます。
+- `/telemetry` ページでは Component/Event/Detail/Level/Origin を条件にフィルタし、15 秒間隔で自動更新が行われます。並び順は `Sort` / `Order` セレクトから変更でき、`?pollMs=1000` や `NEXT_PUBLIC_TELEMETRY_POLL_MS` でポーリング間隔も調整可能です。フィルタ設定は URL クエリと localStorage に記録され再訪時に復元されます。
+
 ## 操作シナリオ（PoC 検証観点メモ）
 - `Projects` 画面: プロジェクト一覧を確認 → 任意の行を選択 → 状態遷移ボタンで `activate/hold/resume/close` を試行し、イベントログが更新されることを確認。
 - `Timesheets` 画面: ステータスフィルタを切り替え → 行の操作ボタンで承認/差戻しを実施 → コメント入力や理由選択を試し、メッセージ表示の挙動を確認。
@@ -68,3 +93,8 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 - Playwright ドライバの取得: `cd ui-poc && npx playwright install chromium`
 - テスト実行: `cd ui-poc && npm run test:e2e`
 - Podman を起動して API 連携（`API live` バッジ）を確認したい場合は `npm run test:e2e:live` を利用してください。
+- `npm run test:e2e` は Telemetry 再試行バナーと SSE の動作モック（`tests/e2e/metrics.spec.ts`）も検証します。ライブ API と組み合わせる場合は `E2E_EXPECT_API=true` を設定してください。
+
+## 補助スクリプト
+- `node ../scripts/show_telemetry.js` — Telemetry API の最新イベントを CLI で確認します。`TELEMETRY_BASE` でベースURLを上書き可能です。
+- `node ../scripts/metrics_stream_stress.js` — 複数クライアントで `/metrics/stream` を購読する簡易ロードテスト。`METRICS_STREAM_CLIENTS`/`METRICS_STREAM_URL` などの環境変数で調整できます。

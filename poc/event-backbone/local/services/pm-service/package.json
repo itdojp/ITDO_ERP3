@@ -5,8 +5,18 @@
   "dependencies": {
     "amqplib": "^0.10.3",
     "express": "^4.19.2",
+    "express-graphql": "^0.12.0",
+    "graphql": "^15.8.0",
+    "graphql-type-json": "^0.3.2",
+    "ioredis": "^5.4.1",
     "minio": "^8.0.1",
-    "nanoid": "^5.0.7",
-    "ioredis": "^5.4.1"
+    "nanoid": "^5.0.7"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  },
+  "scripts": {
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   }
 }

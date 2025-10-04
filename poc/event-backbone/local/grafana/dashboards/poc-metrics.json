@@ -1,0 +1,60 @@
+{
+  "id": null,
+  "uid": "poc-metrics",
+  "title": "PoC Metrics Overview",
+  "tags": [
+    "poc"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "text",
+      "title": "Metrics Integration",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## Podman Metrics Snapshot\n- Use the `scripts/poc_live_smoke.sh` workflow or the UI PoC home screen to trigger `/metrics/summary`.\n- GraphQL \u30af\u30a8\u30ea\u4f8b: ```query { metricsSummary(refresh: true) { projects timesheets invoices events cachedAt } }```\n- SSE \u306f `/metrics/stream` \u3067\u8cfc\u8aad\u53ef\u80fd\u3067\u3059\u3002Grafana \u3067\u7d99\u7d9a\u76e3\u8996\u3059\u308b\u5834\u5408\u306f Loki \u306e\u30ed\u30b0\u30e1\u30c8\u30ea\u30af\u30b9\u3092\u5229\u7528\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Metrics Snapshots (Loki)",
+      "datasource": {
+        "type": "loki",
+        "uid": "poc-loki"
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "{job=\"poc-smoke\"} |= \"metrics-summary\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "dedupStrategy": "none",
+        "wrapLogMessage": true
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}

@@ -15,3 +15,9 @@ scrape_configs:
         labels:
           job: poc-smoke
           __path__: /var/log/poc-smoke/*.log
+  - job_name: poc-telemetry
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: poc-telemetry
+          __path__: /var/log/poc-smoke/telemetry.log*

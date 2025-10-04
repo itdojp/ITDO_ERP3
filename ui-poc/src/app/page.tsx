@@ -15,7 +15,7 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
           {
             title: "Projects",
@@ -28,6 +28,10 @@ export default function Home() {
           {
             title: "Compliance",
             description: "電子取引（インボイス）検索と添付確認の操作性を検証する画面です。",
+          },
+          {
+            title: "Telemetry",
+            description: "UI/バックエンドが送信する Telemetry イベントを一覧表示し、フェールバック状況を可視化します。",
           },
         ].map((card) => (
           <div key={card.title} className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">

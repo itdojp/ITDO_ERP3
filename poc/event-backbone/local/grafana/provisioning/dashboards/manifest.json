@@ -1,0 +1,19 @@
+{
+  "dashboards": [
+    {
+      "title": "PoC Metrics Overview",
+      "uid": "poc-metrics",
+      "file": "poc-metrics.json"
+    },
+    {
+      "title": "PoC Logs Explorer",
+      "uid": "poc-logs",
+      "file": "poc-logs.json"
+    },
+    {
+      "title": "PoC UI Telemetry",
+      "uid": "poc-telemetry",
+      "file": "poc-telemetry.json"
+    }
+  ]
+}

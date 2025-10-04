@@ -1,0 +1,54 @@
+{
+  "id": null,
+  "uid": "poc-logs",
+  "title": "PoC Logs Explorer",
+  "tags": [
+    "poc"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "logs",
+      "title": "Recent PoC Smoke Logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "poc-loki"
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "showTime": true,
+        "wrapLogMessage": true,
+        "showLabels": true,
+        "sortOrder": "Descending",
+        "labels": [
+          "job"
+        ],
+        "prettifyLogMessage": true,
+        "showCommonLabels": false
+      },
+      "targets": [
+        {
+          "expr": "{job=\"poc-smoke\"}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  }
+}
