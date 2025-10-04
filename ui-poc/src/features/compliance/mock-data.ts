@@ -104,6 +104,11 @@ export const mockInvoices: InvoiceListResponse = {
   items,
   meta: {
     total: items.length,
+    page: 1,
+    pageSize: items.length,
+    totalPages: 1,
+    sortBy: "issueDate",
+    sortDir: "desc",
     fetchedAt: baseDate.toISOString(),
     fallback: true,
   },

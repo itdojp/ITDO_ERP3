@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:live": "E2E_EXPECT_API=true playwright test"
   },
   "dependencies": {
     "next": "14.2.5",

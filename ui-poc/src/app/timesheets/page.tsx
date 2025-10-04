@@ -2,6 +2,14 @@ import { TimesheetsClient } from "@/features/timesheets/TimesheetsClient";
 import { mockTimesheets } from "@/features/timesheets/mock-data";
 import type { TimesheetListResponse } from "@/features/timesheets/types";
 
+const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {
+  total: 0,
+  returned: 0,
+  fetchedAt: new Date().toISOString(),
+  fallback: true,
+  status: "all",
+};
+
 async function fetchTimesheets(): Promise<TimesheetListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
   try {
@@ -9,10 +17,26 @@ async function fetchTimesheets(): Promise<TimesheetListResponse> {
     if (!res.ok) {
       throw new Error(`status ${res.status}`);
     }
-    return (await res.json()) as TimesheetListResponse;
+    const data = (await res.json()) as Partial<TimesheetListResponse>;
+    return {
+      items: data.items ?? [],
+      meta: {
+        total: data.meta?.total ?? data.items?.length ?? 0,
+        returned: data.meta?.returned ?? data.items?.length ?? 0,
+        fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
+        fallback: data.meta?.fallback ?? false,
+        status: (data.meta?.status as string | undefined) ?? "submitted",
+      },
+    } satisfies TimesheetListResponse;
   } catch (error) {
     console.warn("[timesheets] falling back to mock data due to fetch error", error);
-    return mockTimesheets;
+    return {
+      ...mockTimesheets,
+      meta: {
+        ...defaultMeta,
+        ...mockTimesheets.meta,
+      },
+    };
   }
 }
 

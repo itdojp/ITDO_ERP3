@@ -43,3 +43,4 @@ docs/_build/
 *.bak
 *.backup
 *_backup.*
+poc/event-backbone/local/services/pm-service/state/pm-poc-state.json

@@ -45,4 +45,9 @@ export const mockProjects: ProjectListResponse = {
       tags: ["AMS"],
     },
   ],
+  meta: {
+    total: 4,
+    fetchedAt: new Date("2024-09-30T09:00:00+09:00").toISOString(),
+    fallback: true,
+  },
 };

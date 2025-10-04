@@ -44,11 +44,22 @@ type UpdateState = {
   variant: "success" | "error" | null;
 };
 
+type QuerySource = "api" | "mock";
+
 export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
+  const initialMeta: NonNullable<ProjectListResponse["meta"]> =
+    initialProjects.meta ?? {
+      total: initialProjects.items.length,
+      fetchedAt: new Date().toISOString(),
+      fallback: true,
+    };
   const [projects, setProjects] = useState(initialProjects.items);
   const [filter, setFilter] = useState<(typeof statusFilters)[number]["value"]>("all");
   const [updateState, setUpdateState] = useState<UpdateState>({ id: null, message: null, variant: null });
   const [pending, setPending] = useState<string | null>(null);
+  const [meta, setMeta] = useState(initialMeta);
+
+  const source: QuerySource = meta.fallback ? "mock" : "api";
 
   const filteredProjects = useMemo(() => {
     if (filter === "all") return projects;
@@ -75,6 +86,11 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         ),
       );
       setUpdateState({ id: project.id, message: `${actionLabel[action]} succeeded`, variant: "success" });
+      setMeta((prev) => ({
+        ...prev,
+        fallback: false,
+        fetchedAt: new Date().toISOString(),
+      }));
     } catch (error) {
       console.error("project action failed", error);
       setUpdateState({ id: project.id, message: `Failed to ${actionLabel[action].toLowerCase()}`, variant: "error" });
@@ -98,6 +114,20 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             {item.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>
+          表示件数: {filteredProjects.length.toLocaleString()} / {meta.total.toLocaleString()} 件
+        </span>
+        <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
+        <span
+          className={`rounded-full px-2 py-1 font-medium ${
+            source === "api" ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"
+          }`}
+        >
+          {source === "api" ? "API live" : "Mock data"}
+        </span>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -182,6 +212,20 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       </div>
     </div>
   );
+}
+
+function formatDateTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function inferNextStatus(current: ProjectStatus, action: ProjectAction): ProjectStatus {

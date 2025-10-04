@@ -13,8 +13,17 @@ export type TimesheetEntry = {
   submittedAt?: string;
 };
 
+export type TimesheetListMeta = {
+  total: number;
+  returned: number;
+  fetchedAt: string;
+  fallback: boolean;
+  status?: TimesheetStatus | 'all';
+};
+
 export type TimesheetListResponse = {
   items: TimesheetEntry[];
+  meta?: TimesheetListMeta;
   next_cursor?: string;
 };
 

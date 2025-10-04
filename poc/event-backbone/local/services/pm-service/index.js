@@ -208,7 +208,14 @@ async function main() {
     if (status && status !== 'all') {
       items = items.filter((project) => project.status === status);
     }
-    res.json({ items });
+    res.json({
+      items,
+      meta: {
+        total: items.length,
+        fetchedAt: new Date().toISOString(),
+        fallback: false,
+      },
+    });
   });
 
   app.post('/api/v1/projects/:projectId/:action', (req, res) => {
@@ -264,15 +271,25 @@ async function main() {
 
   app.get('/api/v1/timesheets', (req, res) => {
     const { status, limit } = req.query || {};
+    const statusFilter = status && status !== 'all' ? status : 'all';
     let items = timesheets;
-    if (status && status !== 'all') {
-      items = items.filter((entry) => entry.approvalStatus === status);
+    if (statusFilter !== 'all') {
+      items = items.filter((entry) => entry.approvalStatus === statusFilter);
     }
     const parsedLimit = Number.parseInt(limit, 10);
     if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
       items = items.slice(0, parsedLimit);
     }
-    res.json({ items });
+    res.json({
+      items,
+      meta: {
+        total: timesheets.length,
+        returned: items.length,
+        fetchedAt: new Date().toISOString(),
+        fallback: false,
+        status: statusFilter,
+      },
+    });
   });
 
   app.post('/api/v1/timesheets', (req, res) => {
@@ -372,7 +389,6 @@ async function main() {
   });
 
   app.get('/api/v1/compliance/invoices', (req, res) => {
-    const limitValue = Number.parseInt(req.query?.limit, 10);
     const filters = {
       keyword: req.query?.keyword,
       status: req.query?.status,
@@ -381,14 +397,54 @@ async function main() {
       minAmount: req.query?.minAmount || req.query?.min_total,
       maxAmount: req.query?.maxAmount || req.query?.max_total,
     };
-    let items = filterInvoices(filters, invoices);
-    if (Number.isFinite(limitValue) && limitValue > 0) {
-      items = items.slice(0, limitValue);
-    }
+
+    const sortKey = typeof req.query?.sort_by === 'string' ? req.query.sort_by : 'issueDate';
+    const sortBy = ['issueDate', 'updatedAt', 'amount'].includes(sortKey) ? sortKey : 'issueDate';
+    const sortDirParam = typeof req.query?.sort_dir === 'string' ? req.query.sort_dir.toLowerCase() : 'desc';
+    const sortDir = sortDirParam === 'asc' ? 'asc' : 'desc';
+
+    const rawPage = Number.parseInt(req.query?.page, 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+
+    const rawPageSize =
+      Number.parseInt(req.query?.page_size, 10) ||
+      Number.parseInt(req.query?.pageSize, 10) ||
+      Number.parseInt(req.query?.limit, 10);
+    const pageSize = Math.max(5, Math.min(Number.isFinite(rawPageSize) && rawPageSize > 0 ? rawPageSize : 25, 100));
+
+    const filtered = filterInvoices(filters, invoices);
+    const total = filtered.length;
+
+    const sorted = filtered.slice().sort((a, b) => {
+      let delta = 0;
+      if (sortBy === 'updatedAt') {
+        const aTime = new Date(a.updatedAt ?? a.issueDate ?? 0).getTime();
+        const bTime = new Date(b.updatedAt ?? b.issueDate ?? 0).getTime();
+        delta = aTime - bTime;
+      } else if (sortBy === 'amount') {
+        delta = (a.amountIncludingTax ?? 0) - (b.amountIncludingTax ?? 0);
+      } else {
+        const aTime = Date.parse(`${a.issueDate}T00:00:00Z`);
+        const bTime = Date.parse(`${b.issueDate}T00:00:00Z`);
+        delta = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+      }
+      return sortDir === 'asc' ? delta : -delta;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const startIndex = (currentPage - 1) * pageSize;
+    const items = sorted.slice(startIndex, startIndex + pageSize);
+
     res.json({
       items,
       meta: {
-        total: items.length,
+        total,
+        page: currentPage,
+        pageSize,
+        totalPages,
+        sortBy,
+        sortDir,
         fetchedAt: new Date().toISOString(),
         fallback: false,
       },
