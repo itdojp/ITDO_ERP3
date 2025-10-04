@@ -124,25 +124,30 @@ async function main() {
 
   let projects = cloneDeep(projectSeed);
   let timesheets = cloneDeep(timesheetSeed);
-  const invoices = cloneDeep(invoiceSeed);
+  let invoices = cloneDeep(invoiceSeed);
   let eventLog = [];
+
+  const persistSnapshot = () =>
+    persistState({ projects, timesheets, invoices, events: eventLog }).catch((err) =>
+      console.error('[pm-service] persistState error', err),
+    );
 
   const restored = await loadStateFromDisk();
   if (restored) {
     if (Array.isArray(restored.projects)) {
-      projects = restored.projects;
+      projects = cloneDeep(restored.projects);
     }
     if (Array.isArray(restored.timesheets)) {
-      timesheets = restored.timesheets;
+      timesheets = cloneDeep(restored.timesheets);
     }
     if (Array.isArray(restored.invoices)) {
-      invoices.splice(0, invoices.length, ...restored.invoices);
+      invoices = cloneDeep(restored.invoices);
     }
     if (Array.isArray(restored.events)) {
-      eventLog = restored.events;
+      eventLog = cloneDeep(restored.events);
     }
   } else {
-    void persistState({ projects, timesheets, invoices, events: eventLog });
+    persistSnapshot();
   }
 
   const { conn, ch } = await setupRabbit();
@@ -189,9 +194,9 @@ async function main() {
     };
     eventLog.push(record);
     if (eventLog.length > 100) {
-      eventLog.splice(0, eventLog.length - 100);
+      eventLog = eventLog.slice(-100);
     }
-    void persistState({ projects, timesheets, invoices, events: eventLog });
+    persistSnapshot();
     return { eventId, shard };
   };
 
@@ -224,7 +229,7 @@ async function main() {
     if (nextStatus === 'closed' && !project.endOn) {
       project.endOn = new Date().toISOString().slice(0, 10);
     }
-    void persistState({ projects, timesheets, invoices, events: eventLog });
+    persistSnapshot();
     res.json({ ok: true, item: project });
   });
 
@@ -253,7 +258,7 @@ async function main() {
       updatedAt: createdAt,
     };
     projects.push(created);
-    void persistState({ projects, timesheets, invoices, events: eventLog });
+    persistSnapshot();
     res.status(201).json({ ok: true, item: created });
   });
 
@@ -297,7 +302,7 @@ async function main() {
       updatedAt: createdAt,
     };
     timesheets.push(created);
-    void persistState({ projects, timesheets, invoices, events: eventLog });
+    persistSnapshot();
     res.status(201).json({ ok: true, item: created });
   });
 
@@ -308,7 +313,7 @@ async function main() {
       return res.status(404).json({ error: 'not_found' });
     }
     timesheets = next;
-    void persistState({ projects, timesheets, invoices, events: eventLog });
+    persistSnapshot();
     res.json({ ok: true });
   });
 
@@ -343,7 +348,7 @@ async function main() {
         entry.approvedAt = nowIso;
         if (comment) entry.note = comment;
         entry.updatedAt = nowIso;
-        void persistState({ projects, timesheets, invoices, events: eventLog });
+        persistSnapshot();
         return res.json({ ok: true, item: entry, eventId, shard });
       }
 
@@ -357,7 +362,7 @@ async function main() {
       }
       entry.approvalStatus = nextStatus;
       entry.updatedAt = nowIso;
-      void persistState({ projects, timesheets, invoices, events: eventLog });
+      persistSnapshot();
       res.json({ ok: true, item: entry });
     } catch (error) {
       console.error('[pm-service] timesheet action error', error);
