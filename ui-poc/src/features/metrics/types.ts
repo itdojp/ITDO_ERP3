@@ -6,4 +6,8 @@ export type MetricsSummaryResponse = {
   cachedAt: string;
   cacheTtlMs: number;
   stale: boolean;
+  idempotency?: {
+    projectKeys?: number;
+    timesheetKeys?: number;
+  };
 };

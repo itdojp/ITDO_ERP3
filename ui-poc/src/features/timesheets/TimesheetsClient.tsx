@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from "react";
-import { apiRequest } from "@/lib/api-client";
+import { FormEvent, useMemo, useState } from "react";
+import { apiRequest, graphqlRequest } from "@/lib/api-client";
+import { reportClientTelemetry } from "@/lib/telemetry";
 import type {
   ActionPayload,
   TimesheetAction,
@@ -32,6 +33,50 @@ const dialogRequired: Record<TimesheetAction, boolean> = {
   reject: true,
   resubmit: true,
 };
+
+const CREATE_TIMESHEET_MUTATION = `
+  mutation CreateTimesheet($input: CreateTimesheetInput!) {
+    createTimesheet(input: $input) {
+      ok
+      error
+      message
+      timesheet {
+        id
+        userName
+        projectCode
+        projectName
+        taskName
+        workDate
+        hours
+        approvalStatus
+        note
+        submittedAt
+      }
+    }
+  }
+`;
+
+const TIMESHEET_ACTION_MUTATION = `
+  mutation TimesheetAction($input: TimesheetActionInput!) {
+    timesheetAction(input: $input) {
+      ok
+      error
+      message
+      timesheet {
+        id
+        userName
+        projectCode
+        projectName
+        workDate
+        hours
+        approvalStatus
+        note
+        submittedAt
+      }
+      eventId
+    }
+  }
+`;
 
 type QuerySource = "api" | "mock";
 
@@ -70,6 +115,18 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
   const [meta, setMeta] = useState(initialMeta);
+  const [creationForm, setCreationForm] = useState({
+    userName: "",
+    projectCode: "",
+    projectName: "",
+    workDate: new Date().toISOString().slice(0, 10),
+    hours: 7.5,
+    note: "",
+    status: "submitted" as TimesheetStatus,
+  });
+  const [creationMessage, setCreationMessage] = useState<string | null>(null);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [creatingTimesheet, setCreatingTimesheet] = useState(false);
 
   const source: QuerySource = meta.fallback ? "mock" : "api";
 
@@ -80,38 +137,263 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
 
   const closeDialog = () => setDialog(initialDialog);
 
+  const normalizeTimesheet = (entry: Partial<TimesheetEntry> | null | undefined): TimesheetEntry | null => {
+    if (!entry?.id) return null;
+    const status = (entry.approvalStatus as TimesheetStatus) ?? "draft";
+    return {
+      id: entry.id,
+      userName: entry.userName ?? "",
+      projectCode: entry.projectCode ?? "",
+      projectName: entry.projectName ?? entry.projectCode ?? "",
+      taskName: entry.taskName ?? undefined,
+      workDate: entry.workDate ?? new Date().toISOString().slice(0, 10),
+      hours: Number.isFinite(entry.hours) ? Number(entry.hours) : 0,
+      approvalStatus: status,
+      note: entry.note ?? undefined,
+      submittedAt: entry.submittedAt ?? undefined,
+    };
+  };
+
+  const updateTimesheetItem = (next: TimesheetEntry) => {
+    setTimesheets((prev) =>
+      prev.map((item) =>
+        item.id === next.id
+          ? {
+              ...item,
+              ...next,
+            }
+          : item,
+      ),
+    );
+    setMeta((prev) => ({
+      ...prev,
+      fallback: false,
+      fetchedAt: new Date().toISOString(),
+    }));
+  };
+
   const performAction = async (entry: TimesheetEntry, action: TimesheetAction, payload?: ActionPayload) => {
     setPendingId(entry.id);
     setMessage(null);
     try {
-      await apiRequest({
-        path: `/api/v1/timesheets/${entry.id}/${action}`,
-        method: "POST",
-        body: payload ? JSON.stringify(payload) : undefined,
+      const gql = await graphqlRequest<{
+        timesheetAction: {
+          ok: boolean;
+          error?: string | null;
+          message?: string | null;
+          timesheet?: TimesheetEntry;
+        };
+      }>({
+        query: TIMESHEET_ACTION_MUTATION,
+        variables: {
+          input: {
+            timesheetId: entry.id,
+            action,
+            comment: payload?.comment,
+            reasonCode: payload?.reasonCode,
+          },
+        },
       });
-      const nextStatus = inferNextStatus(entry.approvalStatus, action);
-      setTimesheets((prev) =>
-        prev.map((item) =>
-          item.id === entry.id
-            ? {
-                ...item,
-                approvalStatus: nextStatus,
-                note: payload?.comment ?? item.note,
-              }
-            : item,
-        ),
-      );
-      setMessage(`${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了`);
+      if (!gql.timesheetAction.ok) {
+        throw new Error(gql.timesheetAction.error ?? gql.timesheetAction.message ?? "GraphQL action failed");
+      }
+      const updated = normalizeTimesheet(gql.timesheetAction.timesheet);
+      if (updated) {
+        updateTimesheetItem(updated);
+      } else {
+        updateTimesheetItem({
+          ...entry,
+          approvalStatus: inferNextStatus(entry.approvalStatus, action),
+          note: payload?.comment ?? entry.note,
+        });
+      }
+      setMessage(gql.timesheetAction.message ?? `${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了`);
+      return;
+    } catch (error) {
+      console.warn("[timesheets] graphql action failed, fallback to REST", error);
+      reportClientTelemetry({
+        component: "timesheets/client",
+        event: "graphql_action_failed",
+        level: "warn",
+        detail: {
+          strategy: "rest",
+          timesheetId: entry.id,
+          action,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      try {
+        await apiRequest({
+          path: `/api/v1/timesheets/${entry.id}/${action}`,
+          method: "POST",
+          body: payload ? JSON.stringify(payload) : undefined,
+        });
+        updateTimesheetItem({
+          ...entry,
+          approvalStatus: inferNextStatus(entry.approvalStatus, action),
+          note: payload?.comment ?? entry.note,
+        });
+        setMessage(`${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了 (REST fallback)`);
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "rest_action_succeeded",
+          level: "info",
+          detail: {
+            strategy: "rest",
+            timesheetId: entry.id,
+            action,
+          },
+        });
+      } catch (restError) {
+        console.error("timesheet action failed", restError);
+        setMessage(`${ACTION_LABEL[action]} に失敗しました`);
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "rest_action_failed",
+          level: "error",
+          detail: {
+            strategy: "rest",
+            timesheetId: entry.id,
+            action,
+            error: restError instanceof Error ? restError.message : String(restError),
+          },
+        });
+      }
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const handleCreateTimesheet = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!creationForm.userName.trim() || !creationForm.projectCode.trim()) {
+      setCreationError("メンバー名とプロジェクトコードを入力してください");
+      return;
+    }
+    setCreationError(null);
+    setCreationMessage(null);
+    setCreatingTimesheet(true);
+    const input = {
+      userName: creationForm.userName.trim(),
+      projectCode: creationForm.projectCode.trim(),
+      projectName: creationForm.projectName.trim() || undefined,
+      workDate: creationForm.workDate,
+      hours: creationForm.hours,
+      note: creationForm.note.trim() || undefined,
+      autoSubmit: creationForm.status === "submitted",
+    };
+    try {
+      const gql = await graphqlRequest<{
+        createTimesheet: {
+          ok: boolean;
+          error?: string | null;
+          message?: string | null;
+          timesheet?: TimesheetEntry;
+        };
+      }>({
+        query: CREATE_TIMESHEET_MUTATION,
+        variables: { input },
+      });
+      if (!gql.createTimesheet.ok) {
+        throw new Error(gql.createTimesheet.error ?? gql.createTimesheet.message ?? "GraphQL mutation failed");
+      }
+      const created = normalizeTimesheet(gql.createTimesheet.timesheet);
+      if (!created) {
+        throw new Error("GraphQL payload missing timesheet");
+      }
+      setTimesheets((prev) => [created, ...prev]);
       setMeta((prev) => ({
         ...prev,
+        total: prev.total + 1,
+        returned: (prev.returned ?? prev.total) + 1,
         fallback: false,
         fetchedAt: new Date().toISOString(),
       }));
+      setCreationMessage(gql.createTimesheet.message ?? "タイムシートを追加しました");
+      setCreationForm((prev) => ({
+        ...prev,
+        userName: "",
+        projectCode: "",
+        projectName: "",
+        note: "",
+      }));
+      if (desiredStatus !== filter && desiredStatus !== "submitted") {
+        setFilter("all");
+      } else {
+        setFilter(desiredStatus === "submitted" ? "submitted" : "all");
+      }
+      return;
     } catch (error) {
-      console.error("timesheet action failed", error);
-      setMessage(`${ACTION_LABEL[action]} に失敗しました`);
+      console.warn("[timesheets] graphql create failed, fallback to REST", error);
+      reportClientTelemetry({
+        component: "timesheets/client",
+        event: "graphql_create_failed",
+        level: "warn",
+        detail: {
+          strategy: "rest",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      try {
+        const rest = await apiRequest<{ ok: boolean; item: TimesheetEntry }>({
+          path: "/api/v1/timesheets",
+          method: "POST",
+          body: JSON.stringify({
+            userName: input.userName,
+            projectCode: input.projectCode,
+            projectName: input.projectName,
+            workDate: input.workDate,
+            hours: input.hours,
+            note: input.note,
+          }),
+        });
+        if (!rest.ok || !rest.item) {
+          throw new Error("REST API response invalid");
+        }
+        const created = normalizeTimesheet(rest.item);
+        if (!created) {
+          throw new Error("REST payload missing timesheet");
+        }
+        setTimesheets((prev) => [created, ...prev]);
+        setMeta((prev) => ({
+          ...prev,
+          total: prev.total + 1,
+          returned: (prev.returned ?? prev.total) + 1,
+          fallback: false,
+          fetchedAt: new Date().toISOString(),
+        }));
+        setCreationMessage("REST API でタイムシートを追加しました");
+        setCreationForm((prev) => ({
+          ...prev,
+          userName: "",
+          projectCode: "",
+          projectName: "",
+          note: "",
+        }));
+        setFilter("all");
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "rest_create_succeeded",
+          level: "info",
+          detail: {
+            strategy: "rest",
+            timesheetId: created.id,
+          },
+        });
+      } catch (restError) {
+        setCreationError((restError as Error).message ?? "タイムシート追加に失敗しました");
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "rest_create_failed",
+          level: "error",
+          detail: {
+            strategy: "rest",
+            error: restError instanceof Error ? restError.message : String(restError),
+          },
+        });
+      }
     } finally {
-      setPendingId(null);
+      setCreatingTimesheet(false);
     }
   };
 
@@ -135,6 +417,95 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
 
   return (
     <div className="space-y-6">
+      <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-slate-950/20">
+        <h3 className="text-sm font-semibold text-slate-200">GraphQL: タイムシート追加</h3>
+        <p className="mt-1 text-xs text-slate-400">GraphQL ミューテーションで工数申請を投入し、承認フローのデモに利用できます。</p>
+        <form className="mt-4 grid gap-3 md:grid-cols-3" onSubmit={handleCreateTimesheet}>
+          <label className="text-xs text-slate-300 md:col-span-1">
+            <span className="mb-1 block">メンバー *</span>
+            <input
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.userName}
+              onChange={(event) => setCreationForm((prev) => ({ ...prev, userName: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="text-xs text-slate-300 md:col-span-1">
+            <span className="mb-1 block">プロジェクトコード *</span>
+            <input
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.projectCode}
+              onChange={(event) => setCreationForm((prev) => ({ ...prev, projectCode: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="text-xs text-slate-300 md:col-span-1">
+            <span className="mb-1 block">プロジェクト名</span>
+            <input
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.projectName}
+              onChange={(event) => setCreationForm((prev) => ({ ...prev, projectName: event.target.value }))}
+            />
+          </label>
+          <label className="text-xs text-slate-300">
+            <span className="mb-1 block">日付</span>
+            <input
+              type="date"
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.workDate}
+              onChange={(event) => setCreationForm((prev) => ({ ...prev, workDate: event.target.value }))}
+            />
+          </label>
+          <label className="text-xs text-slate-300">
+            <span className="mb-1 block">工数 (h)</span>
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.hours}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                setCreationForm((prev) => ({ ...prev, hours: Number.isFinite(value) ? value : 0 }));
+              }}
+            />
+          </label>
+          <label className="text-xs text-slate-300">
+            <span className="mb-1 block">ステータス</span>
+            <select
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.status}
+              onChange={(event) => setCreationForm((prev) => ({ ...prev, status: event.target.value as TimesheetStatus }))}
+            >
+              <option value="submitted">submitted</option>
+              <option value="draft">draft</option>
+            </select>
+          </label>
+          <label className="text-xs text-slate-300 md:col-span-3">
+            <span className="mb-1 block">メモ</span>
+            <textarea
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              value={creationForm.note}
+              onChange={(event) => setCreationForm((prev) => ({ ...prev, note: event.target.value }))}
+              rows={2}
+            />
+          </label>
+          <div className="md:col-span-3 flex items-center justify-between">
+            <div className="text-xs text-slate-400">
+              {creationError ? <span className="text-rose-300">{creationError}</span> : null}
+              {creationMessage ? <span className="text-emerald-300">{creationMessage}</span> : null}
+            </div>
+            <button
+              type="submit"
+              disabled={creatingTimesheet}
+              className="rounded-md border border-sky-500 bg-sky-500/20 px-4 py-2 text-xs font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:text-slate-500"
+            >
+              {creatingTimesheet ? "送信中..." : "GraphQLで追加"}
+            </button>
+          </div>
+        </form>
+      </section>
+
       <div className="flex flex-wrap items-center gap-2">
         {statusFilters.map((item) => (
           <button

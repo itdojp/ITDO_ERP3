@@ -109,9 +109,44 @@ export function MetricsPanel() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+    const base = process.env.NEXT_PUBLIC_API_BASE && process.env.NEXT_PUBLIC_API_BASE.trim().length > 0
+      ? process.env.NEXT_PUBLIC_API_BASE
+      : window.location.origin;
+    let streamUrl = '/metrics/stream';
+    try {
+      streamUrl = new URL('/metrics/stream', base).toString();
+    } catch (error) {
+      console.warn('[metrics] failed to build stream URL', error);
+    }
+    const source = new EventSource(streamUrl, { withCredentials: false });
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data) as MetricsSummaryResponse;
+        handleSuccess(payload);
+      } catch (error) {
+        console.warn('[metrics] failed to parse SSE payload', error);
+      }
+    };
+    const handleError = (event: Event) => {
+      console.warn('[metrics] SSE connection error', event);
+      source.close();
+    };
+    source.addEventListener('message', handleMessage);
+    source.addEventListener('error', handleError);
+
+    return () => {
+      source.removeEventListener('message', handleMessage);
+      source.removeEventListener('error', handleError);
+      source.close();
+    };
+  }, [handleSuccess]);
+
   const projectEntries = useMemo(() => toEntries(metrics?.projects, STATUS_ORDER), [metrics]);
   const timesheetEntries = useMemo(() => toEntries(metrics?.timesheets, TIMESHEET_ORDER), [metrics]);
   const invoiceEntries = useMemo(() => toEntries(metrics?.invoices, INVOICE_ORDER), [metrics]);
+  const idempotencyStats = metrics?.idempotency ?? {};
   const maxEvents = useMemo(() => {
     const values = history.map((item) => item.data.events);
     if (metrics) values.push(metrics.events);
@@ -176,7 +211,7 @@ export function MetricsPanel() {
             </div>
           </div>
 
-          {recentHistory.length > 0 ? (
+         {recentHistory.length > 0 ? (
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4" data-testid="metrics-history">
               <h4 className="text-xs uppercase tracking-wide text-slate-400">Recent Snapshots</h4>
               <ul className="mt-3 space-y-2 text-xs text-slate-300">
@@ -198,6 +233,23 @@ export function MetricsPanel() {
               </ul>
             </div>
           ) : null}
+
+          <div className="grid gap-4 md:grid-cols-2" data-testid="metrics-idempotency">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Idempotency Keys (Projects)</p>
+              <p className="mt-1 text-3xl font-semibold text-sky-100">{idempotencyStats.projectKeys ?? 0}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                Redis に登録済みの Idempotency-Key 件数。TTL は `IDEMP_TTL_MS` で調整可能です。
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Idempotency Keys (Timesheets)</p>
+              <p className="mt-1 text-3xl font-semibold text-sky-100">{idempotencyStats.timesheetKeys ?? 0}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                GraphQL / REST 双方のタイムシート作成で利用されたキー数を参考値として表示します。
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

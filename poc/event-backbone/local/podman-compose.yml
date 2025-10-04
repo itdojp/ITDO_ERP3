@@ -34,12 +34,15 @@ services:
       MINIO_PUBLIC_PORT: ${MINIO_PUBLIC_PORT:-9000}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORT: ${PM_CONTAINER_PORT:-3001}
+      TELEMETRY_LOG_PATH: ${TELEMETRY_LOG_PATH:-/var/log/poc-smoke/telemetry.log}
     ports:
       - "${PM_PORT:-3001}:${PM_CONTAINER_PORT:-3001}"
     depends_on:
       - rabbitmq
       - redis
       - minio
+    volumes:
+      - ../../../logs/poc-smoke:/var/log/poc-smoke
     restart: on-failure
 
   producer:
@@ -52,6 +55,11 @@ services:
       PRODUCER_BATCH: ${PRODUCER_BATCH:-100}
       PRODUCER_RPS: ${PRODUCER_RPS:-20}
       USE_MINIO: ${USE_MINIO:-false}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-events}
     depends_on:
       - rabbitmq
       - minio
@@ -102,9 +110,26 @@ services:
       - loki
     volumes:
       - ./logging/promtail-config.yml:/etc/promtail/config.yml:ro
-      - ../../logs:/var/log/poc-smoke:ro
+      - ../../../logs/poc-smoke:/var/log/poc-smoke:ro
     command: -config.file=/etc/promtail/config.yml
+    restart: unless-stopped
+
+  grafana:
+    image: docker.io/grafana/grafana:10.4.4
+    depends_on:
+      - loki
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     restart: unless-stopped
 
 volumes:
   minio-data:
+  grafana-data:

@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const REQUIRE_API = process.env.E2E_EXPECT_API === 'true';
+
 test.describe('Compliance PoC', () => {
   test('performs mock search and shows detail panel', async ({ page }) => {
     await page.goto('/compliance');
@@ -38,5 +40,21 @@ test.describe('Compliance PoC', () => {
     await expect(pager).toContainText('1 - ');
     await expect(page.getByRole('button', { name: '次へ' })).toBeDisabled();
     await expect(page.getByRole('button', { name: '前へ' })).toBeDisabled();
+  });
+
+  test.skip(REQUIRE_API, 'ライブAPI利用時はモックフォールバックが発生しない');
+
+  test('shows live retry guidance when backend is unavailable', async ({ page }) => {
+    await page.goto('/compliance');
+
+    const retryBanner = page.getByText('現在はモックデータを表示しています', { exact: false });
+    await expect(retryBanner).toBeVisible();
+
+    const retryButton = page.getByTestId('compliance-retry-live');
+    await expect(retryButton).toBeVisible();
+    await expect(retryButton).toBeEnabled();
+
+    await retryButton.click();
+    await expect(retryButton).toBeEnabled();
   });
 });

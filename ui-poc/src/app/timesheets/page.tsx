@@ -1,6 +1,7 @@
 import { TimesheetsClient } from "@/features/timesheets/TimesheetsClient";
 import { mockTimesheets } from "@/features/timesheets/mock-data";
 import type { TimesheetListResponse } from "@/features/timesheets/types";
+import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {
   total: 0,
@@ -10,33 +11,112 @@ const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {
   status: "all",
 };
 
+const TIMESHEETS_QUERY = `
+  query TimesheetsPage($status: String) {
+    timesheets(status: $status) {
+      id
+      userName
+      projectCode
+      projectName
+      taskName
+      workDate
+      hours
+      approvalStatus
+      note
+      submittedAt
+    }
+  }
+`;
+
 async function fetchTimesheets(): Promise<TimesheetListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
+  const status = "submitted";
   try {
-    const res = await fetch(`${base}/api/v1/timesheets?status=submitted`, { cache: "no-store" });
-    if (!res.ok) {
-      throw new Error(`status ${res.status}`);
+    const gql = await fetch(`${base}/graphql`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: TIMESHEETS_QUERY, variables: { status } }),
+    });
+    if (!gql.ok) {
+      throw new Error(`graphql status ${gql.status}`);
     }
-    const data = (await res.json()) as Partial<TimesheetListResponse>;
+    const payload = (await gql.json()) as {
+      data?: { timesheets?: TimesheetListResponse["items"] };
+      errors?: Array<{ message: string }>;
+    };
+    if (payload.errors?.length) {
+      throw new Error(payload.errors.map((err) => err.message).join("; "));
+    }
+    const items = Array.isArray(payload.data?.timesheets) ? payload.data?.timesheets ?? [] : [];
     return {
-      items: data.items ?? [],
+      items,
       meta: {
-        total: data.meta?.total ?? data.items?.length ?? 0,
-        returned: data.meta?.returned ?? data.items?.length ?? 0,
-        fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
-        fallback: data.meta?.fallback ?? false,
-        status: (data.meta?.status as string | undefined) ?? "submitted",
+        total: items.length,
+        returned: items.length,
+        fetchedAt: new Date().toISOString(),
+        fallback: false,
+        status,
       },
     } satisfies TimesheetListResponse;
   } catch (error) {
-    console.warn("[timesheets] falling back to mock data due to fetch error", error);
-    return {
-      ...mockTimesheets,
-      meta: {
-        ...defaultMeta,
-        ...mockTimesheets.meta,
+    console.warn("[timesheets] GraphQL fetch failed, fallback to REST", error);
+    await reportServerTelemetry({
+      component: "timesheets/page",
+      event: "graphql_fetch_failed",
+      level: "warn",
+      detail: {
+        stage: "initial",
+        status,
+        error: error instanceof Error ? error.message : String(error),
       },
-    };
+    });
+    try {
+      const res = await fetch(`${base}/api/v1/timesheets?status=${status}`, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`);
+      }
+      const data = (await res.json()) as Partial<TimesheetListResponse>;
+      await reportServerTelemetry({
+        component: "timesheets/page",
+        event: "rest_fallback_succeeded",
+        level: "info",
+        detail: {
+          stage: "initial",
+          status,
+          items: data.items?.length ?? 0,
+        },
+      });
+      return {
+        items: data.items ?? [],
+        meta: {
+          total: data.meta?.total ?? data.items?.length ?? 0,
+          returned: data.meta?.returned ?? data.items?.length ?? 0,
+          fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
+          fallback: data.meta?.fallback ?? false,
+          status: (data.meta?.status as string | undefined) ?? status,
+        },
+      } satisfies TimesheetListResponse;
+    } catch (restError) {
+      console.warn("[timesheets] falling back to mock data", restError);
+      await reportServerTelemetry({
+        component: "timesheets/page",
+        event: "mock_fallback",
+        level: "warn",
+        detail: {
+          stage: "initial",
+          status,
+          error: restError instanceof Error ? restError.message : String(restError),
+        },
+      });
+      return {
+        ...mockTimesheets,
+        meta: {
+          ...defaultMeta,
+          ...mockTimesheets.meta,
+        },
+      };
+    }
   }
 }
 

@@ -14,6 +14,7 @@ const links: Array<{ href: string; label: string }> = [
   { href: "/projects", label: "Projects" },
   { href: "/timesheets", label: "Timesheets" },
   { href: "/compliance", label: "Compliance" },
+  { href: "/telemetry", label: "Telemetry" },
 ];
 
 export default function RootLayout({
