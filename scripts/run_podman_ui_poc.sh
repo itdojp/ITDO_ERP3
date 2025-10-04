@@ -65,16 +65,18 @@ cd "${UI_DIR}"
 
 echo "[ui] Starting Next.js dev server on port ${UI_PORT_VALUE}"
 echo "      (API base: http://localhost:${PM_HOST_PORT})"
-NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" \
-POC_API_BASE="http://localhost:${PM_HOST_PORT}" \
 if [ "${UI_HEADLESS}" = 'true' ]; then
   LOG_FILE="${UI_DIR}/.next/dev.log"
   mkdir -p "${UI_DIR}/.next"
   echo "[ui] Launching Next.js in headless mode; logs -> ${LOG_FILE}"
-  npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}" > "${LOG_FILE}" 2>&1 &
+  env NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" \
+      POC_API_BASE="http://localhost:${PM_HOST_PORT}" \
+      npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}" > "${LOG_FILE}" 2>&1 &
   NEXT_DEV_PID=$!
   echo "[ui] Next.js dev server running (PID ${NEXT_DEV_PID}). Press Ctrl+C to stop."
   wait ${NEXT_DEV_PID}
 else
-  npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}"
+  env NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" \
+      POC_API_BASE="http://localhost:${PM_HOST_PORT}" \
+      npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}"
 fi

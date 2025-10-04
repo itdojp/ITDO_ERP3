@@ -189,7 +189,7 @@ async function main() {
     };
     eventLog.push(record);
     if (eventLog.length > 100) {
-      eventLog = eventLog.slice(-100);
+      eventLog.splice(0, eventLog.length - 100);
     }
     void persistState({ projects, timesheets, invoices, events: eventLog });
     return { eventId, shard };
