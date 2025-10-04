@@ -127,6 +127,16 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - `scripts/poc_live_smoke.sh` は RabbitMQ / Redis / MinIO / Loki / Grafana / pm-service それぞれを個別の待機ロジックで監視し、タイムアウトや接続不能時には Slack 通知とログ収集を行います。`RABBITMQ_TIMEOUT_SECONDS` や `GRAFANA_TIMEOUT_SECONDS` などの環境変数で待機時間を上書きできます。
 - `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`) や WebSocket モード (`METRICS_STREAM_MODE=ws`) もここで変更できます。
 
+##### Grafana ダッシュボード検証手順
+1. Podman スタックを起動後、`http://localhost:3000/` にアクセスし `admin / admin` でログインします。
+2. サイドバーの **Dashboards → Browse → Poc Dashboards** を開き、以下の 3 つが存在することを確認します。
+   - *PoC Metrics Overview* (`metrics-overview`)
+   - *PoC Logs Explorer* (`logs-explorer`)
+   - *PoC UI Telemetry* (`ui-telemetry`)
+3. 各ダッシュボードの右上 **Refresh** ボタンで更新し、最新データが描画されるか（特に `/metrics/stream` 切断時のアラート）を確認します。
+4. **Alerting → PoC Alerts → TelemetryFallbackSpike** を開き、ルールが有効化されているか・直近発火履歴がないかを確認します。閾値の調整は `poc/event-backbone/local/grafana/provisioning/alerting/telemetry.yaml` を編集します。
+5. 必要に応じて `scripts/check_grafana_manifest.py` を実行し、ダッシュボード JSON と manifest の不整合がないことを検証します。
+
 #### GraphQL エンドポイント
 - `pm-service` は REST API に加えて `http://localhost:3001/graphql` で GraphQL を公開しています。
 - スキーマ例:
