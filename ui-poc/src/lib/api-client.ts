@@ -8,6 +8,22 @@ export type ApiRequestOptions = RequestInit & {
   baseUrl?: string;
 };
 
+type GraphQLResponse<TData> = {
+  data?: TData;
+  errors?: Array<{
+    message: string;
+    path?: (string | number)[];
+    extensions?: Record<string, unknown>;
+  }>;
+};
+
+export type GraphQLRequestOptions<TVars extends Record<string, unknown> | undefined = Record<string, unknown>> = {
+  query: string;
+  variables?: TVars;
+  baseUrl?: string;
+  headers?: HeadersInit;
+};
+
 export async function apiRequest<T>(options: ApiRequestOptions): Promise<T> {
   const { path, baseUrl = defaultBase, headers, ...rest } = options;
   const url = new URL(path, baseUrl).toString();
@@ -44,4 +60,41 @@ export async function apiRequest<T>(options: ApiRequestOptions): Promise<T> {
   }
 
   return (await res.json()) as T;
+}
+
+export async function graphqlRequest<TData, TVars extends Record<string, unknown> | undefined = Record<string, unknown>>(
+  options: GraphQLRequestOptions<TVars>,
+): Promise<TData> {
+  const { query, variables, baseUrl = defaultBase, headers } = options;
+  const url = new URL('/graphql', baseUrl).toString();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    body: JSON.stringify({ query, variables }),
+    cache: 'no-store',
+  });
+
+  const payload = (await res.json()) as GraphQLResponse<TData>;
+
+  if (enableLogging) {
+    console.debug('[graphql] response', { url, payload, status: res.status });
+  }
+
+  if (payload.errors && payload.errors.length > 0) {
+    const messages = payload.errors.map((err) => err.message).join('; ');
+    throw new Error(`GraphQL error: ${messages}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(`GraphQL request failed (${res.status})`);
+  }
+
+  if (!payload.data) {
+    throw new Error('GraphQL response missing data');
+  }
+
+  return payload.data;
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ChangeEventHandler, FormEventHandler } from "react";
 import { apiRequest } from "@/lib/api-client";
+import { reportClientTelemetry } from "@/lib/telemetry";
 import { searchMockInvoices, statusOptions } from "./mock-data";
 import type {
   InvoiceAttachment,
@@ -101,6 +102,16 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
       const response = await apiRequest<InvoiceListResponse>({ path });
       setInvoices(response.items);
       applyMeta(response.meta);
+      reportClientTelemetry({
+        component: "compliance/client",
+        event: "api_fetch_succeeded",
+        level: response.meta?.fallback ? "warn" : "info",
+        detail: {
+          fallback: response.meta?.fallback ?? false,
+          items: response.items.length,
+          page: response.meta?.page,
+        },
+      });
 
       const preserved = previousSelection && response.items.some((item) => item.id === previousSelection)
         ? previousSelection
@@ -109,6 +120,20 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
       result = response;
     } catch (err) {
       console.warn("[compliance] falling back to mock data", err);
+      reportClientTelemetry({
+        component: "compliance/client",
+        event: "mock_fallback",
+        level: "warn",
+        detail: {
+          error: err instanceof Error ? err.message : String(err),
+          query: {
+            keyword: form.keyword,
+            status: form.status,
+            sortBy: nextSortBy,
+            sortDir: nextSortDir,
+          },
+        },
+      });
       const fallbackItems = searchMockInvoices(form);
       const sortedFallback = fallbackItems.slice().sort((a, b) => {
         if (nextSortBy === "updatedAt") {
@@ -176,6 +201,10 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
     applyMeta(initialData.meta);
     setSelectedId(initialData.items[0]?.id ?? null);
     setError(null);
+  };
+
+  const handleRetryLive = () => {
+    void fetchInvoices({ refresh: true });
   };
 
   const handleSortKeyChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
@@ -374,10 +403,37 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
         </div>
       </form>
 
-      <div
-        className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400"
-        data-testid="compliance-meta"
-      >
+      {error ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-700 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={handleRetryLive}
+            disabled={loading}
+            className="rounded-md border border-amber-400 px-3 py-1 font-semibold text-amber-100 transition-colors hover:border-amber-300 hover:text-white disabled:cursor-not-allowed disabled:border-amber-700 disabled:text-amber-500"
+            data-testid="compliance-retry-live"
+          >
+            ライブAPIを再試行
+          </button>
+        </div>
+      ) : null}
+
+      {!error && source === "mock" ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-3 text-xs text-slate-200">
+          <span>現在はモックデータを表示しています。ポッドマン環境を確認したらライブAPIを再試行できます。</span>
+          <button
+            type="button"
+            onClick={handleRetryLive}
+            disabled={loading}
+            className="rounded-md border border-sky-500 px-3 py-1 font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
+            data-testid="compliance-retry-live"
+          >
+            ライブAPIを再試行
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400" data-testid="compliance-meta">
         <div className="flex flex-wrap items-center gap-3">
           <span>ヒット件数: {meta.total.toLocaleString()} 件</span>
           <span>
@@ -393,7 +449,6 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
           >
             {source === "api" ? "API live" : "Mock data"}
           </span>
-          {error ? <span className="text-amber-300">{error}</span> : null}
         </div>
         <div className="flex items-center gap-2" data-testid="compliance-pager">
           <button
