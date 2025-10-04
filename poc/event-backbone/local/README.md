@@ -125,7 +125,7 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - `scripts/metrics_stream_stress.js` を利用すると複数クライアントで `/metrics/stream` を同時購読する簡易ロードテストを実施できます。例: `METRICS_STREAM_CLIENTS=25 node scripts/metrics_stream_stress.js`
 - `scripts/show_telemetry.js` は Telemetry API の最新イベントを一覧表示するユーティリティです。
 - `scripts/poc_live_smoke.sh` は RabbitMQ / Redis / MinIO / Loki / Grafana / pm-service それぞれを個別の待機ロジックで監視し、タイムアウトや接続不能時には Slack 通知とログ収集を行います。`RABBITMQ_TIMEOUT_SECONDS` や `GRAFANA_TIMEOUT_SECONDS` などの環境変数で待機時間を上書きできます。
-- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`) や WebSocket モード (`METRICS_STREAM_MODE=ws`) もここで変更できます。
+- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`)、WebSocket モード (`METRICS_STREAM_MODE=ws`)、Grafana ダッシュボード検証 (`CHECK_GRAFANA_DASHBOARDS`) や Slack 通知といったオプションをまとめています。
 
 #### GraphQL エンドポイント
 - `pm-service` は REST API に加えて `http://localhost:3001/graphql` で GraphQL を公開しています。
