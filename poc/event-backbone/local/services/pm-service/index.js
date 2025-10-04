@@ -109,10 +109,10 @@ async function loadStateFromDisk() {
   }
 }
 
-async function persistState({ projects, timesheets, invoices }) {
+async function persistState({ projects, timesheets, invoices, events }) {
   try {
     await mkdir(path.dirname(STATE_FILE), { recursive: true });
-    await writeFile(STATE_FILE, JSON.stringify({ projects, timesheets, invoices }, null, 2));
+    await writeFile(STATE_FILE, JSON.stringify({ projects, timesheets, invoices, events }, null, 2));
   } catch (error) {
     console.warn('[pm-service] failed to persist state', error);
   }
@@ -124,21 +124,30 @@ async function main() {
 
   let projects = cloneDeep(projectSeed);
   let timesheets = cloneDeep(timesheetSeed);
-  const invoices = cloneDeep(invoiceSeed);
+  let invoices = cloneDeep(invoiceSeed);
+  let eventLog = [];
+
+  const persistSnapshot = () =>
+    persistState({ projects, timesheets, invoices, events: eventLog }).catch((err) =>
+      console.error('[pm-service] persistState error', err),
+    );
 
   const restored = await loadStateFromDisk();
   if (restored) {
     if (Array.isArray(restored.projects)) {
-      projects = restored.projects;
+      projects = cloneDeep(restored.projects);
     }
     if (Array.isArray(restored.timesheets)) {
-      timesheets = restored.timesheets;
+      timesheets = cloneDeep(restored.timesheets);
     }
     if (Array.isArray(restored.invoices)) {
-      invoices.splice(0, invoices.length, ...restored.invoices);
+      invoices = cloneDeep(restored.invoices);
+    }
+    if (Array.isArray(restored.events)) {
+      eventLog = cloneDeep(restored.events);
     }
   } else {
-    void persistState({ projects, timesheets, invoices });
+    persistSnapshot();
   }
 
   const { conn, ch } = await setupRabbit();
@@ -179,6 +188,15 @@ async function main() {
       headers: { idempotencyKey: resolvedKey, timesheetId },
     });
     await redis.incr('metrics:events:pm.timesheet.approved').catch(() => {});
+    const record = {
+      ...payload,
+      storedAt: new Date().toISOString(),
+    };
+    eventLog.push(record);
+    if (eventLog.length > 100) {
+      eventLog = eventLog.slice(-100);
+    }
+    persistSnapshot();
     return { eventId, shard };
   };
 
@@ -211,8 +229,37 @@ async function main() {
     if (nextStatus === 'closed' && !project.endOn) {
       project.endOn = new Date().toISOString().slice(0, 10);
     }
-    void persistState({ projects, timesheets, invoices });
+    persistSnapshot();
     res.json({ ok: true, item: project });
+  });
+
+  app.post('/api/v1/projects', (req, res) => {
+    const { code, name, clientName, status = 'planned', startOn, endOn, manager, health = 'green', tags = [] } = req.body || {};
+    if (!name) {
+      return res.status(400).json({ error: 'name required' });
+    }
+    const projectId = req.body?.id || `PRJ-${nanoid(6)}`;
+    if (projects.some((item) => item.id === projectId || (code && item.code === code))) {
+      return res.status(409).json({ error: 'duplicate_project' });
+    }
+    const createdAt = new Date().toISOString();
+    const created = {
+      id: projectId,
+      code: code || projectId,
+      name,
+      clientName: clientName || 'Internal',
+      status,
+      startOn: startOn || createdAt.slice(0, 10),
+      endOn: endOn || null,
+      manager: manager || null,
+      health,
+      tags,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    projects.push(created);
+    persistSnapshot();
+    res.status(201).json({ ok: true, item: created });
   });
 
   app.get('/api/v1/timesheets', (req, res) => {
@@ -226,6 +273,48 @@ async function main() {
       items = items.slice(0, parsedLimit);
     }
     res.json({ items });
+  });
+
+  app.post('/api/v1/timesheets', (req, res) => {
+    const { userName, projectId, projectCode, projectName, workDate, hours = 8, note, rateType = 'standard' } = req.body || {};
+    if (!userName || !(projectId || projectCode)) {
+      return res.status(400).json({ error: 'userName and projectId/projectCode are required' });
+    }
+    const id = req.body?.id || `TS-${nanoid(6)}`;
+    if (timesheets.some((item) => item.id === id)) {
+      return res.status(409).json({ error: 'duplicate_timesheet' });
+    }
+    const createdAt = new Date().toISOString();
+    const created = {
+      id,
+      userName,
+      employeeId: req.body?.employeeId || `EMP-${nanoid(4)}`,
+      projectId: projectId || projectCode,
+      projectCode: projectCode || projectId || id,
+      projectName: projectName || 'Untitled Project',
+      taskName: req.body?.taskName || null,
+      workDate: workDate || createdAt.slice(0, 10),
+      hours,
+      approvalStatus: 'draft',
+      note: note || null,
+      rateType,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    timesheets.push(created);
+    persistSnapshot();
+    res.status(201).json({ ok: true, item: created });
+  });
+
+  app.delete('/api/v1/timesheets/:timesheetId', (req, res) => {
+    const { timesheetId } = req.params;
+    const next = timesheets.filter((item) => item.id !== timesheetId);
+    if (next.length === timesheets.length) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    timesheets = next;
+    persistSnapshot();
+    res.json({ ok: true });
   });
 
   app.post('/api/v1/timesheets/:timesheetId/:action', async (req, res) => {
@@ -259,7 +348,7 @@ async function main() {
         entry.approvedAt = nowIso;
         if (comment) entry.note = comment;
         entry.updatedAt = nowIso;
-        void persistState({ projects, timesheets, invoices });
+        persistSnapshot();
         return res.json({ ok: true, item: entry, eventId, shard });
       }
 
@@ -273,7 +362,7 @@ async function main() {
       }
       entry.approvalStatus = nextStatus;
       entry.updatedAt = nowIso;
-      void persistState({ projects, timesheets, invoices });
+      persistSnapshot();
       res.json({ ok: true, item: entry });
     } catch (error) {
       console.error('[pm-service] timesheet action error', error);
@@ -304,6 +393,33 @@ async function main() {
         fallback: false,
       },
     });
+  });
+
+  app.get('/metrics/summary', (_req, res) => {
+    const projectStatus = projects.reduce((acc, item) => {
+      acc[item.status] = (acc[item.status] || 0) + 1;
+      return acc;
+    }, {});
+    const timesheetStatus = timesheets.reduce((acc, item) => {
+      acc[item.approvalStatus] = (acc[item.approvalStatus] || 0) + 1;
+      return acc;
+    }, {});
+    const invoiceStatus = invoices.reduce((acc, item) => {
+      acc[item.status] = (acc[item.status] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({
+      projects: projectStatus,
+      timesheets: timesheetStatus,
+      invoices: invoiceStatus,
+      events: eventLog.length,
+    });
+  });
+
+  app.get('/events/recent', (req, res) => {
+    const limit = Number.parseInt(req.query?.limit, 10) || 20;
+    const items = eventLog.slice(-limit).reverse();
+    res.json({ items });
   });
 
   // approve a timesheet and publish event

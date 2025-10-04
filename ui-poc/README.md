@@ -60,10 +60,10 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 - `Timesheets` 画面: ステータスフィルタを切り替え → 行の操作ボタンで承認/差戻しを実施 → コメント入力や理由選択を試し、メッセージ表示の挙動を確認。
 - `Compliance` 画面: 期間/金額/ステータス/キーワードで検索条件を組み合わせ → 結果テーブルから行を選択 → 詳細パネルで添付プレビューを開き、モックビューアの流れを確認。
 - Podman 連携時: `scripts/run_podman_ui_poc.sh` でスタックを起動し、Real API モード (`API live` バッジ) とモックモード (`Mock data`) が自動で切り替わることを確認。
-  - Podman スタックを起動している場合、プロジェクト/タイムシート/電子取引の PoC API が `/api/v1/...` エンドポイントからサンプルデータを返します。
+  - Podman スタックを起動している場合、プロジェクト/タイムシート/電子取引の PoC API が `/api/v1/...` エンドポイントからサンプルデータを返します。`/api/v1/projects`・`/api/v1/timesheets` の `POST` で追加、`DELETE /api/v1/timesheets/:id` で削除、`/metrics/summary` や `/events/recent` で状況を確認できます。
 
 ## E2E テスト
 - 依存パッケージのインストール: `cd ui-poc && npm install`
 - Playwright ドライバの取得: `cd ui-poc && npx playwright install chromium`
 - テスト実行: `cd ui-poc && npm run test:e2e`
-- Podman を起動して API 連携（`API live` バッジ）を確認したい場合は `E2E_EXPECT_API=true npm run test:e2e` を利用してください。
+- Podman を起動して API 連携（`API live` バッジ）を確認したい場合は `npm run test:e2e:live` を利用してください。
