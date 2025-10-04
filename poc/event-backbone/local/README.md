@@ -35,6 +35,16 @@ podman run -d --name minio \
 # その後 USE_MINIO=true を環境変数として渡し pm-service / producer を再起動
 ```
 
+v3.1 以降の `podman-compose.yml` には MinIO サービスが同梱されているため、以下のように環境変数を指定するだけで添付ファイル向けオブジェクトストレージ連携を有効化できる。
+
+```
+USE_MINIO=true MINIO_PORT=9000 MINIO_CONSOLE_PORT=9001 podman compose -f podman-compose.yml up -d
+```
+
+`pm-service` は MinIO 連携が有効な場合、請求書添付を `compliance/<invoiceId>/...` のキーで自動生成し、APIレスポンスには有効期限付きのダウンロードURLが含まれる。
+
+`MINIO_PRESIGN_SECONDS`（既定 600）でURLの有効時間を調整できる。
+
 #### Podman向けスモークテスト
 
 以下のスクリプトは Podman 上でスタックを起動し、タイムシート承認イベントを1件発火→consumerが請求書生成ログを出力するまで待機してから停止します。
@@ -42,6 +52,17 @@ podman run -d --name minio \
 ```
 scripts/run_podman_poc.sh
 ```
+
+#### UI + API ライブE2Eスモーク
+
+Podman スタックを再起動しつつ Playwright の `test:e2e:live` を走らせるユーティリティ:
+
+```
+TIMEOUT_SECONDS=120 scripts/poc_live_smoke.sh           # 単発実行
+TIMEOUT_SECONDS=120 scripts/poc_live_smoke.sh --loop    # 継続実行（10分間隔）
+```
+
+MinIO を利用した添付ダウンロードも検証したい場合は `USE_MINIO=true` を付与して実行してください。
 
 #### 永続化状態の手動確認手順
 
@@ -62,6 +83,7 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 4. スタック停止 → 再起動: `podman compose -f podman-compose.yml down` → `podman compose -f podman-compose.yml up -d`
 5. API再取得: `curl http://localhost:3001/api/v1/projects` などで投入したデータが復元されていることを確認します。
 6. リセットが必要な場合は `scripts/reset_pm_state.sh` を実行すると状態ファイルが初期化されます。
+   - MinIO 連携中に添付ファイルをクリアしたい場合は `scripts/reset_pm_state.sh --with-minio` を使用すると、状態ファイルに加えてバケット上の `compliance/` / `timesheets/` オブジェクトも削除できます。
 
 #### 設定（環境変数）
 - NUM_SHARDS: シャード数（デフォルト4）

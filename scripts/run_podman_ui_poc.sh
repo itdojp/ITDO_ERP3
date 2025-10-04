@@ -9,6 +9,51 @@ PM_HOST_PORT="${PM_PORT:-3001}"
 PM_CONTAINER_PORT="${PM_CONTAINER_PORT:-3001}"
 UI_PORT_VALUE="${UI_PORT:-4000}"
 UI_HEADLESS="${UI_HEADLESS:-false}"
+RUN_TESTS=false
+TESTS_ONLY=false
+USE_MINIO_FLAG="${USE_MINIO:-false}"
+
+usage() {
+  cat <<USAGE
+Usage: ${0##*/} [options]
+
+Options:
+  --run-tests      Execute \`npm run test:e2e:live\` after the stack becomes healthy.
+  --tests-only     Run live tests and skip launching the Next.js dev server (implies --run-tests).
+  --with-minio     Export USE_MINIO=true before starting the stack.
+  -h, --help       Show this help message.
+
+Environment variables:
+  PM_PORT, UI_PORT, PM_CONTAINER_PORT, UI_HEADLESS, USE_MINIO
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --run-tests)
+      RUN_TESTS=true
+      shift
+      ;;
+    --tests-only)
+      RUN_TESTS=true
+      TESTS_ONLY=true
+      shift
+      ;;
+    --with-minio)
+      USE_MINIO_FLAG=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
 
 NEXT_DEV_PID=""
 
@@ -55,6 +100,7 @@ check_ui_port() {
 # Export variables for podman-compose so that host/container port values are respected.
 export PM_PORT="${PM_HOST_PORT}"
 export PM_CONTAINER_PORT
+export USE_MINIO="${USE_MINIO_FLAG}"
 
 cleanup() {
   if [ -n "$NEXT_DEV_PID" ] && kill -0 "$NEXT_DEV_PID" 2>/dev/null; then
@@ -73,7 +119,7 @@ podman-compose -f "${COMPOSE_FILE}" up -d --build
 
 echo "[health] Waiting for pm-service on http://localhost:${PM_HOST_PORT}"
 pm_service_up=false
-for _ in {1..40}; do
+for _ in {1..60}; do
   if curl -fsS "http://localhost:${PM_HOST_PORT}/health" >/dev/null 2>&1; then
     pm_service_up=true
     break
@@ -82,8 +128,20 @@ for _ in {1..40}; do
 done
 
 if [ "$pm_service_up" = false ]; then
-  echo "[health] ERROR: pm-service did not become available after 40 seconds. Exiting." >&2
+  echo "[health] ERROR: pm-service did not become available after 60 seconds. Exiting." >&2
   exit 2
+fi
+
+if [ "$RUN_TESTS" = true ]; then
+  echo "[tests] Running Playwright live suite"
+  if ! (cd "${UI_DIR}" && NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" POC_API_BASE="http://localhost:${PM_HOST_PORT}" npm run test:e2e:live); then
+    echo "[tests] Playwright suite failed" >&2
+    exit 4
+  fi
+  if [ "$TESTS_ONLY" = true ]; then
+    echo "[tests] Completed. Stack will be torn down."
+    exit 0
+  fi
 fi
 
 check_ui_port

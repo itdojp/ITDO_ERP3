@@ -20,4 +20,23 @@ test.describe('Compliance PoC', () => {
     await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('table tbody tr').first()).toBeVisible();
   });
+
+  test('supports sorting and paging controls', async ({ page }) => {
+    await page.goto('/compliance');
+
+    const meta = page.getByTestId('compliance-meta');
+    await expect(meta).toContainText('ヒット件数');
+
+    await page.getByLabel('並び順 (項目)').selectOption('amount');
+    await expect(page.locator('table tbody tr').first().locator('td').nth(3)).toContainText(/Laptop refresh program|Laptop/i);
+
+    await page.getByLabel('並び順 (方向)').selectOption('asc');
+    await expect(page.locator('table tbody tr').first().locator('td').nth(3)).toContainText(/電力使用料|電力|Laptop refresh program/i);
+
+    await page.getByLabel('1ページ表示件数').selectOption('25');
+    const pager = page.getByTestId('compliance-pager');
+    await expect(pager).toContainText('1 - ');
+    await expect(page.getByRole('button', { name: '次へ' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '前へ' })).toBeDisabled();
+  });
 });

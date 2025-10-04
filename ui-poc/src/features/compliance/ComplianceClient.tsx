@@ -336,7 +336,10 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
         </div>
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400"
+        data-testid="compliance-meta"
+      >
         <div className="flex flex-wrap items-center gap-3">
           <span>ヒット件数: {meta.total.toLocaleString()} 件</span>
           <span>
@@ -354,7 +357,7 @@ export function ComplianceClient({ initialData }: ComplianceClientProps) {
           </span>
           {error ? <span className="text-amber-300">{error}</span> : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-testid="compliance-pager">
           <button
             type="button"
             onClick={goToPreviousPage}
@@ -533,12 +536,25 @@ function DetailPanel({ invoice, onPreview }: DetailPanelProps) {
                 >
                   プレビュー
                 </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-800 bg-slate-800 px-3 py-1 text-xs text-slate-400"
-                >
-                  ダウンロード
-                </button>
+                {attachment.downloadUrl ? (
+                  <a
+                    href={attachment.downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md border border-sky-500 bg-sky-500/20 px-3 py-1 text-xs font-medium text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30"
+                    download
+                  >
+                    ダウンロード
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-md border border-slate-800 bg-slate-800 px-3 py-1 text-xs text-slate-500"
+                  >
+                    ダウンロード
+                  </button>
+                )}
               </div>
             </div>
           ))}

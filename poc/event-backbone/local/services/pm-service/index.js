@@ -19,10 +19,13 @@ const MINIO_USE_SSL = (process.env.MINIO_USE_SSL || 'false').toLowerCase() === '
 const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'minioadmin';
 const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'minioadmin';
 const MINIO_BUCKET = process.env.MINIO_BUCKET || 'events';
+const MINIO_PRESIGN_SECONDS = parseInt(process.env.MINIO_PRESIGN_SECONDS || '600', 10);
 
 const cloneDeep = (value) => (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 
 const STATE_FILE = process.env.PM_STATE_FILE || path.resolve(process.cwd(), 'state', 'pm-poc-state.json');
+
+const METRICS_CACHE_MS = parseInt(process.env.METRICS_CACHE_MS || '5000', 10);
 
 const PROJECT_ACTIONS = new Set(['activate', 'hold', 'resume', 'close']);
 const PROJECT_STATUS_TRANSITIONS = {
@@ -49,6 +52,69 @@ function nextTimesheetStatus(current, action) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const countByKey = (items, key) =>
+  items.reduce((acc, item) => {
+    const value = item[key] ?? 'unknown';
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+
+const buildMinioObjectUrl = (key) =>
+  `${MINIO_USE_SSL ? 'https' : 'http'}://${MINIO_ENDPOINT}:${MINIO_PORT}/${MINIO_BUCKET}/${key}`;
+
+async function ensureObject(minioClient, key, contents, metadata = {}) {
+  try {
+    await minioClient.statObject(MINIO_BUCKET, key);
+  } catch (error) {
+    if (error.code === 'NotFound') {
+      const buffer = Buffer.isBuffer(contents) ? contents : Buffer.from(contents);
+      await minioClient.putObject(MINIO_BUCKET, key, buffer, { 'Content-Type': metadata.contentType || 'application/json' });
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function ensureComplianceAttachmentObjects(minioClient, invoices) {
+  if (!USE_MINIO) return;
+  for (const invoice of invoices) {
+    for (const attachment of invoice.attachments) {
+      const key = attachment.storageKey || `compliance/${invoice.id}/${attachment.fileName}`;
+      attachment.storageKey = key;
+      const payload = JSON.stringify({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        attachmentId: attachment.id,
+        generatedAt: new Date().toISOString(),
+        note: 'Seeded attachment placeholder for MinIO integration.',
+      });
+      await ensureObject(minioClient, key, payload, { contentType: 'application/json' });
+    }
+  }
+}
+
+async function attachMinioDownloadUrls(minioClient, invoices) {
+  if (!USE_MINIO) return invoices;
+  await Promise.all(
+    invoices.map(async (invoice) => {
+      await Promise.all(
+        invoice.attachments.map(async (attachment) => {
+          const key = attachment.storageKey || `compliance/${invoice.id}/${attachment.fileName}`;
+          attachment.storageKey = key;
+          try {
+            const url = await minioClient.presignedGetObject(MINIO_BUCKET, key, MINIO_PRESIGN_SECONDS);
+            attachment.downloadUrl = url;
+          } catch (error) {
+            console.warn('[pm-service] failed to presign attachment', { key, error: error.message });
+            attachment.downloadUrl = buildMinioObjectUrl(key);
+          }
+        }),
+      );
+    }),
+  );
+  return invoices;
+}
 
 async function connectRabbitWithRetry(context = 'pm-service') {
   let attempt = 0;
@@ -127,10 +193,31 @@ async function main() {
   let invoices = cloneDeep(invoiceSeed);
   let eventLog = [];
 
+  let metricsSnapshot = null;
+
+  const computeMetricsSnapshot = () => ({
+    computedAt: Date.now(),
+    data: {
+      projects: countByKey(projects, 'status'),
+      timesheets: countByKey(timesheets, 'approvalStatus'),
+      invoices: countByKey(invoices, 'status'),
+      events: eventLog.length,
+    },
+  });
+
+  const getMetricsSnapshot = (force = false) => {
+    if (!metricsSnapshot || force || Date.now() - metricsSnapshot.computedAt > METRICS_CACHE_MS) {
+      metricsSnapshot = computeMetricsSnapshot();
+    }
+    return metricsSnapshot;
+  };
+
   const persistSnapshot = () =>
-    persistState({ projects, timesheets, invoices, events: eventLog }).catch((err) =>
-      console.error('[pm-service] persistState error', err),
-    );
+    persistState({ projects, timesheets, invoices, events: eventLog })
+      .then(() => {
+        getMetricsSnapshot(true);
+      })
+      .catch((err) => console.error('[pm-service] persistState error', err));
 
   const restored = await loadStateFromDisk();
   if (restored) {
@@ -150,10 +237,13 @@ async function main() {
     persistSnapshot();
   }
 
+  getMetricsSnapshot(true);
+
   const { conn, ch } = await setupRabbit();
   const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
   const minioClient = new MinioClient({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
   if (USE_MINIO) await ensureBucket(minioClient);
+  if (USE_MINIO) await ensureComplianceAttachmentObjects(minioClient, invoices);
 
   const publishTimesheetApproved = async ({ timesheetId, employeeId = 'E-001', projectId = 'P-001', hours = 8, rateType = 'standard', note, idempotencyKey }) => {
     if (!timesheetId) {
@@ -388,7 +478,7 @@ async function main() {
     }
   });
 
-  app.get('/api/v1/compliance/invoices', (req, res) => {
+  app.get('/api/v1/compliance/invoices', async (req, res) => {
     const filters = {
       keyword: req.query?.keyword,
       status: req.query?.status,
@@ -434,10 +524,18 @@ async function main() {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.min(page, totalPages);
     const startIndex = (currentPage - 1) * pageSize;
-    const items = sorted.slice(startIndex, startIndex + pageSize);
+    const slice = sorted.slice(startIndex, startIndex + pageSize);
+    let payloadItems = cloneDeep(slice);
+    if (USE_MINIO) {
+      try {
+        payloadItems = await attachMinioDownloadUrls(minioClient, payloadItems);
+      } catch (error) {
+        console.warn('[pm-service] failed to attach MinIO download URLs', error);
+      }
+    }
 
     res.json({
-      items,
+      items: payloadItems,
       meta: {
         total,
         page: currentPage,
@@ -451,24 +549,16 @@ async function main() {
     });
   });
 
-  app.get('/metrics/summary', (_req, res) => {
-    const projectStatus = projects.reduce((acc, item) => {
-      acc[item.status] = (acc[item.status] || 0) + 1;
-      return acc;
-    }, {});
-    const timesheetStatus = timesheets.reduce((acc, item) => {
-      acc[item.approvalStatus] = (acc[item.approvalStatus] || 0) + 1;
-      return acc;
-    }, {});
-    const invoiceStatus = invoices.reduce((acc, item) => {
-      acc[item.status] = (acc[item.status] || 0) + 1;
-      return acc;
-    }, {});
+  app.get('/metrics/summary', (req, res) => {
+    const refresh = String(req.query?.refresh ?? '').toLowerCase() === 'true';
+    const snapshot = getMetricsSnapshot(refresh);
+    const now = Date.now();
+    const stale = now - snapshot.computedAt > METRICS_CACHE_MS;
     res.json({
-      projects: projectStatus,
-      timesheets: timesheetStatus,
-      invoices: invoiceStatus,
-      events: eventLog.length,
+      ...snapshot.data,
+      cachedAt: new Date(snapshot.computedAt).toISOString(),
+      cacheTtlMs: METRICS_CACHE_MS,
+      stale,
     });
   });
 
