@@ -96,6 +96,7 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
  - MINIO_ENDPOINT/MINIO_PORT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY/MINIO_BUCKET
  - MINIO_PUBLIC_ENDPOINT/MINIO_PUBLIC_PORT: 署名付きURLを生成する際の公開URL（デフォルト localhost:9000）
  - MINIO_MAX_RETRIES/MINIO_RETRY_BACKOFF_MS: MinIOシード処理のリトライ回数/バックオフ設定
+  - IDEMP_TTL_MS: Idempotency-Key を Redis に保持する期間（ミリ秒）。デフォルトは 24 時間。
 
 テスト
 - Producerログ: 送信件数とシャード割り当て
@@ -108,6 +109,98 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - `scripts/poc_live_smoke.sh` は失敗時に `logs/poc-smoke/` 以下へスタックログを収集し、Promtail 経由で Loki に連携されます。
 - Loki の UI は http://localhost:3100/ からアクセスできます。
 - Grafana は http://localhost:3000/ （既定ユーザー: `admin` / パスワード: `admin`） で起動し、Loki データソースと PoC Logs ダッシュボードが事前設定されています。
+- `dashboards/poc-metrics.json` を通じて `/metrics/summary` のスナップショットログを可視化するテンプレートを追加しました。ログ面からメトリクス変化を追跡し、SSE と組み合わせて Podman 側の監視に活用できます。
+- Grafana のサイドバーから **Dashboards → Browse → Poc Dashboards** を開くと、以下の2つのダッシュボードが利用できます。
+  - `PoC Metrics Overview`: `/metrics/summary` と `/metrics/stream` の値を時系列で確認（ログ由来）。SSEでの最新値を確認したい場合は「Refresh」を実行してください。
+  - `PoC Logs Explorer`: Loki へ送信された pm-service / producer / consumer / Playwright スモークログを検索できます。`{app="pm-service"}` のクエリで pm-service ログだけを絞り込めます。
+  - `PoC UI Telemetry`: UI クライアント/サーバが `POST /api/v1/telemetry/ui` に送ったイベントをリアルタイムで確認できます（Loki クエリ `{job="poc-telemetry"}`）。
+- **Alerting → PoC Alerts** フォルダには `TelemetryFallbackSpike` アラートが事前登録されており、5分間に複数回モックフォールバックが発生した際に警告として検知できます。スモークスクリプト (`scripts/poc_live_smoke.sh`) は Grafana のルール/アラート API を監視し、ルールが失われた場合やアラートが発火した場合は Slack 通知とログ採取を行います。
+- 同スクリプトではダッシュボード API も照会し、`poc/event-backbone/local/grafana/provisioning/dashboards/manifest.json` に列挙したタイトル/UID (`PoC Metrics Overview` / `PoC Logs Explorer` / `PoC UI Telemetry`) と同じものが Grafana 上に存在するかを確認します。欠落している場合は失敗として扱われ、`last_grafana_dashboards.json` がアーティファクトに含まれます。
+- ダッシュボード構成が manifest と一致しているかをローカルで確認したい場合は、プロジェクトルートで `python3 scripts/check_grafana_manifest.py` を実行してください。manifest に未登録のファイルやタイトル/UID の不整合を検出し、CI（`poc-live-smoke` ワークフロー）でも同じ検証を行っています。
+- `pm-service` の Telemetry API (`POST /api/v1/telemetry/ui`) に送信されたイベントは `/var/log/poc-smoke/telemetry.log` にも追記され、Promtail 経由で Loki へ転送されます。UI から `reportClientTelemetry` / `reportServerTelemetry` を呼び出すことでフォールバック発生状況を追跡できます。
+- Telemetry ログは既定で 5MB 超過時にローテーションされ、最大3世代 (`telemetry.log.[1-3]`) を保持します。閾値は `TELEMETRY_MAX_LOG_BYTES`、保持数は `TELEMETRY_LOG_MAX_ARCHIVES` で調整可能です。
+- 最新 200 件の Telemetry イベントは `GET /api/v1/telemetry/ui` でも取得できます。開発時に即座に確認したい場合は `curl http://localhost:3001/api/v1/telemetry/ui` を利用してください。
+- クエリパラメータでは `component` / `event` / `detail` / `detail_path` / `level` / `origin` によるフィルタと、`since` / `until` の日付範囲絞り込み、`sort`（`receivedAt`/`timestamp`/`component`/`event`/`level`/`origin`）と `order`（`asc`/`desc`）による並び替えを指定できます。`detail_path` は JSONPath 風の表記 (`$.detail.marker`、`items[1].code`、`checks[*].status` など) に対応しており、配列やワイルドカードを含むネストオブジェクトの検索も可能です。
+- `scripts/poc_live_smoke.sh` は `/metrics/summary` のヘルスチェックに加えて `/metrics/stream` の SSE が即時にイベントを返すかも検証し、結果を `logs/poc-smoke/last_metrics_stream.txt` に保存します。
+- `scripts/metrics_stream_stress.js` を利用すると複数クライアントで `/metrics/stream` を同時購読する簡易ロードテストを実施できます。例: `METRICS_STREAM_CLIENTS=25 node scripts/metrics_stream_stress.js`
+- `scripts/show_telemetry.js` は Telemetry API の最新イベントを一覧表示するユーティリティです。
+- `scripts/poc_live_smoke.sh` は RabbitMQ / Redis / MinIO / Loki / Grafana / pm-service それぞれを個別の待機ロジックで監視し、タイムアウトや接続不能時には Slack 通知とログ収集を行います。`RABBITMQ_TIMEOUT_SECONDS` や `GRAFANA_TIMEOUT_SECONDS` などの環境変数で待機時間を上書きできます。
+- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`) や WebSocket モード (`METRICS_STREAM_MODE=ws`) もここで変更できます。
+
+#### GraphQL エンドポイント
+- `pm-service` は REST API に加えて `http://localhost:3001/graphql` で GraphQL を公開しています。
+- スキーマ例:
+  ```graphql
+  query DemoMetrics($refresh: Boolean) {
+    metricsSummary(refresh: $refresh) {
+      projects
+      timesheets
+      invoices
+      events
+      cachedAt
+      stale
+    }
+    projects(status: "active") {
+      id
+      name
+      status
+      manager
+    }
+    recentEvents(limit: 10)
+  }
+  ```
+- `NODE_ENV` が production でなければ GraphiQL が有効化されるため、ブラウザからクエリを試せます。
+- MinIO 連携が有効な場合、請求書の添付 (`invoices.attachments.downloadUrl`) も署名付き URL に置き換えられます。
+- ミューテーション例（抜粋）:
+  ```graphql
+  mutation CreateProject {
+    createProject(
+      input: { name: "GraphQL Demo", code: "GQL-001", clientName: "Internal", status: "planned" }
+    ) {
+      ok
+      project { id name status manager }
+    }
+  }
+
+  mutation SubmitTimesheet {
+    createTimesheet(
+      input: {
+        userName: "Playwright Bot"
+        projectCode: "DX-2025-01"
+        hours: 4.0
+        note: "GraphQL submission"
+        autoSubmit: true
+      }
+    ) {
+      ok
+      timesheet { id approvalStatus submittedAt }
+    }
+  }
+
+  mutation ApproveTimesheet($input: TimesheetActionInput!) {
+    timesheetAction(input: $input) {
+      ok
+      message
+      timesheet { id approvalStatus note }
+    }
+  }
+  ```
+- コンプライアンス検索も GraphQL から取得できます。
+  ```graphql
+  query ComplianceInvoices($keyword: String, $status: String, $page: Int = 1) {
+    complianceInvoices(filter: { keyword: $keyword, status: $status, page: $page, pageSize: 10 }) {
+      meta { total page pageSize totalPages sortBy sortDir }
+      items {
+        invoiceNumber
+        counterpartyName
+        issueDate
+        amountIncludingTax
+        status
+        attachments { fileName downloadUrl }
+      }
+    }
+  }
+  ```
 
 想定確認
 - 再送（同一Idempotency-Key）→重複抑止（skip）

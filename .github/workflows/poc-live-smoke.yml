@@ -61,12 +61,42 @@ jobs:
           npx playwright install --with-deps chromium
         working-directory: ui-poc
 
+      - name: Install pm-service dependencies
+        run: npm install
+        working-directory: poc/event-backbone/local/services/pm-service
+
+      - name: Run pm-service tests
+        run: npm test
+        working-directory: poc/event-backbone/local/services/pm-service
+
+      - name: Validate Grafana manifest
+        run: python3 scripts/check_grafana_manifest.py
+
       - name: Run PoC live smoke
         env:
           USE_MINIO: ${{ matrix.use_minio }}
+          RUN_METRICS_STRESS: "true"
+          METRICS_STREAM_CLIENTS: "20"
+          METRICS_STREAM_ITERATIONS: "3"
+          METRICS_STREAM_TIMEOUT_MS: "15000"
+          CHECK_GRAFANA_ALERTS: "true"
+          GRAFANA_USER: "admin"
+          GRAFANA_PASSWORD: "admin"
+          MATRIX_NAME: "${{ matrix.name }}"
+          GITHUB_WORKFLOW_NAME: "${{ github.workflow }}"
+          GITHUB_RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
-          ARGS="--tests-only"
-          if [ "${{ matrix.use_minio }}" = "true" ]; then
-            ARGS="$ARGS --with-minio"
-          fi
-          scripts/poc_live_smoke.sh $ARGS
+          scripts/poc_live_smoke.sh
+
+      - name: Verify telemetry log contains probes
+        run: |
+          test -f logs/poc-smoke/telemetry.log
+          grep -q "poc_smoke" logs/poc-smoke/telemetry.log
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc-smoke-${{ matrix.name }}
+          path: logs/poc-smoke
+          if-no-files-found: warn

@@ -3,10 +3,12 @@ import amqp from 'amqplib';
 import { nanoid } from 'nanoid';
 import { Client as MinioClient } from 'minio';
 import Redis from 'ioredis';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, appendFile, rename, stat, rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { graphqlHTTP } from 'express-graphql';
 import { projectSeed, timesheetSeed, invoiceSeed, filterInvoices } from './sample-data.js';
+import { createGraphQLSchema } from './graphql-schema.js';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
 const NUM_SHARDS = parseInt(process.env.NUM_SHARDS || '4', 10);
@@ -28,8 +30,16 @@ const MINIO_RETRY_BACKOFF_MS = parseInt(process.env.MINIO_RETRY_BACKOFF_MS || '5
 const cloneDeep = (value) => (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 
 const STATE_FILE = process.env.PM_STATE_FILE || path.resolve(process.cwd(), 'state', 'pm-poc-state.json');
+const TELEMETRY_LOG_PATH = process.env.TELEMETRY_LOG_PATH || path.resolve(process.cwd(), 'state', 'telemetry.log');
+const TELEMETRY_MAX_LOG_BYTES = Math.max(1024, parseInt(process.env.TELEMETRY_MAX_LOG_BYTES || String(5 * 1024 * 1024), 10));
+const TELEMETRY_LOG_MAX_ARCHIVES = Math.max(1, parseInt(process.env.TELEMETRY_LOG_MAX_ARCHIVES || '3', 10));
+const TELEMETRY_DEFAULT_LIMIT = Math.max(1, parseInt(process.env.TELEMETRY_DEFAULT_LIMIT || '50', 10));
+const TELEMETRY_MAX_LIMIT = Math.max(1, parseInt(process.env.TELEMETRY_MAX_LIMIT || '200', 10));
+const TELEMETRY_DATE_FIELDS = ['since', 'from', 'start', 'after'];
+const TELEMETRY_END_DATE_FIELDS = ['until', 'to', 'end', 'before'];
 
 const METRICS_CACHE_MS = parseInt(process.env.METRICS_CACHE_MS || '5000', 10);
+const IDEMP_TTL_MS = Math.max(0, parseInt(process.env.IDEMP_TTL_MS || String(24 * 60 * 60 * 1000), 10));
 
 const PROJECT_ACTIONS = new Set(['activate', 'hold', 'resume', 'close']);
 const PROJECT_STATUS_TRANSITIONS = {
@@ -155,6 +165,300 @@ async function attachMinioDownloadUrls(minioClient, invoices) {
   return invoices;
 }
 
+async function rotateTelemetryLogIfNeeded() {
+  if (!TELEMETRY_LOG_PATH) return;
+  try {
+    const info = await stat(TELEMETRY_LOG_PATH).catch(() => null);
+    if (!info || info.size < TELEMETRY_MAX_LOG_BYTES) {
+      return;
+    }
+    const dir = path.dirname(TELEMETRY_LOG_PATH);
+    const base = path.basename(TELEMETRY_LOG_PATH);
+    await rm(path.join(dir, `${base}.${TELEMETRY_LOG_MAX_ARCHIVES}`), { force: true }).catch(() => {});
+    for (let index = TELEMETRY_LOG_MAX_ARCHIVES - 1; index >= 1; index -= 1) {
+      const src = path.join(dir, `${base}.${index}`);
+      const dest = path.join(dir, `${base}.${index + 1}`);
+      await rm(dest, { force: true }).catch(() => {});
+      await rename(src, dest).catch(() => {});
+    }
+    const firstArchive = path.join(dir, `${base}.1`);
+    await rm(firstArchive, { force: true }).catch(() => {});
+    await rename(TELEMETRY_LOG_PATH, firstArchive).catch(() => {});
+  } catch (error) {
+    console.warn('[telemetry] failed to rotate log', error);
+  }
+}
+
+async function appendTelemetryLogEntry(entry) {
+  if (!TELEMETRY_LOG_PATH) return;
+  try {
+    await mkdir(path.dirname(TELEMETRY_LOG_PATH), { recursive: true });
+    await rotateTelemetryLogIfNeeded();
+    await appendFile(TELEMETRY_LOG_PATH, `${JSON.stringify(entry)}\n`);
+  } catch (error) {
+    console.warn('[telemetry] failed to append log', error);
+  }
+}
+
+function parseTelemetryLimit(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return TELEMETRY_DEFAULT_LIMIT;
+  return Math.min(parsed, TELEMETRY_MAX_LIMIT);
+}
+
+function parseTelemetryOffset(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+const toLowerSafe = (value) => (typeof value === 'string' ? value.toLowerCase() : undefined);
+
+const includesText = (value, filter) => {
+  if (!filter) return true;
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value).toLowerCase().includes(filter);
+    } catch (error) {
+      return String(value).toLowerCase().includes(filter);
+    }
+  }
+  return String(value).toLowerCase().includes(filter);
+};
+
+const safeStringify = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+};
+
+const parseDetailPath = (expression) => {
+  if (typeof expression !== 'string') return [];
+  let input = expression.trim();
+  if (!input) return [];
+  if (input.startsWith('$')) {
+    input = input.slice(1);
+    if (input.startsWith('.')) {
+      input = input.slice(1);
+    }
+  }
+
+  const tokens = [];
+  let buffer = '';
+  let index = 0;
+
+  const pushBuffer = () => {
+    const candidate = buffer.trim();
+    if (candidate.length > 0) {
+      tokens.push({ type: 'key', value: candidate });
+    }
+    buffer = '';
+  };
+
+  while (index < input.length) {
+    const char = input[index];
+    if (char === '.') {
+      pushBuffer();
+      index += 1;
+      continue;
+    }
+    if (char === '[') {
+      pushBuffer();
+      const end = input.indexOf(']', index);
+      if (end === -1) {
+        buffer += input.slice(index);
+        break;
+      }
+      const inner = input.slice(index + 1, end).trim();
+      if (inner === '*' || inner === '.*') {
+        tokens.push({ type: 'wildcard' });
+      } else if (
+        (inner.startsWith('"') && inner.endsWith('"')) ||
+        (inner.startsWith("'") && inner.endsWith("'"))
+      ) {
+        tokens.push({ type: 'key', value: inner.slice(1, -1) });
+      } else if (/^-?\d+$/.test(inner)) {
+        tokens.push({ type: 'index', value: Number.parseInt(inner, 10) });
+      } else if (inner.length > 0) {
+        tokens.push({ type: 'key', value: inner });
+      }
+      index = end + 1;
+      continue;
+    }
+    buffer += char;
+    index += 1;
+  }
+
+  pushBuffer();
+  return tokens;
+};
+
+const extractValuesAtDetailPath = (source, tokens) => {
+  if (!tokens || tokens.length === 0) {
+    return [source];
+  }
+  let current = [source];
+  for (const token of tokens) {
+    const next = [];
+    for (const entry of current) {
+      if (entry === null || entry === undefined) continue;
+      if (token.type === 'wildcard') {
+        if (Array.isArray(entry)) {
+          next.push(...entry);
+        } else if (typeof entry === 'object') {
+          next.push(...Object.values(entry));
+        }
+        continue;
+      }
+      if (token.type === 'index') {
+        if (Array.isArray(entry) && token.value >= 0 && token.value < entry.length) {
+          next.push(entry[token.value]);
+        }
+        continue;
+      }
+      if (typeof entry === 'object' && entry !== null && token.value in entry) {
+        next.push(entry[token.value]);
+      }
+    }
+    current = next;
+    if (current.length === 0) {
+      break;
+    }
+  }
+  return current;
+};
+
+const matchesDetailFilter = (detail, filter, tokens) => {
+  if (!filter) return true;
+  if (tokens && tokens.length > 0) {
+    if (!detail || typeof detail !== 'object') {
+      return false;
+    }
+    const values = extractValuesAtDetailPath(detail, tokens);
+    if (values.length === 0) {
+      return false;
+    }
+    return values.some((value) => {
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'object') {
+        return includesText(safeStringify(value), filter);
+      }
+      return includesText(value, filter);
+    });
+  }
+  if (detail === null || detail === undefined) {
+    return false;
+  }
+  if (typeof detail === 'object') {
+    return includesText(safeStringify(detail), filter);
+  }
+  return includesText(detail, filter);
+};
+
+const parseTelemetryDate = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const resolveTimestamp = (item) => {
+  const source = item?.receivedAt || item?.timestamp;
+  if (!source) return null;
+  const parsed = new Date(source);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const TELEMETRY_SORT_FIELDS = new Set(['receivedAt', 'timestamp', 'component', 'event', 'level', 'origin']);
+const TELEMETRY_SORT_ORDERS = new Set(['asc', 'desc']);
+
+async function buildComplianceInvoicesResponse(params = {}, attachContext = null, sourceInvoices = invoiceSeed) {
+  const dataset = Array.isArray(sourceInvoices) ? sourceInvoices : [];
+  const filters = {
+    keyword: params.keyword ?? params.search,
+    status: params.status,
+    startDate: params.startDate ?? params.issued_from,
+    endDate: params.endDate ?? params.issued_to,
+    minAmount: params.minAmount ?? params.min_total,
+    maxAmount: params.maxAmount ?? params.max_total,
+  };
+
+  const sortCandidate =
+    typeof params.sortBy === 'string'
+      ? params.sortBy
+      : typeof params.sort_by === 'string'
+        ? params.sort_by
+        : undefined;
+  const sortBy = ['issueDate', 'updatedAt', 'amount'].includes(sortCandidate) ? sortCandidate : 'issueDate';
+  const sortDirParam = String(params.sortDir ?? params.sort_dir ?? '').toLowerCase();
+  const sortDir = sortDirParam === 'asc' ? 'asc' : 'desc';
+
+  const parseNumber = (value) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const rawPage = parseNumber(params.page);
+  const page = rawPage && rawPage > 0 ? rawPage : 1;
+
+  const rawPageSize =
+    parseNumber(params.pageSize) ??
+    parseNumber(params.page_size) ??
+    parseNumber(params.limit);
+  const pageSize = Math.max(5, Math.min(rawPageSize && rawPageSize > 0 ? rawPageSize : 25, 100));
+
+  const filtered = filterInvoices(filters, dataset);
+  const total = filtered.length;
+
+  const sorted = filtered.slice().sort((a, b) => {
+    let delta = 0;
+    if (sortBy === 'updatedAt') {
+      const aTime = new Date(a.updatedAt ?? a.issueDate ?? 0).getTime();
+      const bTime = new Date(b.updatedAt ?? b.issueDate ?? 0).getTime();
+      delta = aTime - bTime;
+    } else if (sortBy === 'amount') {
+      delta = (a.amountIncludingTax ?? 0) - (b.amountIncludingTax ?? 0);
+    } else {
+      const aTime = Date.parse(`${a.issueDate}T00:00:00Z`);
+      const bTime = Date.parse(`${b.issueDate}T00:00:00Z`);
+      delta = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+    }
+    return sortDir === 'asc' ? delta : -delta;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageSlice = sorted.slice(startIndex, startIndex + pageSize);
+  let payloadItems = cloneDeep(pageSlice);
+  if (USE_MINIO && attachContext && typeof attachContext.attach === 'function' && payloadItems.length > 0) {
+    try {
+      payloadItems = await attachContext.attach(payloadItems);
+    } catch (error) {
+      console.warn('[pm-service] failed to attach MinIO download URLs (graphql)', error);
+    }
+  }
+
+  return {
+    items: payloadItems,
+    meta: {
+      total,
+      page: currentPage,
+      pageSize,
+      totalPages,
+      sortBy,
+      sortDir,
+      fetchedAt: new Date().toISOString(),
+      fallback: false,
+    },
+  };
+}
+
 async function connectRabbitWithRetry(context = 'pm-service') {
   let attempt = 0;
   while (true) {
@@ -226,11 +530,24 @@ async function persistState({ projects, timesheets, invoices, events }) {
 async function main() {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
 
   let projects = cloneDeep(projectSeed);
   let timesheets = cloneDeep(timesheetSeed);
   let invoices = cloneDeep(invoiceSeed);
   let eventLog = [];
+  let telemetryLog = [];
+  const projectIdempotencyFallback = new Map();
+  const timesheetIdempotencyFallback = new Map();
 
   const sseClients = new Set();
   let metricsSnapshot = null;
@@ -242,6 +559,10 @@ async function main() {
       timesheets: countByKey(timesheets, 'approvalStatus'),
       invoices: countByKey(invoices, 'status'),
       events: eventLog.length,
+      idempotency: {
+        projectKeys: projectIdempotencyFallback.size,
+        timesheetKeys: timesheetIdempotencyFallback.size,
+      },
     },
   });
 
@@ -252,14 +573,27 @@ async function main() {
     return metricsSnapshot;
   };
 
-  const broadcastMetrics = () => {
-    if (sseClients.size === 0) return;
-    const snapshot = getMetricsSnapshot();
-    const payload = JSON.stringify({
-      ...snapshot.data,
+  const buildMetricsPayload = (snapshot) => ({
+    ...snapshot.data,
+    cachedAt: new Date(snapshot.computedAt).toISOString(),
+    cacheTtlMs: METRICS_CACHE_MS,
+    stale: Date.now() - snapshot.computedAt > METRICS_CACHE_MS,
+  });
+
+  const logMetricsSnapshot = (snapshot, reason = 'persist') => {
+    console.info('[metrics:snapshot]', JSON.stringify({
+      type: 'metrics-summary',
+      reason,
       cachedAt: new Date(snapshot.computedAt).toISOString(),
       cacheTtlMs: METRICS_CACHE_MS,
-    });
+      ...snapshot.data,
+    }));
+  };
+
+  const broadcastMetrics = (snapshotOverride) => {
+    if (sseClients.size === 0) return;
+    const snapshot = snapshotOverride ?? getMetricsSnapshot();
+    const payload = JSON.stringify(buildMetricsPayload(snapshot));
     const message = `data: ${payload}\n\n`;
     for (const client of sseClients) {
       try {
@@ -279,8 +613,9 @@ async function main() {
   const persistSnapshot = () =>
     persistState({ projects, timesheets, invoices, events: eventLog })
       .then(() => {
-        getMetricsSnapshot(true);
-        broadcastMetrics();
+        const snapshot = getMetricsSnapshot(true);
+        logMetricsSnapshot(snapshot, 'persist');
+        broadcastMetrics(snapshot);
       })
       .catch((err) => console.error('[pm-service] persistState error', err));
 
@@ -306,6 +641,62 @@ async function main() {
 
   const { conn, ch } = await setupRabbit();
   const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+  const PROJECT_IDEMP_PREFIX = 'pm:idempotency:project:';
+  const TIMESHEET_IDEMP_PREFIX = 'pm:idempotency:timesheet:';
+
+  const projectIdempotencyStore = {
+    async get(key) {
+      if (!key) return null;
+      const fallback = projectIdempotencyFallback.get(key) || null;
+      try {
+        const value = await redis.get(PROJECT_IDEMP_PREFIX + key);
+        return value || fallback;
+      } catch (error) {
+        console.warn('[idempotency] redis get project failed', error);
+        return fallback;
+      }
+    },
+    async set(key, value) {
+      if (!key || !value) return;
+      projectIdempotencyFallback.set(key, value);
+      try {
+        if (IDEMP_TTL_MS > 0) {
+          await redis.set(PROJECT_IDEMP_PREFIX + key, value, 'PX', IDEMP_TTL_MS);
+        } else {
+          await redis.set(PROJECT_IDEMP_PREFIX + key, value);
+        }
+      } catch (error) {
+        console.warn('[idempotency] redis set project failed', error);
+      }
+    },
+  };
+
+  const timesheetIdempotencyStore = {
+    async get(key) {
+      if (!key) return null;
+      const fallback = timesheetIdempotencyFallback.get(key) || null;
+      try {
+        const value = await redis.get(TIMESHEET_IDEMP_PREFIX + key);
+        return value || fallback;
+      } catch (error) {
+        console.warn('[idempotency] redis get timesheet failed', error);
+        return fallback;
+      }
+    },
+    async set(key, value) {
+      if (!key || !value) return;
+      timesheetIdempotencyFallback.set(key, value);
+      try {
+        if (IDEMP_TTL_MS > 0) {
+          await redis.set(TIMESHEET_IDEMP_PREFIX + key, value, 'PX', IDEMP_TTL_MS);
+        } else {
+          await redis.set(TIMESHEET_IDEMP_PREFIX + key, value);
+        }
+      } catch (error) {
+        console.warn('[idempotency] redis set timesheet failed', error);
+      }
+    },
+  };
   const minioClient = new MinioClient({ endPoint: MINIO_ENDPOINT, port: MINIO_PORT, useSSL: MINIO_USE_SSL, accessKey: MINIO_ACCESS_KEY, secretKey: MINIO_SECRET_KEY });
   if (USE_MINIO) await ensureBucket(minioClient);
   if (USE_MINIO) await ensureComplianceAttachmentObjects(minioClient, invoices);
@@ -355,6 +746,50 @@ async function main() {
     return { eventId, shard };
   };
 
+  const schema = createGraphQLSchema({
+    projects,
+    timesheets,
+    invoices,
+    eventLog,
+    getMetricsSnapshot,
+    buildMetricsPayload,
+    logMetricsSnapshot,
+    broadcastMetrics,
+    persistSnapshot,
+    publishTimesheetApproved,
+    attachDownloadUrls: async (items) => attachMinioDownloadUrls(minioClient, items),
+    filterInvoices,
+    buildComplianceInvoicesResponse: (params, attachContext) =>
+      buildComplianceInvoicesResponse(params, attachContext, invoices),
+    projectActions: PROJECT_ACTIONS,
+    timesheetActions: TIMESHEET_ACTIONS,
+    nextProjectStatus,
+    nextTimesheetStatus,
+    useMinio: USE_MINIO,
+    projectIdempotencyStore,
+    timesheetIdempotencyStore,
+  });
+
+  app.use(
+    '/graphql',
+    graphqlHTTP({
+      schema,
+      graphiql: process.env.NODE_ENV !== 'production',
+      customFormatErrorFn: (error) => {
+        console.warn('[graphql] error', {
+          message: error.message,
+          path: error.path,
+          locations: error.locations,
+        });
+        return {
+          message: error.message,
+          locations: error.locations,
+          path: error.path,
+        };
+      },
+    }),
+  );
+
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   app.get('/api/v1/projects', (req, res) => {
@@ -395,12 +830,22 @@ async function main() {
     res.json({ ok: true, item: project });
   });
 
-  app.post('/api/v1/projects', (req, res) => {
+  app.post('/api/v1/projects', async (req, res) => {
     const { code, name, clientName, status = 'planned', startOn, endOn, manager, health = 'green', tags = [] } = req.body || {};
     if (!name) {
       return res.status(400).json({ error: 'name required' });
     }
     const projectId = req.body?.id || `PRJ-${nanoid(6)}`;
+    const idempotencyKeyHeader = (req.header('Idempotency-Key') || req.body?.idempotencyKey || '').trim();
+    if (idempotencyKeyHeader) {
+      const existingId = await projectIdempotencyStore.get(idempotencyKeyHeader);
+      if (existingId) {
+        const existing = projects.find((item) => item.id === existingId || item.code === existingId);
+        if (existing) {
+          return res.json({ ok: true, item: existing, idempotent: true });
+        }
+      }
+    }
     if (projects.some((item) => item.id === projectId || (code && item.code === code))) {
       return res.status(409).json({ error: 'duplicate_project' });
     }
@@ -421,6 +866,9 @@ async function main() {
     };
     projects.push(created);
     persistSnapshot();
+    if (idempotencyKeyHeader) {
+      await projectIdempotencyStore.set(idempotencyKeyHeader, created.id);
+    }
     res.status(201).json({ ok: true, item: created });
   });
 
@@ -447,12 +895,22 @@ async function main() {
     });
   });
 
-  app.post('/api/v1/timesheets', (req, res) => {
+  app.post('/api/v1/timesheets', async (req, res) => {
     const { userName, projectId, projectCode, projectName, workDate, hours = 8, note, rateType = 'standard' } = req.body || {};
     if (!userName || !(projectId || projectCode)) {
       return res.status(400).json({ error: 'userName and projectId/projectCode are required' });
     }
     const id = req.body?.id || `TS-${nanoid(6)}`;
+    const idempotencyKeyHeader = (req.header('Idempotency-Key') || req.body?.idempotencyKey || '').trim();
+    if (idempotencyKeyHeader) {
+      const existingId = await timesheetIdempotencyStore.get(idempotencyKeyHeader);
+      if (existingId) {
+        const existing = timesheets.find((item) => item.id === existingId);
+        if (existing) {
+          return res.json({ ok: true, item: existing, idempotent: true });
+        }
+      }
+    }
     if (timesheets.some((item) => item.id === id)) {
       return res.status(409).json({ error: 'duplicate_timesheet' });
     }
@@ -475,6 +933,9 @@ async function main() {
     };
     timesheets.push(created);
     persistSnapshot();
+    if (idempotencyKeyHeader) {
+      await timesheetIdempotencyStore.set(idempotencyKeyHeader, created.id);
+    }
     res.status(201).json({ ok: true, item: created });
   });
 
@@ -544,88 +1005,120 @@ async function main() {
   });
 
   app.get('/api/v1/compliance/invoices', async (req, res) => {
-    const filters = {
-      keyword: req.query?.keyword,
-      status: req.query?.status,
-      startDate: req.query?.startDate || req.query?.issued_from,
-      endDate: req.query?.endDate || req.query?.issued_to,
-      minAmount: req.query?.minAmount || req.query?.min_total,
-      maxAmount: req.query?.maxAmount || req.query?.max_total,
+    try {
+      const result = await buildComplianceInvoicesResponse(
+        req.query,
+        USE_MINIO
+          ? {
+              attach: (items) => attachMinioDownloadUrls(minioClient, items),
+            }
+          : null,
+        invoices,
+      );
+      res.json(result);
+    } catch (error) {
+      console.error('[pm-service] compliance invoices error', error);
+      res.status(500).json({ error: 'internal' });
+    }
+  });
+
+  app.post('/api/v1/telemetry/ui', (req, res) => {
+    const payload = {
+      ...(typeof req.body === 'object' && req.body ? req.body : {}),
+      receivedAt: new Date().toISOString(),
+      ip: req.ip,
     };
+    telemetryLog.push(payload);
+    if (telemetryLog.length > 200) {
+      telemetryLog = telemetryLog.slice(-200);
+    }
+    console.info('[telemetry:ui:ingest]', JSON.stringify(payload));
+    void appendTelemetryLogEntry(payload);
+    res.status(204).end();
+  });
 
-    const sortKey = typeof req.query?.sort_by === 'string' ? req.query.sort_by : 'issueDate';
-    const sortBy = ['issueDate', 'updatedAt', 'amount'].includes(sortKey) ? sortKey : 'issueDate';
-    const sortDirParam = typeof req.query?.sort_dir === 'string' ? req.query.sort_dir.toLowerCase() : 'desc';
-    const sortDir = sortDirParam === 'asc' ? 'asc' : 'desc';
+  app.get('/api/v1/telemetry/ui', (req, res) => {
+    const query = req.query || {};
+    const componentFilter = toLowerSafe(query.component ?? query.components ?? query.component_like);
+    const eventFilter = toLowerSafe(query.event ?? query.events ?? query.keyword);
+    const levelFilter = toLowerSafe(query.level ?? query.levels);
+    const originFilter = toLowerSafe(query.origin ?? query.origins);
+    const detailFilter = toLowerSafe(query.detail ?? query.details ?? query.detail_like ?? query.detailContains);
+    const detailPathCandidate = Array.isArray(query.detail_path) ? query.detail_path[0] : query.detail_path;
+    const detailPath = typeof detailPathCandidate === 'string' ? detailPathCandidate : undefined;
+    const detailPathTokens = parseDetailPath(detailPath);
+    const limit = parseTelemetryLimit(query.limit);
+    const offset = parseTelemetryOffset(query.offset);
+    const sinceCandidate = TELEMETRY_DATE_FIELDS.map((key) => query[key]).find((value) => value !== undefined);
+    const untilCandidate = TELEMETRY_END_DATE_FIELDS.map((key) => query[key]).find((value) => value !== undefined);
+    const since = parseTelemetryDate(Array.isArray(sinceCandidate) ? sinceCandidate[0] : sinceCandidate);
+    const until = parseTelemetryDate(Array.isArray(untilCandidate) ? untilCandidate[0] : untilCandidate);
+    const sortField = TELEMETRY_SORT_FIELDS.has(String(query.sort ?? '').trim()) ? String(query.sort).trim() : 'receivedAt';
+    const sortOrder = TELEMETRY_SORT_ORDERS.has(String(query.order ?? '').toLowerCase())
+      ? String(query.order).toLowerCase()
+      : 'desc';
 
-    const rawPage = Number.parseInt(req.query?.page, 10);
-    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
-
-    const rawPageSize =
-      Number.parseInt(req.query?.page_size, 10) ||
-      Number.parseInt(req.query?.pageSize, 10) ||
-      Number.parseInt(req.query?.limit, 10);
-    const pageSize = Math.max(5, Math.min(Number.isFinite(rawPageSize) && rawPageSize > 0 ? rawPageSize : 25, 100));
-
-    const filtered = filterInvoices(filters, invoices);
-    const total = filtered.length;
-
-    const sorted = filtered.slice().sort((a, b) => {
-      let delta = 0;
-      if (sortBy === 'updatedAt') {
-        const aTime = new Date(a.updatedAt ?? a.issueDate ?? 0).getTime();
-        const bTime = new Date(b.updatedAt ?? b.issueDate ?? 0).getTime();
-        delta = aTime - bTime;
-      } else if (sortBy === 'amount') {
-        delta = (a.amountIncludingTax ?? 0) - (b.amountIncludingTax ?? 0);
-      } else {
-        const aTime = Date.parse(`${a.issueDate}T00:00:00Z`);
-        const bTime = Date.parse(`${b.issueDate}T00:00:00Z`);
-        delta = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
-      }
-      return sortDir === 'asc' ? delta : -delta;
-    });
-
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const currentPage = Math.min(page, totalPages);
-    const startIndex = (currentPage - 1) * pageSize;
-    const slice = sorted.slice(startIndex, startIndex + pageSize);
-    let payloadItems = cloneDeep(slice);
-    if (USE_MINIO) {
-      try {
-        payloadItems = await attachMinioDownloadUrls(minioClient, payloadItems);
-      } catch (error) {
-        console.warn('[pm-service] failed to attach MinIO download URLs', error);
-      }
+    let dataset = telemetryLog.slice().reverse();
+    if (componentFilter) {
+      dataset = dataset.filter((item) => includesText(item.component, componentFilter));
+    }
+    if (eventFilter) {
+      dataset = dataset.filter((item) => includesText(item.event, eventFilter));
+    }
+    if (levelFilter) {
+      dataset = dataset.filter((item) => toLowerSafe(item.level) === levelFilter);
+    }
+    if (originFilter) {
+      dataset = dataset.filter((item) => toLowerSafe(item.origin) === originFilter);
+    }
+    if (detailFilter) {
+      dataset = dataset.filter((item) => matchesDetailFilter(item.detail ?? null, detailFilter, detailPathTokens));
+    }
+    if (since || until) {
+      dataset = dataset.filter((item) => {
+        const timestamp = resolveTimestamp(item);
+        if (!timestamp) return !since && !until;
+        if (since && timestamp < since) return false;
+        if (until && timestamp > until) return false;
+        return true;
+      });
     }
 
+    dataset.sort((a, b) => {
+      if (sortField === 'component' || sortField === 'event') {
+        const valueA = (a?.[sortField] ?? '').toLowerCase();
+        const valueB = (b?.[sortField] ?? '').toLowerCase();
+        return sortOrder === 'asc' ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
+      }
+      if (sortField === 'level' || sortField === 'origin') {
+        const valueA = toLowerSafe(a?.[sortField]) ?? '';
+        const valueB = toLowerSafe(b?.[sortField]) ?? '';
+        return sortOrder === 'asc' ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
+      }
+      const timeA = resolveTimestamp(a)?.getTime() ?? 0;
+      const timeB = resolveTimestamp(b)?.getTime() ?? 0;
+      return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+    });
+
+    const paged = dataset.slice(offset, offset + limit);
     res.json({
-      items: payloadItems,
-      meta: {
-        total,
-        page: currentPage,
-        pageSize,
-        totalPages,
-        sortBy,
-        sortDir,
-        fetchedAt: new Date().toISOString(),
-        fallback: false,
-      },
+      items: paged,
+      total: dataset.length,
+      limit,
+      offset,
+      sort: sortField,
+      order: sortOrder,
     });
   });
 
   app.get('/metrics/summary', (req, res) => {
     const refresh = String(req.query?.refresh ?? '').toLowerCase() === 'true';
     const snapshot = getMetricsSnapshot(refresh);
-    if (refresh) broadcastMetrics();
-    const now = Date.now();
-    const stale = now - snapshot.computedAt > METRICS_CACHE_MS;
-    res.json({
-      ...snapshot.data,
-      cachedAt: new Date(snapshot.computedAt).toISOString(),
-      cacheTtlMs: METRICS_CACHE_MS,
-      stale,
-    });
+    if (refresh) {
+      logMetricsSnapshot(snapshot, 'refresh');
+      broadcastMetrics(snapshot);
+    }
+    res.json(buildMetricsPayload(snapshot));
   });
 
   app.get('/metrics/stream', (req, res) => {
@@ -636,13 +1129,8 @@ async function main() {
 
     sseClients.add(res);
     const snapshot = getMetricsSnapshot(false);
-    res.write(
-      `data: ${JSON.stringify({
-        ...snapshot.data,
-        cachedAt: new Date(snapshot.computedAt).toISOString(),
-        cacheTtlMs: METRICS_CACHE_MS,
-      })}\n\n`,
-    );
+    logMetricsSnapshot(snapshot, 'sse-initial');
+    res.write(`data: ${JSON.stringify(buildMetricsPayload(snapshot))}\n\n`);
 
     req.on('close', () => {
       sseClients.delete(res);
