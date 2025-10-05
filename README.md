@@ -96,7 +96,8 @@ Next.js ベースの UI PoC については、以下の手順でエンドツー�
    npm install
    npm run test:e2e
    ```
-   - 主要画面（Projects/Timesheets/Compliance/Telemetry など）の UI 操作とフォールバック動作を確認します。
+   - Projects / Timesheets / Compliance / Telemetry など主要画面の UI 操作とフォールバック動作を確認します。
+   - Podman 上で API を起動した状態で検証する場合は `npm run test:e2e:live` を利用し、`E2E_EXPECT_API=true` を設定すると API 成功を前提としたアサーションを有効にできます。
 
 2. **Podman ライブスモーク**
    ```bash
@@ -106,7 +107,7 @@ Next.js ベースの UI PoC については、以下の手順でエンドツー�
    - Slack Webhook を設定すると失敗通知も送信されます。詳細は `scripts/.env.poc_live_smoke.example` を参照してください。
 
 3. **CI 監視**
-   - GitHub Actions の **PoC Live Smoke** ワークフローでは、MinIO 有効/無効の 2 パターンで上記スモークを毎日／手動で実行できます。
+   - GitHub Actions の **PoC Live Smoke** ワークフローでは MinIO 有効/無効の 2 パターンで上記スモークを毎日／手動で実行できます。
    - 実行結果と生成アーティファクト（`logs/poc-smoke/`）を確認し、ダッシュボードやアラート定義に差異がないかチェックしてください。
 
 ## 📝 ライセンス
