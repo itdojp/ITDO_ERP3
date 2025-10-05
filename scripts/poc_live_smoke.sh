@@ -32,6 +32,9 @@ GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}"
 CHECK_GRAFANA_DASHBOARDS="${CHECK_GRAFANA_DASHBOARDS:-true}"
 EXPECTED_GRAFANA_DASHBOARDS="${EXPECTED_GRAFANA_DASHBOARDS:-PoC Metrics Overview,PoC Logs Explorer,PoC UI Telemetry}"
 EXPECTED_GRAFANA_DASHBOARD_UIDS="${EXPECTED_GRAFANA_DASHBOARD_UIDS:-poc-metrics,poc-logs,poc-telemetry}"
+CHECK_GRAFANA_MANIFEST="${CHECK_GRAFANA_MANIFEST:-true}"
+GRAFANA_MANIFEST_SCRIPT="${GRAFANA_MANIFEST_SCRIPT:-${ROOT_DIR}/scripts/check_grafana_manifest.py}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
 RABBITMQ_MANAGEMENT_PORT="${RABBITMQ_MANAGEMENT_PORT:-15672}"
 RABBITMQ_USER="${RABBITMQ_USER:-${RABBITMQ_DEFAULT_USER:-guest}}"
@@ -157,6 +160,18 @@ notify_slack() {
       "mrkdwn_in": ["text"]
     }
   ]
+}
+
+resolve_python_bin() {
+  if command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo "${PYTHON_BIN}"
+  elif command -v python3 >/dev/null 2>&1; then
+    echo python3
+  elif command -v python >/dev/null 2>&1; then
+    echo python
+  else
+    echo ""
+  fi
 }
 JSON
 )
@@ -465,6 +480,29 @@ PY
   return 0
 }
 
+check_grafana_manifest() {
+  if [[ "${CHECK_GRAFANA_MANIFEST}" != "true" ]]; then
+    return 0
+  fi
+  if [[ ! -f "${GRAFANA_MANIFEST_SCRIPT}" ]]; then
+    echo "[grafana] manifest script not found: ${GRAFANA_MANIFEST_SCRIPT}" >&2
+    return 1
+  fi
+  local py
+  py=$(resolve_python_bin)
+  if [[ -z "${py}" ]]; then
+    echo "[grafana] python interpreter not found for manifest validation" >&2
+    return 1
+  fi
+  echo "[grafana] validating dashboard manifest"
+  if ! "${py}" "${GRAFANA_MANIFEST_SCRIPT}" >/dev/null; then
+    echo "[grafana] manifest validation failed" >&2
+    collect_logs "grafana_manifest"
+    return 1
+  fi
+  return 0
+}
+
 run_tests() {
   echo "[tests] running Playwright live suite"
   if ! (cd "${UI_DIR}" && NEXT_PUBLIC_API_BASE="http://localhost:${PM_PORT}" POC_API_BASE="http://localhost:${PM_PORT}" npm run test:e2e:live); then
@@ -537,6 +575,9 @@ while true; do
     elif ! check_telemetry_endpoint; then
       STATUS="failure"
       FAIL_REASON="telemetry"
+    elif ! check_grafana_manifest; then
+      STATUS="failure"
+      FAIL_REASON="grafana_manifest"
     elif ! check_grafana_dashboards; then
       STATUS="failure"
       FAIL_REASON="grafana_dashboards"
