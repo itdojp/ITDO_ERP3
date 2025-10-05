@@ -15,6 +15,7 @@ export const COMPLIANCE_INVOICES_QUERY = `#graphql
         tags
         remarks
         matchedPurchaseOrder
+        subject
         attachments {
           id
           kind
@@ -81,6 +82,7 @@ export const COMPLIANCE_INVOICES_QUERY_LIVE = `#graphql
         currency
         status
         matchedPurchaseOrder
+        subject
         attachments {
           id
           kind

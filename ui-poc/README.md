@@ -77,7 +77,9 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
   }
   ```
 - Projects 画面には GraphQL 経由の「プロジェクト追加」フォームを実装しており、作成・状態遷移は GraphQL ミューテーションを優先的に利用します（失敗時は REST にフォールバック）。
+- Projects 画面の一覧にはキーワード検索バーを追加しており、GraphQL `projects(status, keyword)` でフィルタ済みデータを取得します。GraphQL が失敗した場合は REST → モックデータの順にフォールバックしつつテレメトリへ記録します。
 - Timesheets 画面にも GraphQL のクイック追加フォームと、承認/差戻しアクションの GraphQL 呼び出しが組み込まれています。
+- Timesheets 画面のテーブルはステータスとキーワードで絞り込み可能になり、GraphQL `timesheets(status, keyword)` を優先利用します（フォールバック時は REST 応答をクライアント側で再フィルタリングし、最終的にモックへ切り替えます）。
 - Compliance 画面は GraphQL クエリ `complianceInvoices` を優先利用しており、ページネーション/フィルタ結果のメタ情報を取得できます。
 - GraphQL / REST の両経路は Idempotency-Key をサポートしており、UI クライアント側ではフォールバック時に `reportClientTelemetry` / `reportServerTelemetry` を発火して動作状況を記録します。Podman スタックが起動していれば Telemetry イベントは Loki へ転送され、`scripts/show_telemetry.js` で最新イベントを確認できます。
 - `/telemetry` ページでは Component/Event/Detail/Level/Origin を条件にフィルタし、15 秒間隔で自動更新が行われます。並び順は `Sort` / `Order` セレクトから変更でき、`?pollMs=1000` や `NEXT_PUBLIC_TELEMETRY_POLL_MS` でポーリング間隔も調整可能です。フィルタ設定は URL クエリと localStorage に記録され再訪時に復元されます。

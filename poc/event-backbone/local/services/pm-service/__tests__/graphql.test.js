@@ -31,6 +31,32 @@ describe('GraphQL schema', () => {
     expect(new Set(ids)).toEqual(new Set(projects.map((p) => p.id)));
   });
 
+  test('filters projects by keyword', async () => {
+    const target = projects.find((project) => project.clientName) ?? projects[0];
+    expect(target).toBeTruthy();
+    const keywordSource = target.clientName || target.name;
+    const keyword = keywordSource.slice(0, 4);
+
+    const response = await graphql(
+      `
+        query Projects($keyword: String) {
+          projects(keyword: $keyword) {
+            id
+            clientName
+          }
+        }
+      `,
+      { keyword },
+    ).expect(200);
+
+    expect(response.body.errors).toBeUndefined();
+    const returned = response.body.data.projects;
+    expect(returned.length).toBeGreaterThan(0);
+    returned.forEach((project) => {
+      expect((project.clientName || '').toLowerCase()).toContain(keyword.toLowerCase());
+    });
+  });
+
   test('creates and transitions project via GraphQL', async () => {
     const createRes = await graphql(
       `
@@ -103,6 +129,32 @@ describe('GraphQL schema', () => {
 
     expect(approveRes.body.errors).toBeUndefined();
     expect(approveRes.body.data.timesheetAction.timesheet.approvalStatus).toBe('approved');
+  });
+
+  test('filters timesheets by keyword', async () => {
+    const sample = timesheets[0];
+    const keyword = sample.projectCode.slice(0, 3);
+
+    const response = await graphql(
+      `
+        query Timesheets($keyword: String, $status: String) {
+          timesheets(keyword: $keyword, status: $status) {
+            id
+            projectCode
+            userName
+          }
+        }
+      `,
+      { keyword, status: 'all' },
+    ).expect(200);
+
+    expect(response.body.errors).toBeUndefined();
+    const rows = response.body.data.timesheets;
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((row) => {
+      const haystack = `${row.projectCode} ${row.userName}`.toLowerCase();
+      expect(haystack).toContain(keyword.toLowerCase());
+    });
   });
 
   test('returns compliance invoices metadata', async () => {

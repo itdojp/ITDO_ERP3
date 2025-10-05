@@ -16,6 +16,84 @@ test.describe('Timesheets PoC', () => {
     await expect(actionsCell.getByRole('button').first()).toBeVisible();
   });
 
+  test('filters timesheets by keyword search', async ({ page }) => {
+    const dataset = [
+      {
+        id: 'TS-1000',
+        userName: 'Alice',
+        projectCode: 'PRJ-MKT',
+        projectName: 'Marketing Revamp',
+        taskName: null,
+        workDate: '2025-03-05',
+        hours: 7.5,
+        approvalStatus: 'submitted',
+        note: 'Initial submission',
+        submittedAt: '2025-03-05T09:00:00Z',
+      },
+      {
+        id: 'TS-2000',
+        userName: 'Bob',
+        projectCode: 'PRJ-ANL',
+        projectName: 'Analytics Platform',
+        taskName: null,
+        workDate: '2025-03-06',
+        hours: 8,
+        approvalStatus: 'submitted',
+        note: 'Data modelling',
+        submittedAt: '2025-03-06T10:00:00Z',
+      },
+      {
+        id: 'TS-3000',
+        userName: 'Carol',
+        projectCode: 'PRJ-OPS',
+        projectName: 'Operations Cleanup',
+        taskName: null,
+        workDate: '2025-03-07',
+        hours: 6,
+        approvalStatus: 'approved',
+        note: null,
+        submittedAt: '2025-03-07T10:30:00Z',
+      },
+    ];
+
+    await page.route('**/graphql', async (route) => {
+      const payload = JSON.parse(route.request().postData() ?? '{}');
+      const { query, variables = {} } = payload;
+      if (query?.includes('TimesheetsPage')) {
+        const keyword = (variables.keyword ?? '').toLowerCase();
+        const status = (variables.status ?? 'all').toLowerCase();
+        let filtered = dataset;
+        if (status !== 'all') {
+          filtered = filtered.filter((entry) => entry.approvalStatus === status);
+        }
+        if (keyword) {
+          filtered = filtered.filter((entry) => {
+            const haystack = `${entry.projectName} ${entry.projectCode} ${entry.userName} ${entry.note ?? ''}`.toLowerCase();
+            return haystack.includes(keyword);
+          });
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { timesheets: filtered } }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto('/timesheets');
+
+    await expect(page.locator('table tbody tr')).toHaveCount(2);
+    await page.getByTestId('timesheets-search-input').fill('Analytics');
+    await page.getByRole('button', { name: '検索' }).click();
+    await expect(page.locator('table tbody tr')).toHaveCount(1);
+    await expect(page.locator('table tbody tr').first()).toContainText('Analytics Platform');
+
+    await page.getByRole('button', { name: 'クリア' }).click();
+    await expect(page.locator('table tbody tr')).toHaveCount(2);
+  });
+
   test('adds and approves timesheet via GraphQL form with API stubs', async ({ page }) => {
     test.skip(API_MODE, 'GraphQL stub test runs only in mock mode');
     const baseTimesheets = [
@@ -39,10 +117,25 @@ test.describe('Timesheets PoC', () => {
       const { query, variables } = payload;
 
       if (query?.includes('TimesheetsPage')) {
+        const status = (variables?.status ?? 'all').toLowerCase();
+        const keyword = (variables?.keyword ?? '').toLowerCase();
+        let responseEntries = [...baseTimesheets];
+        if (createdTimesheet) {
+          responseEntries = [createdTimesheet, ...responseEntries];
+        }
+        if (status !== 'all') {
+          responseEntries = responseEntries.filter((entry) => entry.approvalStatus === status);
+        }
+        if (keyword) {
+          responseEntries = responseEntries.filter((entry) => {
+            const haystack = `${entry.projectName} ${entry.projectCode} ${entry.userName} ${entry.note ?? ''}`.toLowerCase();
+            return haystack.includes(keyword);
+          });
+        }
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ data: { timesheets: baseTimesheets } }),
+          body: JSON.stringify({ data: { timesheets: responseEntries } }),
         });
         return;
       }

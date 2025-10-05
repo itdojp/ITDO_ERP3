@@ -1,10 +1,11 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import { STATUS_LABEL, type ProjectAction, type ProjectListResponse, type ProjectStatus } from "./types";
-import { CREATE_PROJECT_MUTATION, PROJECT_TRANSITION_MUTATION } from "./queries";
+import { mockProjects } from "./mock-data";
+import { CREATE_PROJECT_MUTATION, PROJECTS_PAGE_QUERY, PROJECT_TRANSITION_MUTATION } from "./queries";
 
 const statusFilters: Array<{ value: "all" | ProjectStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -60,6 +61,11 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [updateState, setUpdateState] = useState<UpdateState>({ id: null, message: null, variant: null });
   const [pending, setPending] = useState<string | null>(null);
   const [meta, setMeta] = useState(initialMeta);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const fetchTokenRef = useRef(0);
   const [createForm, setCreateForm] = useState({
     name: "",
     code: "",
@@ -75,11 +81,17 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const source: QuerySource = meta.fallback ? "mock" : "api";
 
   const filteredProjects = useMemo(() => {
-    if (filter === "all") return projects;
-    return projects.filter((p) => p.status === filter);
-  }, [projects, filter]);
+    const keyword = appliedKeyword.trim().toLowerCase();
+    return projects.filter((project) => {
+      const statusMatch = filter === "all" || project.status === filter;
+      if (!statusMatch) return false;
+      if (!keyword) return true;
+      const haystack = `${project.name} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [projects, filter, appliedKeyword]);
 
-  const normalizeProject = (project: Partial<ProjectItem> | undefined | null): ProjectItem | null => {
+  const normalizeProject = useCallback((project: Partial<ProjectItem> | undefined | null): ProjectItem | null => {
     if (!project?.id) return null;
     return {
       id: project.id,
@@ -93,7 +105,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       health: (project.health as ProjectItem["health"]) ?? "green",
       tags: Array.isArray(project.tags) ? (project.tags.filter(Boolean) as string[]) : [],
     };
-  };
+  }, []);
 
   const applyProjectUpdate = (project: ProjectItem) => {
     setProjects((prev) =>
@@ -112,6 +124,114 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       fetchedAt: new Date().toISOString(),
     }));
   };
+
+  const fetchProjects = useCallback(
+    async (statusValue: ProjectStatus | "all", keywordValue: string) => {
+      const trimmedKeyword = keywordValue.trim();
+      fetchTokenRef.current += 1;
+      const token = fetchTokenRef.current;
+      setListLoading(true);
+      setListError(null);
+
+      const assignProjects = (items: ProjectItem[], fallback: boolean) => {
+        if (token !== fetchTokenRef.current) {
+          return;
+        }
+        setProjects(items);
+        setMeta({
+          total: items.length,
+          fetchedAt: new Date().toISOString(),
+          fallback,
+        });
+      };
+
+      const finishLoading = () => {
+        if (token === fetchTokenRef.current) {
+          setListLoading(false);
+        }
+      };
+
+      try {
+        const gql = await graphqlRequest<{
+          projects?: Partial<ProjectItem>[];
+        }>({
+          query: PROJECTS_PAGE_QUERY,
+          variables: {
+            status: statusValue,
+            keyword: trimmedKeyword.length > 0 ? trimmedKeyword : undefined,
+          },
+        });
+
+        const items = Array.isArray(gql.projects) ? gql.projects : [];
+        const normalized = items
+          .map((item) => normalizeProject(item))
+          .filter(Boolean) as ProjectItem[];
+        assignProjects(normalized, false);
+        finishLoading();
+        return;
+      } catch (error) {
+        console.warn("[projects] graphql list failed, fallback to REST", error);
+        reportClientTelemetry({
+          component: "projects/client",
+          event: "graphql_list_failed",
+          level: "warn",
+          detail: {
+            status: statusValue,
+            keyword: trimmedKeyword,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+
+      try {
+        const params = new URLSearchParams();
+        if (statusValue !== "all") {
+          params.set("status", statusValue);
+        }
+        const path = `/api/v1/projects${params.toString() ? `?${params.toString()}` : ""}`;
+        const rest = await apiRequest<ProjectListResponse>({ path });
+        const items = Array.isArray(rest.items) ? rest.items : [];
+        const normalized = items
+          .map((item) => normalizeProject(item))
+          .filter(Boolean) as ProjectItem[];
+        assignProjects(normalized, rest.meta?.fallback ?? false);
+        reportClientTelemetry({
+          component: "projects/client",
+          event: "rest_list_fallback",
+          level: "info",
+          detail: {
+            status: statusValue,
+            keyword: trimmedKeyword,
+          },
+        });
+        finishLoading();
+        return;
+      } catch (restError) {
+        console.error("[projects] REST fallback failed, using mock", restError);
+        reportClientTelemetry({
+          component: "projects/client",
+          event: "rest_list_failed",
+          level: "error",
+          detail: {
+            status: statusValue,
+            keyword: trimmedKeyword,
+            error: restError instanceof Error ? restError.message : String(restError),
+          },
+        });
+        setListError("API から取得できなかったためモックデータを表示しています");
+        const fallbackItems = (mockProjects.items ?? [])
+          .map((item) => normalizeProject(item))
+          .filter(Boolean) as ProjectItem[];
+        assignProjects(fallbackItems, true);
+        finishLoading();
+      }
+    },
+    [normalizeProject],
+  );
+
+  useEffect(() => {
+    void fetchProjects(filter, appliedKeyword);
+  }, [fetchProjects, filter, appliedKeyword]);
 
   const handleCreateProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -153,6 +273,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       }));
       setCreateMessage(gql.createProject.message ?? "プロジェクトを追加しました");
       setCreateForm({ name: "", code: "", clientName: "", manager: "", status: "planned", health: "green" });
+      void fetchProjects(filter, appliedKeyword);
       return;
     } catch (error) {
       console.warn("[projects] graphql create failed, fallback to REST", error);
@@ -203,6 +324,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             projectId: project.id,
           },
         });
+        void fetchProjects(filter, appliedKeyword);
       } catch (restError) {
         setCreateError((restError as Error).message ?? "プロジェクト追加に失敗しました");
         reportClientTelemetry({
@@ -227,7 +349,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       const gql = await graphqlRequest<{
         projectTransition: { ok: boolean; error?: string | null; message?: string | null; project?: ProjectItem };
       }>({
-        query: TRANSITION_PROJECT_MUTATION,
+        query: PROJECT_TRANSITION_MUTATION,
         variables: { input: { projectId: project.id, action } },
       });
       if (!gql.projectTransition.ok) {
@@ -396,6 +518,51 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         ))}
       </div>
 
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(event: FormEvent<HTMLFormElement>) => {
+          event.preventDefault();
+          const keyword = searchTerm.trim();
+          if (keyword === appliedKeyword) {
+            void fetchProjects(filter, keyword);
+          }
+          setAppliedKeyword(keyword);
+        }}
+      >
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>キーワード検索</span>
+          <input
+            className="w-64 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="名前・コード・顧客名で検索"
+            data-testid="projects-search-input"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-md border border-sky-500 bg-sky-500/20 px-4 py-2 text-xs font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:text-slate-500"
+            disabled={listLoading && appliedKeyword === searchTerm.trim()}
+          >
+            検索
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTerm("");
+              if (appliedKeyword !== "") {
+                setAppliedKeyword("");
+              }
+            }}
+            className="rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
+            disabled={listLoading && appliedKeyword === "" && searchTerm.trim() === ""}
+          >
+            クリア
+          </button>
+        </div>
+      </form>
+
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span>
           表示件数: {filteredProjects.length.toLocaleString()} / {meta.total.toLocaleString()} 件
@@ -408,6 +575,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         >
           {source === "api" ? "API live" : "Mock data"}
         </span>
+        {listLoading ? <span className="text-sky-300">読み込み中...</span> : null}
+        {listError ? <span className="text-amber-300">{listError}</span> : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
