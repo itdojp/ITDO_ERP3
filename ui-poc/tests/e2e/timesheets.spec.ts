@@ -14,6 +14,9 @@ test.describe('Timesheets PoC', () => {
 
     const actionsCell = rows.first().locator('td').last();
     await expect(actionsCell.getByRole('button').first()).toBeVisible();
+
+    await expect(page.getByTestId('timesheets-summary-count')).toContainText('表示件数');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('フィルタ');
   });
 
   test('filters timesheets by keyword search', async ({ page }) => {
@@ -89,9 +92,11 @@ test.describe('Timesheets PoC', () => {
     await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('table tbody tr')).toHaveCount(1);
     await expect(page.locator('table tbody tr').first()).toContainText('Analytics Platform');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('"Analytics"');
 
     await page.getByRole('button', { name: 'クリア' }).click();
     await expect(page.locator('table tbody tr')).toHaveCount(2);
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('指定なし');
   });
 
   test('adds and approves timesheet via GraphQL form with API stubs', async ({ page }) => {
@@ -191,5 +196,6 @@ test.describe('Timesheets PoC', () => {
     await expect(page.getByText('GraphQL Worker / PRJ-GQL: Approve 完了')).toBeVisible();
     await page.getByRole('button', { name: 'All' }).click();
     await expect(page.locator('table tbody tr', { hasText: 'GraphQL Worker' }).first()).toContainText('Approved');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('すべて');
   });
 });
