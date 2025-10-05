@@ -45,10 +45,17 @@ test.describe('Compliance PoC', () => {
   test.skip(REQUIRE_API, 'ライブAPI利用時はモックフォールバックが発生しない');
 
   test('shows live retry guidance when backend is unavailable', async ({ page }) => {
+    await page.route('**/graphql', async (route) => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'down' }] }) });
+    });
+    await page.route('**/api/v1/compliance/invoices**', async (route) => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'unavailable' }) });
+    });
     await page.goto('/compliance');
+    await page.getByRole('button', { name: '検索' }).click();
 
-    const retryBanner = page.getByText('現在はモックデータを表示しています', { exact: false });
-    await expect(retryBanner).toBeVisible();
+    const errorBanner = page.getByText('APIの取得に失敗したため、モックデータを表示しています。', { exact: false });
+    await expect(errorBanner).toBeVisible();
 
     const retryButton = page.getByTestId('compliance-retry-live');
     await expect(retryButton).toBeVisible();

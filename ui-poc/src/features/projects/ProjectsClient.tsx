@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import { STATUS_LABEL, type ProjectAction, type ProjectListResponse, type ProjectStatus } from "./types";
+import { CREATE_PROJECT_MUTATION, PROJECT_TRANSITION_MUTATION } from "./queries";
 
 const statusFilters: Array<{ value: "all" | ProjectStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -32,50 +33,6 @@ const HEALTH_CLASS: Record<string, string> = {
   yellow: "bg-amber-400",
   red: "bg-rose-500",
 };
-
-const CREATE_PROJECT_MUTATION = `
-  mutation CreateProject($input: CreateProjectInput!) {
-    createProject(input: $input) {
-      ok
-      error
-      message
-      project {
-        id
-        code
-        name
-        clientName
-        status
-        startOn
-        endOn
-        manager
-        health
-        tags
-      }
-    }
-  }
-`;
-
-const TRANSITION_PROJECT_MUTATION = `
-  mutation TransitionProject($input: ProjectTransitionInput!) {
-    projectTransition(input: $input) {
-      ok
-      error
-      message
-      project {
-        id
-        code
-        name
-        clientName
-        status
-        startOn
-        endOn
-        manager
-        health
-        tags
-      }
-    }
-  }
-`;
 
 type ProjectsClientProps = {
   initialProjects: ProjectListResponse;
