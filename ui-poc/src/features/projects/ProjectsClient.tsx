@@ -89,17 +89,47 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const lastSyncedQueryRef = useRef<string | null>(null);
   const filterRef = useRef(filter);
   const keywordRef = useRef(appliedKeyword);
+  const managerRef = useRef("");
+  const tagRef = useRef("");
+  const healthRef = useRef<"" | ProjectItem["health"]>("" as "" | ProjectItem["health"]);
+
+  const [managerTerm, setManagerTerm] = useState("");
+  const [appliedManager, setAppliedManager] = useState("");
+  const [tagTerm, setTagTerm] = useState("");
+  const [appliedTag, setAppliedTag] = useState("");
+  const [healthFilter, setHealthFilter] = useState<"" | ProjectItem["health"]>("");
+  const [appliedHealth, setAppliedHealth] = useState<"" | ProjectItem["health"]>("");
 
   const filteredProjects = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
+    const manager = appliedManager.trim().toLowerCase();
+    const tag = appliedTag.trim().toLowerCase();
+    const health = appliedHealth;
     return projects.filter((project) => {
       const statusMatch = filter === "all" || project.status === filter;
       if (!statusMatch) return false;
+      if (health && project.health !== health) {
+        return false;
+      }
+      if (manager) {
+        const managerName = (project.manager ?? '').toLowerCase();
+        if (!managerName.includes(manager)) {
+          return false;
+        }
+      }
+      if (tag) {
+        const tagList = Array.isArray(project.tags)
+          ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
+          : [];
+        if (!tagList.includes(tag)) {
+          return false;
+        }
+      }
       if (!keyword) return true;
       const haystack = `${project.name} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [projects, filter, appliedKeyword]);
+  }, [projects, filter, appliedKeyword, appliedManager, appliedTag, appliedHealth]);
 
   const normalizeProject = useCallback((project: Partial<ProjectItem> | undefined | null): ProjectItem | null => {
     if (!project?.id) return null;
@@ -136,8 +166,15 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   };
 
   const fetchProjects = useCallback(
-    async (statusValue: ProjectStatus | "all", keywordValue: string) => {
+    async (
+      statusValue: ProjectStatus | "all",
+      keywordValue: string,
+      options: { manager?: string; health?: string; tag?: string } = {},
+    ) => {
       const trimmedKeyword = keywordValue.trim();
+      const managerValue = options.manager?.trim() ?? '';
+      const healthValue = options.health?.trim() ?? '';
+      const tagValue = options.tag?.trim() ?? '';
       fetchTokenRef.current += 1;
       const token = fetchTokenRef.current;
       setListLoading(true);
@@ -169,6 +206,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           variables: {
             status: statusValue,
             keyword: trimmedKeyword.length > 0 ? trimmedKeyword : undefined,
+            manager: managerValue.length > 0 ? managerValue : undefined,
+            health: healthValue.length > 0 ? healthValue : undefined,
+            tag: tagValue.length > 0 ? tagValue : undefined,
           },
         });
 
@@ -204,7 +244,33 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         const normalized = items
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
-        assignProjects(normalized, rest.meta?.fallback ?? false);
+        const filtered = normalized.filter((project) => {
+          if (healthValue && project.health !== healthValue) {
+            return false;
+          }
+          if (managerValue) {
+            const managerName = (project.manager ?? '').toLowerCase();
+            if (!managerName.includes(managerValue.toLowerCase())) {
+              return false;
+            }
+          }
+          if (tagValue) {
+            const tagList = Array.isArray(project.tags)
+              ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
+              : [];
+            if (!tagList.includes(tagValue.toLowerCase())) {
+              return false;
+            }
+          }
+          if (trimmedKeyword.length > 0) {
+            const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
+            if (!haystack.includes(trimmedKeyword.toLowerCase())) {
+              return false;
+            }
+          }
+          return true;
+        });
+        assignProjects(filtered, rest.meta?.fallback ?? false);
         reportClientTelemetry({
           component: "projects/client",
           event: "rest_list_fallback",
@@ -232,7 +298,31 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         const fallbackItems = (mockProjects.items ?? [])
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
-        assignProjects(fallbackItems, true);
+        const filteredFallback = fallbackItems.filter((project) => {
+          if (healthValue && project.health !== healthValue) {
+            return false;
+          }
+          if (managerValue) {
+            const managerName = (project.manager ?? '').toLowerCase();
+            if (!managerName.includes(managerValue.toLowerCase())) {
+              return false;
+            }
+          }
+          if (tagValue) {
+            const tagList = Array.isArray(project.tags)
+              ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
+              : [];
+            if (!tagList.includes(tagValue.toLowerCase())) {
+              return false;
+            }
+          }
+          if (trimmedKeyword.length > 0) {
+            const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
+            return haystack.includes(trimmedKeyword.toLowerCase());
+          }
+          return true;
+        });
+        assignProjects(filteredFallback, true);
         finishLoading();
       }
     },
@@ -248,6 +338,18 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   }, [appliedKeyword]);
 
   useEffect(() => {
+    managerRef.current = appliedManager;
+  }, [appliedManager]);
+
+  useEffect(() => {
+    tagRef.current = appliedTag;
+  }, [appliedTag]);
+
+  useEffect(() => {
+    healthRef.current = appliedHealth;
+  }, [appliedHealth]);
+
+  useEffect(() => {
     if (!hydratedRef.current) {
       return;
     }
@@ -255,7 +357,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ status: filter, keyword: appliedKeyword }),
+          JSON.stringify({
+            status: filter,
+            keyword: appliedKeyword,
+            manager: appliedManager,
+            tag: appliedTag,
+            health: appliedHealth ?? "",
+          }),
         );
       } catch (error) {
         console.warn("[projects] failed to persist filters", error);
@@ -270,6 +378,18 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     }
     if (desiredKeywordParam.length > 0) {
       nextParams.set("keyword", desiredKeywordParam);
+    }
+    const desiredManagerParam = appliedManager.trim();
+    const desiredTagParam = appliedTag.trim();
+    const desiredHealthParam = appliedHealth?.trim?.() ?? "";
+    if (desiredManagerParam.length > 0) {
+      nextParams.set("manager", desiredManagerParam);
+    }
+    if (desiredTagParam.length > 0) {
+      nextParams.set("tag", desiredTagParam);
+    }
+    if (desiredHealthParam.length > 0) {
+      nextParams.set("health", desiredHealthParam);
     }
     const nextQuery = nextParams.toString();
 
@@ -287,7 +407,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", target);
     }
-  }, [filter, appliedKeyword, pathname, router]);
+  }, [filter, appliedKeyword, appliedManager, appliedTag, appliedHealth, pathname, router]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -295,7 +415,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     }
 
     const parseFiltersFromLocation = () => {
-      let stored: { status?: string; keyword?: string } | null = null;
+      let stored: { status?: string; keyword?: string; manager?: string; tag?: string; health?: string } | null = null;
       try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw) {
@@ -308,6 +428,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       const params = new URLSearchParams(window.location.search);
       const statusFromQuery = params.get("status");
       const keywordFromQuery = params.get("keyword");
+      const managerFromQuery = params.get("manager");
+      const tagFromQuery = params.get("tag");
+      const healthFromQuery = params.get("health");
 
       let normalizedStatus: (typeof statusFilters)[number]["value"] = "all";
       if (statusFromQuery && statusFilters.some((item) => item.value === statusFromQuery)) {
@@ -323,10 +446,36 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         normalizedKeyword = stored.keyword;
       }
 
+      let normalizedManager = "";
+      if (typeof managerFromQuery === "string" && managerFromQuery.trim().length > 0) {
+        normalizedManager = managerFromQuery.trim();
+      } else if (typeof stored?.manager === "string") {
+        normalizedManager = stored.manager;
+      }
+
+      let normalizedTag = "";
+      if (typeof tagFromQuery === "string" && tagFromQuery.trim().length > 0) {
+        normalizedTag = tagFromQuery.trim();
+      } else if (typeof stored?.tag === "string") {
+        normalizedTag = stored.tag;
+      }
+
+      let normalizedHealth: "" | ProjectItem["health"] = "";
+      const healthCandidate = (healthFromQuery ?? stored?.health ?? "").trim();
+      if (["green", "yellow", "red"].includes(healthCandidate)) {
+        normalizedHealth = healthCandidate as ProjectItem["health"];
+      }
+
       if (!hydratedRef.current) {
         setFilter(normalizedStatus);
         setAppliedKeyword(normalizedKeyword);
         setSearchTerm(normalizedKeyword);
+        setAppliedManager(normalizedManager);
+        setManagerTerm(normalizedManager);
+        setAppliedTag(normalizedTag);
+        setTagTerm(normalizedTag);
+        setAppliedHealth(normalizedHealth);
+        setHealthFilter(normalizedHealth);
         hydratedRef.current = true;
       } else {
         if (normalizedStatus !== filterRef.current) {
@@ -335,6 +484,18 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         if (normalizedKeyword !== keywordRef.current) {
           setAppliedKeyword(normalizedKeyword);
           setSearchTerm(normalizedKeyword);
+        }
+        if (normalizedManager !== managerRef.current) {
+          setAppliedManager(normalizedManager);
+          setManagerTerm(normalizedManager);
+        }
+        if (normalizedTag !== tagRef.current) {
+          setAppliedTag(normalizedTag);
+          setTagTerm(normalizedTag);
+        }
+        if (normalizedHealth !== healthRef.current) {
+          setAppliedHealth(normalizedHealth);
+          setHealthFilter(normalizedHealth);
         }
       }
 
@@ -354,8 +515,12 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   }, []);
 
   useEffect(() => {
-    void fetchProjects(filter, appliedKeyword);
-  }, [fetchProjects, filter, appliedKeyword]);
+    void fetchProjects(filter, appliedKeyword, {
+      manager: appliedManager,
+      health: appliedHealth || undefined,
+      tag: appliedTag,
+    });
+  }, [fetchProjects, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag]);
 
   const handleCreateProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -397,7 +562,11 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       }));
       setCreateMessage(gql.createProject.message ?? "プロジェクトを追加しました");
       setCreateForm({ name: "", code: "", clientName: "", manager: "", status: "planned", health: "green" });
-      void fetchProjects(filter, appliedKeyword);
+      void fetchProjects(filter, appliedKeyword, {
+        manager: appliedManager,
+        health: appliedHealth || undefined,
+        tag: appliedTag,
+      });
       return;
     } catch (error) {
       console.warn("[projects] graphql create failed, fallback to REST", error);
@@ -448,7 +617,11 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             projectId: project.id,
           },
         });
-        void fetchProjects(filter, appliedKeyword);
+        void fetchProjects(filter, appliedKeyword, {
+          manager: appliedManager,
+          health: appliedHealth || undefined,
+          tag: appliedTag,
+        });
       } catch (restError) {
         setCreateError((restError as Error).message ?? "プロジェクト追加に失敗しました");
         reportClientTelemetry({
@@ -643,31 +816,67 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       </div>
 
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="grid gap-3 md:grid-cols-4 items-end"
         onSubmit={(event: FormEvent<HTMLFormElement>) => {
           event.preventDefault();
-          const keyword = searchTerm.trim();
-          if (keyword === appliedKeyword) {
-            void fetchProjects(filter, keyword);
-          }
-          setAppliedKeyword(keyword);
+          setAppliedKeyword(searchTerm.trim());
+          setAppliedManager(managerTerm.trim());
+          setAppliedTag(tagTerm.trim());
+          setAppliedHealth(healthFilter);
         }}
       >
         <label className="flex flex-col gap-1 text-xs text-slate-300">
           <span>キーワード検索</span>
           <input
-            className="w-64 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="名前・コード・顧客名で検索"
             data-testid="projects-search-input"
           />
         </label>
-        <div className="flex gap-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>マネージャ</span>
+          <input
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={managerTerm}
+            onChange={(event) => setManagerTerm(event.target.value)}
+            placeholder="例: 山田"
+            data-testid="projects-filter-manager"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>タグ</span>
+          <input
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={tagTerm}
+            onChange={(event) => setTagTerm(event.target.value)}
+            placeholder="例: dx"
+            data-testid="projects-filter-tag"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>ヘルス</span>
+          <select
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={healthFilter}
+            onChange={(event) => {
+              const value = event.target.value as ProjectItem["health"];
+              setHealthFilter(value ? value : "");
+            }}
+            data-testid="projects-filter-health"
+          >
+            <option value="">指定なし</option>
+            <option value="green">green</option>
+            <option value="yellow">yellow</option>
+            <option value="red">red</option>
+          </select>
+        </label>
+        <div className="flex flex-wrap gap-2 md:col-span-4">
           <button
             type="submit"
             className="rounded-md border border-sky-500 bg-sky-500/20 px-4 py-2 text-xs font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:text-slate-500"
-            disabled={listLoading && appliedKeyword === searchTerm.trim()}
+            disabled={listLoading}
           >
             検索
           </button>
@@ -675,12 +884,16 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             type="button"
             onClick={() => {
               setSearchTerm("");
-              if (appliedKeyword !== "") {
-                setAppliedKeyword("");
-              }
+              setManagerTerm("");
+              setTagTerm("");
+              setHealthFilter("");
+              setAppliedKeyword("");
+              setAppliedManager("");
+              setAppliedTag("");
+              setAppliedHealth("");
             }}
             className="rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
-            disabled={listLoading && appliedKeyword === "" && searchTerm.trim() === ""}
+            disabled={listLoading}
           >
             クリア
           </button>

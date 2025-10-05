@@ -63,6 +63,18 @@ test.describe('Projects PoC', () => {
             return haystack.includes(keyword);
           });
         }
+        const manager = (variables.manager ?? '').toLowerCase();
+        if (manager) {
+          filtered = filtered.filter((project) => (project.manager ?? '').toLowerCase().includes(manager));
+        }
+        const tag = (variables.tag ?? '').toLowerCase();
+        if (tag) {
+          filtered = filtered.filter((project) => (project.tags ?? []).map((value) => value?.toLowerCase()).includes(tag));
+        }
+        const health = (variables.health ?? '').toLowerCase();
+        if (health) {
+          filtered = filtered.filter((project) => project.health === health);
+        }
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -83,8 +95,19 @@ test.describe('Projects PoC', () => {
     await expect(page.locator('article')).toHaveCount(1);
     await expect(page.locator('article').first()).toContainText('Analytics Platform');
 
+    await page.getByTestId('projects-filter-manager').fill('佐藤');
+    await page.getByTestId('projects-filter-health').selectOption('yellow');
+    await page.getByRole('button', { name: '検索' }).click();
+    await expect(page.locator('article')).toHaveCount(1);
+    await page.getByTestId('projects-filter-tag').fill('data');
+    await page.getByRole('button', { name: '検索' }).click();
+    await expect(page.locator('article')).toHaveCount(1);
+
     await page.getByRole('button', { name: 'All' }).click();
     await page.getByTestId('projects-search-input').fill('');
+    await page.getByTestId('projects-filter-manager').fill('');
+    await page.getByTestId('projects-filter-tag').fill('');
+    await page.getByTestId('projects-filter-health').selectOption('');
     await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('article')).toHaveCount(dataset.length);
   });
@@ -133,6 +156,18 @@ test.describe('Projects PoC', () => {
             return haystack.includes(keyword);
           });
         }
+        const manager = (variables.manager ?? '').toLowerCase();
+        if (manager) {
+          filtered = filtered.filter((project) => (project.manager ?? '').toLowerCase().includes(manager));
+        }
+        const tag = (variables.tag ?? '').toLowerCase();
+        if (tag) {
+          filtered = filtered.filter((project) => (project.tags ?? []).map((value) => value?.toLowerCase()).includes(tag));
+        }
+        const health = (variables.health ?? '').toLowerCase();
+        if (health) {
+          filtered = filtered.filter((project) => project.health === health);
+        }
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -149,19 +184,31 @@ test.describe('Projects PoC', () => {
 
     await page.getByRole('button', { name: 'Active' }).click();
     await page.getByTestId('projects-search-input').fill('Analytics');
+    await page.getByTestId('projects-filter-manager').fill('佐藤');
+    await page.getByTestId('projects-filter-tag').fill('data');
+    await page.getByTestId('projects-filter-health').selectOption('yellow');
     await page.getByRole('button', { name: '検索' }).click();
 
     await expect(page).toHaveURL(/status=active/);
     await expect(page).toHaveURL(/keyword=Analytics/);
+    await expect(page).toHaveURL(/manager=%E4%BD%90%E8%97%A4/);
+    await expect(page).toHaveURL(/tag=data/);
+    await expect(page).toHaveURL(/health=yellow/);
     await expect(page.locator('article')).toHaveCount(1);
     await expect(page.locator('article').first()).toContainText('Analytics Launcher');
 
     await page.reload();
     await expect(page.getByTestId('projects-search-input')).toHaveValue('Analytics');
+    await expect(page.getByTestId('projects-filter-manager')).toHaveValue('佐藤');
+    await expect(page.getByTestId('projects-filter-tag')).toHaveValue('data');
+    await expect(page.getByTestId('projects-filter-health')).toHaveValue('yellow');
     await expect(page.locator('article')).toHaveCount(1);
 
     await page.goto('/projects', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('projects-search-input')).toHaveValue('Analytics');
+    await expect(page.getByTestId('projects-filter-manager')).toHaveValue('佐藤');
+    await expect(page.getByTestId('projects-filter-tag')).toHaveValue('data');
+    await expect(page.getByTestId('projects-filter-health')).toHaveValue('yellow');
     await expect(page.locator('article')).toHaveCount(1);
   });
 

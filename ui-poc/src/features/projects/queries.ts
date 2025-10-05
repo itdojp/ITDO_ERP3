@@ -1,6 +1,6 @@
 export const PROJECTS_PAGE_QUERY = `#graphql
-  query ProjectsPage($status: String, $keyword: String) {
-    projects(status: $status, keyword: $keyword) {
+  query ProjectsPage($status: String, $keyword: String, $manager: String, $health: String, $tag: String) {
+    projects(status: $status, keyword: $keyword, manager: $manager, health: $health, tag: $tag) {
       id
       code
       name
