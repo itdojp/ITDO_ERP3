@@ -282,13 +282,34 @@ export function createGraphQLSchema({
         args: {
           status: { type: GraphQLString },
           keyword: { type: GraphQLString },
+          manager: { type: GraphQLString },
+          health: { type: GraphQLString },
+          tag: { type: GraphQLString },
         },
         resolve: (_root, args) => {
           const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : '';
           const status = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
+          const manager = typeof args?.manager === 'string' ? args.manager.trim().toLowerCase() : '';
+          const health = typeof args?.health === 'string' ? args.health.trim().toLowerCase() : '';
+          const tag = typeof args?.tag === 'string' ? args.tag.trim().toLowerCase() : '';
           const filteredProjects = projects.filter((project) => {
             const statusMatch = !status || status === 'all' || project.status === status;
             if (!statusMatch) return false;
+            if (health && project.health !== health) return false;
+            if (manager) {
+              const managerName = (project.manager ?? '').toLowerCase();
+              if (!managerName.includes(manager)) {
+                return false;
+              }
+            }
+            if (tag) {
+              const tagList = Array.isArray(project.tags)
+                ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
+                : [];
+              if (!tagList.includes(tag)) {
+                return false;
+              }
+            }
             if (!keyword) return true;
             const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
             return haystack.includes(keyword);
@@ -302,17 +323,33 @@ export function createGraphQLSchema({
           status: { type: GraphQLString },
           projectId: { type: GraphQLString },
           keyword: { type: GraphQLString },
+          userName: { type: GraphQLString },
+          projectCode: { type: GraphQLString },
         },
         resolve: (_root, args) => {
           const status = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
           const projectId = typeof args?.projectId === 'string' ? args.projectId.trim() : '';
           const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : '';
+          const userName = typeof args?.userName === 'string' ? args.userName.trim().toLowerCase() : '';
+          const projectCodeArg = typeof args?.projectCode === 'string' ? args.projectCode.trim().toLowerCase() : '';
           const filteredTimesheets = timesheets.filter((sheet) => {
             const statusMatch = !status || status === 'all' || sheet.approvalStatus === status;
             if (!statusMatch) return false;
             const projectMatch =
               !projectId || sheet.projectId === projectId || sheet.projectCode === projectId;
             if (!projectMatch) return false;
+            if (userName) {
+              const name = (sheet.userName ?? '').toLowerCase();
+              if (!name.includes(userName)) {
+                return false;
+              }
+            }
+            if (projectCodeArg) {
+              const codeLower = (sheet.projectCode ?? '').toLowerCase();
+              if (codeLower !== projectCodeArg) {
+                return false;
+              }
+            }
             if (!keyword) return true;
             const haystack = [
               sheet.projectCode,
