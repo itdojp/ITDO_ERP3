@@ -45,6 +45,8 @@ USE_MINIO=true MINIO_PORT=9000 MINIO_CONSOLE_PORT=9001 podman compose -f podman-
 
 `MINIO_PRESIGN_SECONDS`（既定 600）でURLの有効時間を調整できる。
 
+開発中にビルド済みイメージを再利用したい場合は `PODMAN_BUILD=false scripts/run_podman_ui_poc.sh --no-build` のように指定すると、`podman-compose --build` をスキップできます。
+
 メトリクスは `/metrics/summary` のほか `/metrics/stream` から Server-Sent Events (SSE) 形式で購読可能です。ダッシュボードや通知向けに利用してください。
 
 #### Podman向けスモークテスト
