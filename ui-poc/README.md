@@ -37,6 +37,8 @@ scripts/run_podman_ui_poc.sh
 
 ```bash
 PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
+
+> Live テスト (`--run-tests` / `--tests-only`) を利用する場合は、Playwright の実行前に PoC API を既定ポート（3001）へ一旦リダイレクトするため、環境変数 `FORCE_PM_PORT` で強制ポートを指定できます。Podman スタックを独自ポートで常用している場合は、テスト専用に `FORCE_PM_PORT=3001` を維持するか、Playwright 側の `PM_PORT` を合わせて上書きしてください。
 ```
 
 ## ディレクトリ構成（抜粋）
@@ -92,7 +94,7 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 - 依存パッケージのインストール: `cd ui-poc && npm install`
 - Playwright ドライバの取得: `cd ui-poc && npx playwright install chromium`
 - テスト実行: `cd ui-poc && npm run test:e2e`
-- Podman を起動して API 連携（`API live` バッジ）を確認したい場合は `npm run test:e2e:live` を利用してください。
+- Podman を起動して API 連携（`API live` バッジ）を確認したい場合は `npm run test:e2e:live` を利用してください。MinIO を必須として検証する場合は `E2E_REQUIRE_MINIO=true` を併用すると、添付ファイルの署名 URL を強制的にチェックできます。
 - `npm run test:e2e` は Telemetry 再試行バナーと SSE の動作モック（`tests/e2e/metrics.spec.ts`）も検証します。ライブ API と組み合わせる場合は `E2E_EXPECT_API=true` を設定してください。
 
 ## 補助スクリプト

@@ -12,6 +12,7 @@ UI_HEADLESS="${UI_HEADLESS:-false}"
 RUN_TESTS=false
 TESTS_ONLY=false
 USE_MINIO_FLAG="${USE_MINIO:-false}"
+FORCE_PM=${FORCE_PM_PORT:-3001}
 USE_BUILD="${PODMAN_BUILD:-true}"
 
 usage() {
@@ -27,7 +28,8 @@ Options:
   -h, --help       Show this help message.
 
 Environment variables:
-  PM_PORT, UI_PORT, PM_CONTAINER_PORT, UI_HEADLESS, USE_MINIO, PODMAN_BUILD
+  PM_PORT, UI_PORT, PM_CONTAINER_PORT, UI_HEADLESS, USE_MINIO, PODMAN_BUILD,
+  FORCE_PM_PORT (default 3001, Playwright live testsの強制ポート)
 USAGE
 }
 
@@ -157,7 +159,28 @@ fi
 
 if [ "$RUN_TESTS" = true ]; then
   echo "[tests] Running Playwright live suite"
-  if ! (cd "${UI_DIR}" && NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" POC_API_BASE="http://localhost:${PM_HOST_PORT}" npm run test:e2e:live); then
+  if [ "$PM_HOST_PORT" != "$FORCE_PM" ]; then
+    export PM_PORT="$FORCE_PM"
+    export PM_CONTAINER_PORT="$FORCE_PM"
+    echo "[tests] restarting stack on PM_PORT=${FORCE_PM} for live tests"
+    (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" down >/dev/null 2>&1) || true
+    (cd "${PROJECT_DIR}" && PM_PORT="$FORCE_PM" PM_CONTAINER_PORT="$FORCE_PM" USE_MINIO="$USE_MINIO_FLAG" podman-compose -f "${COMPOSE_FILE}" up -d --build)
+    echo "[health] Waiting for pm-service on http://localhost:${FORCE_PM}"
+    pm_service_up=false
+    for _ in {1..60}; do
+      if curl -fsS "http://localhost:${FORCE_PM}/health" >/dev/null 2>&1; then
+        pm_service_up=true
+        break
+      fi
+      sleep 1
+    done
+    if [ "$pm_service_up" = false ]; then
+      echo "[health] ERROR: pm-service did not become available on ${FORCE_PM}." >&2
+      exit 2
+    fi
+    PM_HOST_PORT="$FORCE_PM"
+  fi
+  if ! (cd "${UI_DIR}" && NEXT_PUBLIC_API_BASE="http://localhost:${FORCE_PM}" POC_API_BASE="http://localhost:${FORCE_PM}" PM_PORT="$FORCE_PM" npm run test:e2e:live); then
     echo "[tests] Playwright suite failed" >&2
     exit 4
   fi
