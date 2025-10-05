@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import { STATUS_LABEL, type ProjectAction, type ProjectListResponse, type ProjectStatus } from "./types";
@@ -34,6 +35,8 @@ const HEALTH_CLASS: Record<string, string> = {
   yellow: "bg-amber-400",
   red: "bg-rose-500",
 };
+
+const STORAGE_KEY = "projects-filters-v1";
 
 type ProjectsClientProps = {
   initialProjects: ProjectListResponse;
@@ -79,6 +82,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [creating, setCreating] = useState(false);
 
   const source: QuerySource = meta.fallback ? "mock" : "api";
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const hydratedRef = useRef(false);
+  const lastSyncedQueryRef = useRef<string | null>(null);
+  const filterRef = useRef(filter);
+  const keywordRef = useRef(appliedKeyword);
 
   const filteredProjects = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
@@ -228,6 +238,120 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     },
     [normalizeProject],
   );
+
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
+
+  useEffect(() => {
+    keywordRef.current = appliedKeyword;
+  }, [appliedKeyword]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      return;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ status: filter, keyword: appliedKeyword }),
+        );
+      } catch (error) {
+        console.warn("[projects] failed to persist filters", error);
+      }
+    }
+
+    const desiredStatusParam = filter === "all" ? null : filter;
+    const desiredKeywordParam = appliedKeyword.trim();
+    const nextParams = new URLSearchParams();
+    if (desiredStatusParam) {
+      nextParams.set("status", desiredStatusParam);
+    }
+    if (desiredKeywordParam.length > 0) {
+      nextParams.set("keyword", desiredKeywordParam);
+    }
+    const nextQuery = nextParams.toString();
+
+    if (lastSyncedQueryRef.current === nextQuery) {
+      return;
+    }
+
+    lastSyncedQueryRef.current = nextQuery;
+    const target = nextQuery.length > 0 ? `${pathname}?${nextQuery}` : pathname;
+    try {
+      router.replace(target, { scroll: false });
+    } catch (error) {
+      console.warn("[projects] router.replace failed", error);
+    }
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", target);
+    }
+  }, [filter, appliedKeyword, pathname, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const parseFiltersFromLocation = () => {
+      let stored: { status?: string; keyword?: string } | null = null;
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          stored = JSON.parse(raw);
+        }
+      } catch (error) {
+        console.warn("[projects] failed to parse stored filters", error);
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const statusFromQuery = params.get("status");
+      const keywordFromQuery = params.get("keyword");
+
+      let normalizedStatus: (typeof statusFilters)[number]["value"] = "all";
+      if (statusFromQuery && statusFilters.some((item) => item.value === statusFromQuery)) {
+        normalizedStatus = statusFromQuery as (typeof statusFilters)[number]["value"];
+      } else if (stored?.status && statusFilters.some((item) => item.value === stored.status)) {
+        normalizedStatus = stored.status as (typeof statusFilters)[number]["value"];
+      }
+
+      let normalizedKeyword = "";
+      if (typeof keywordFromQuery === "string" && keywordFromQuery.trim().length > 0) {
+        normalizedKeyword = keywordFromQuery.trim();
+      } else if (typeof stored?.keyword === "string") {
+        normalizedKeyword = stored.keyword;
+      }
+
+      if (!hydratedRef.current) {
+        setFilter(normalizedStatus);
+        setAppliedKeyword(normalizedKeyword);
+        setSearchTerm(normalizedKeyword);
+        hydratedRef.current = true;
+      } else {
+        if (normalizedStatus !== filterRef.current) {
+          setFilter(normalizedStatus);
+        }
+        if (normalizedKeyword !== keywordRef.current) {
+          setAppliedKeyword(normalizedKeyword);
+          setSearchTerm(normalizedKeyword);
+        }
+      }
+
+      lastSyncedQueryRef.current = params.toString();
+    };
+
+    parseFiltersFromLocation();
+
+    const handlePopState = () => {
+      parseFiltersFromLocation();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     void fetchProjects(filter, appliedKeyword);
