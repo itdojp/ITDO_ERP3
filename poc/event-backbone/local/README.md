@@ -125,7 +125,24 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - `scripts/metrics_stream_stress.js` を利用すると複数クライアントで `/metrics/stream` を同時購読する簡易ロードテストを実施できます。例: `METRICS_STREAM_CLIENTS=25 node scripts/metrics_stream_stress.js`
 - `scripts/show_telemetry.js` は Telemetry API の最新イベントを一覧表示するユーティリティです。
 - `scripts/poc_live_smoke.sh` は RabbitMQ / Redis / MinIO / Loki / Grafana / pm-service それぞれを個別の待機ロジックで監視し、タイムアウトや接続不能時には Slack 通知とログ収集を行います。`RABBITMQ_TIMEOUT_SECONDS` や `GRAFANA_TIMEOUT_SECONDS` などの環境変数で待機時間を上書きできます。
-- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`) や WebSocket モード (`METRICS_STREAM_MODE=ws`) もここで変更できます。
+- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`) や WebSocket モード (`METRICS_STREAM_MODE=ws`) のほか、Grafana 検証 (`CHECK_GRAFANA_DASHBOARDS`) や Slack 通知 (`SLACK_WEBHOOK_URL`) の設定例も含まれます。
+
+##### Grafana ダッシュボード検証手順
+1. Podman スタックを起動後、`http://localhost:3000/` にアクセスし `admin / admin` でログインします。
+2. サイドバーの **Dashboards → Browse → Poc Dashboards** を開き、以下の 3 つが存在することを確認します。
+   - `PoC Metrics Overview` (UID: `poc-metrics`)
+   - `PoC Logs Explorer` (UID: `poc-logs`)
+   - `PoC UI Telemetry` (UID: `poc-telemetry`)
+3. 各ダッシュボードの右上 **Refresh** ボタンで更新し、最新データが描画されるか（特に `/metrics/stream` 切断時のアラート）を確認します。
+4. **Alerting → PoC Alerts → TelemetryFallbackSpike** を開き、ルールが有効化されているか・直近発火履歴がないかを確認します。閾値の調整は `poc/event-backbone/local/grafana/provisioning/alerting/telemetry.yaml` を編集します。
+5. 必要に応じて `python3 scripts/check_grafana_manifest.py` を実行し、ダッシュボード JSON と manifest の不整合がないことを検証します。CI の `poc-live-smoke` ワークフローでも同じ検証が行われます。
+
+###### Slack 通知の設定
+`scripts/poc_live_smoke.sh` は Slack Webhook を指定すると失敗時に通知を送信します。ローカルで確認する場合は以下を設定してください。
+
+1. Slack の Incoming Webhook URL を `SLACK_WEBHOOK_URL` に設定します（`.env.poc_live_smoke` など）。
+2. 成功時通知も欲しい場合は `SLACK_NOTIFY_ON_SUCCESS=true` を追加します。
+3. スクリプトは起動時に `.env` を読み込むため、`env $(cat scripts/.env.poc_live_smoke.example | xargs) scripts/poc_live_smoke.sh` のように一時的に上書きすることも可能です。
 
 #### GraphQL エンドポイント
 - `pm-service` は REST API に加えて `http://localhost:3001/graphql` で GraphQL を公開しています。
