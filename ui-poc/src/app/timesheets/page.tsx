@@ -2,7 +2,7 @@ import { TimesheetsClient } from "@/features/timesheets/TimesheetsClient";
 import { mockTimesheets } from "@/features/timesheets/mock-data";
 import { TIMESHEETS_PAGE_QUERY } from "@/features/timesheets/queries";
 import type { TimesheetListResponse } from "@/features/timesheets/types";
-import { graphqlRequest } from "@/lib/api-client";
+import { graphqlRequest } from "@/lib/api-client.server";
 import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {

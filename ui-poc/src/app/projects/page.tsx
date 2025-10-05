@@ -2,7 +2,7 @@ import { ProjectsClient } from "@/features/projects/ProjectsClient";
 import { mockProjects } from "@/features/projects/mock-data";
 import { PROJECTS_PAGE_QUERY } from "@/features/projects/queries";
 import type { ProjectListResponse } from "@/features/projects/types";
-import { graphqlRequest } from "@/lib/api-client";
+import { graphqlRequest } from "@/lib/api-client.server";
 import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: NonNullable<ProjectListResponse["meta"]> = {

@@ -1,5 +1,3 @@
-'use client';
-
 export { apiRequestInternal as apiRequest, graphqlRequestInternal as graphqlRequest } from './api-client-base';
 export type {
   ApiRequestOptions,

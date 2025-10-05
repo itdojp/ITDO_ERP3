@@ -2,6 +2,7 @@ import { ComplianceClient } from "@/features/compliance/ComplianceClient";
 import { mockInvoices } from "@/features/compliance/mock-data";
 import type { InvoiceListResponse } from "@/features/compliance/types";
 import { COMPLIANCE_INVOICES_QUERY } from "@/features/compliance/queries";
+import { graphqlRequest } from "@/lib/api-client.server";
 import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: InvoiceListResponse["meta"] = {
@@ -20,28 +21,18 @@ async function fetchComplianceInvoices(): Promise<InvoiceListResponse> {
   const filterInput = { page: 1, pageSize: 25, sortBy: "issueDate", sortDir: "desc" as const };
 
   try {
-    const gqlResponse = await fetch(`${base}/graphql`, {
-      method: "POST",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: COMPLIANCE_INVOICES_QUERY, variables: { filter: filterInput } }),
-    });
-    if (!gqlResponse.ok) {
-      throw new Error(`graphql status ${gqlResponse.status}`);
-    }
-    const gqlPayload = (await gqlResponse.json()) as {
-      data?: {
-        complianceInvoices?: {
-          items?: InvoiceListResponse["items"];
-          meta?: InvoiceListResponse["meta"];
-        };
+    const gql = await graphqlRequest<{
+      complianceInvoices?: {
+        items?: InvoiceListResponse["items"];
+        meta?: InvoiceListResponse["meta"];
       };
-      errors?: Array<{ message: string }>;
-    };
-    if (gqlPayload.errors?.length) {
-      throw new Error(gqlPayload.errors.map((err) => err.message).join("; "));
-    }
-    const connection = gqlPayload.data?.complianceInvoices;
+    }>({
+      query: COMPLIANCE_INVOICES_QUERY,
+      variables: { filter: filterInput },
+      baseUrl: base,
+    });
+
+    const connection = gql.complianceInvoices;
     if (!connection) {
       throw new Error("graphql response missing complianceInvoices");
     }

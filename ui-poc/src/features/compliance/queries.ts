@@ -5,16 +5,23 @@ export const COMPLIANCE_INVOICES_QUERY = `#graphql
         id
         invoiceNumber
         counterpartyName
+        counterpartyNumber
         issueDate
         dueDate
         amountIncludingTax
+        amountExcludingTax
+        currency
         status
         tags
+        remarks
         matchedPurchaseOrder
         attachments {
           id
+          kind
           fileName
-          fileType
+          mimeType
+          sizeLabel
+          previewNote
           downloadUrl
           storageKey
         }
@@ -66,17 +73,28 @@ export const COMPLIANCE_INVOICES_QUERY_LIVE = `#graphql
         id
         invoiceNumber
         counterpartyName
+        counterpartyNumber
         issueDate
         dueDate
         amountIncludingTax
+        amountExcludingTax
+        currency
         status
         matchedPurchaseOrder
         attachments {
           id
+          kind
           fileName
-          fileType
+          mimeType
+          sizeLabel
+          previewNote
           downloadUrl
+          storageKey
         }
+        remarks
+        tags
+        createdAt
+        updatedAt
       }
       meta {
         total

@@ -52,7 +52,7 @@ test.describe('Metrics SSE', () => {
       stale: false,
     };
 
-    await page.route('http://localhost:3001/metrics/summary*', async (route) => {
+    await page.route('**/metrics/summary**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -61,6 +61,7 @@ test.describe('Metrics SSE', () => {
     });
 
     await page.goto('/');
+    await page.waitForResponse(/\/metrics\/summary/);
     await expect(page.getByTestId('metrics-panel')).toBeVisible();
     await expect(page.getByTestId('metrics-events')).toContainText('10');
     await expect(page.getByTestId('metrics-history')).toContainText('10');
