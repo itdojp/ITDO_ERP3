@@ -45,6 +45,8 @@ USE_MINIO=true MINIO_PORT=9000 MINIO_CONSOLE_PORT=9001 podman compose -f podman-
 
 `MINIO_PRESIGN_SECONDS`（既定 600）でURLの有効時間を調整できる。
 
+開発中にビルド済みイメージを再利用したい場合は `PODMAN_BUILD=false scripts/run_podman_ui_poc.sh --no-build` のように指定すると、`podman-compose --build` をスキップできます。
+
 メトリクスは `/metrics/summary` のほか `/metrics/stream` から Server-Sent Events (SSE) 形式で購読可能です。ダッシュボードや通知向けに利用してください。
 
 #### Podman向けスモークテスト
@@ -110,13 +112,13 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - Loki の UI は http://localhost:3100/ からアクセスできます。
 - Grafana は http://localhost:3000/ （既定ユーザー: `admin` / パスワード: `admin`） で起動し、Loki データソースと PoC Logs ダッシュボードが事前設定されています。
 - `dashboards/poc-metrics.json` を通じて `/metrics/summary` のスナップショットログを可視化するテンプレートを追加しました。ログ面からメトリクス変化を追跡し、SSE と組み合わせて Podman 側の監視に活用できます。
-- Grafana のサイドバーから **Dashboards → Browse → Poc Dashboards** を開くと、以下の2つのダッシュボードが利用できます。
-  - `PoC Metrics Overview`: `/metrics/summary` と `/metrics/stream` の値を時系列で確認（ログ由来）。SSEでの最新値を確認したい場合は「Refresh」を実行してください。
-  - `PoC Logs Explorer`: Loki へ送信された pm-service / producer / consumer / Playwright スモークログを検索できます。`{app="pm-service"}` のクエリで pm-service ログだけを絞り込めます。
-  - `PoC UI Telemetry`: UI クライアント/サーバが `POST /api/v1/telemetry/ui` に送ったイベントをリアルタイムで確認できます（Loki クエリ `{job="poc-telemetry"}`）。
+- Grafana のサイドバーから **Dashboards → Browse → Poc Dashboards** を開くと、以下の 3 つのダッシュボードが利用できます。
+  - *PoC Metrics Overview* (`metrics-overview`)
+  - *PoC Logs Explorer* (`logs-explorer`)
+  - *PoC UI Telemetry* (`ui-telemetry`)
 - **Alerting → PoC Alerts** フォルダには `TelemetryFallbackSpike` アラートが事前登録されており、5分間に複数回モックフォールバックが発生した際に警告として検知できます。スモークスクリプト (`scripts/poc_live_smoke.sh`) は Grafana のルール/アラート API を監視し、ルールが失われた場合やアラートが発火した場合は Slack 通知とログ採取を行います。
 - 同スクリプトではダッシュボード API も照会し、`poc/event-backbone/local/grafana/provisioning/dashboards/manifest.json` に列挙したタイトル/UID (`PoC Metrics Overview` / `PoC Logs Explorer` / `PoC UI Telemetry`) と同じものが Grafana 上に存在するかを確認します。欠落している場合は失敗として扱われ、`last_grafana_dashboards.json` がアーティファクトに含まれます。
-- ダッシュボード構成が manifest と一致しているかをローカルで確認したい場合は、プロジェクトルートで `python3 scripts/check_grafana_manifest.py` を実行してください。manifest に未登録のファイルやタイトル/UID の不整合を検出し、CI（`poc-live-smoke` ワークフロー）でも同じ検証を行っています。
+- ダッシュボード構成が manifest と一致しているかをローカルで確認したい場合は、プロジェクトルートで `python3 scripts/check_grafana_manifest.py` を実行してください。CI（`poc-live-smoke` ワークフロー）でも同じ検証が行われます。
 - `pm-service` の Telemetry API (`POST /api/v1/telemetry/ui`) に送信されたイベントは `/var/log/poc-smoke/telemetry.log` にも追記され、Promtail 経由で Loki へ転送されます。UI から `reportClientTelemetry` / `reportServerTelemetry` を呼び出すことでフォールバック発生状況を追跡できます。
 - Telemetry ログは既定で 5MB 超過時にローテーションされ、最大3世代 (`telemetry.log.[1-3]`) を保持します。閾値は `TELEMETRY_MAX_LOG_BYTES`、保持数は `TELEMETRY_LOG_MAX_ARCHIVES` で調整可能です。
 - 最新 200 件の Telemetry イベントは `GET /api/v1/telemetry/ui` でも取得できます。開発時に即座に確認したい場合は `curl http://localhost:3001/api/v1/telemetry/ui` を利用してください。
@@ -125,17 +127,17 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 - `scripts/metrics_stream_stress.js` を利用すると複数クライアントで `/metrics/stream` を同時購読する簡易ロードテストを実施できます。例: `METRICS_STREAM_CLIENTS=25 node scripts/metrics_stream_stress.js`
 - `scripts/show_telemetry.js` は Telemetry API の最新イベントを一覧表示するユーティリティです。
 - `scripts/poc_live_smoke.sh` は RabbitMQ / Redis / MinIO / Loki / Grafana / pm-service それぞれを個別の待機ロジックで監視し、タイムアウトや接続不能時には Slack 通知とログ収集を行います。`RABBITMQ_TIMEOUT_SECONDS` や `GRAFANA_TIMEOUT_SECONDS` などの環境変数で待機時間を上書きできます。
-- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`) や WebSocket モード (`METRICS_STREAM_MODE=ws`) のほか、Grafana 検証 (`CHECK_GRAFANA_DASHBOARDS`) や Slack 通知 (`SLACK_WEBHOOK_URL`) の設定例も含まれます。
+- `.env` 経由で設定を調整したい場合は `scripts/.env.poc_live_smoke.example` を参考にしてください。SSE ストレス検証回数 (`METRICS_STREAM_ITERATIONS`)、WebSocket モード (`METRICS_STREAM_MODE=ws`)、Grafana ダッシュボード検証 (`CHECK_GRAFANA_DASHBOARDS`) や Slack 通知 (`SLACK_WEBHOOK_URL`) の設定例も含まれます。
 
 ##### Grafana ダッシュボード検証手順
 1. Podman スタックを起動後、`http://localhost:3000/` にアクセスし `admin / admin` でログインします。
 2. サイドバーの **Dashboards → Browse → Poc Dashboards** を開き、以下の 3 つが存在することを確認します。
-   - `PoC Metrics Overview` (UID: `poc-metrics`)
-   - `PoC Logs Explorer` (UID: `poc-logs`)
-   - `PoC UI Telemetry` (UID: `poc-telemetry`)
+   - *PoC Metrics Overview* (`metrics-overview`)
+   - *PoC Logs Explorer* (`logs-explorer`)
+   - *PoC UI Telemetry* (`ui-telemetry`)
 3. 各ダッシュボードの右上 **Refresh** ボタンで更新し、最新データが描画されるか（特に `/metrics/stream` 切断時のアラート）を確認します。
 4. **Alerting → PoC Alerts → TelemetryFallbackSpike** を開き、ルールが有効化されているか・直近発火履歴がないかを確認します。閾値の調整は `poc/event-backbone/local/grafana/provisioning/alerting/telemetry.yaml` を編集します。
-5. 必要に応じて `python3 scripts/check_grafana_manifest.py` を実行し、ダッシュボード JSON と manifest の不整合がないことを検証します。CI の `poc-live-smoke` ワークフローでも同じ検証が行われます。
+5. 必要に応じて `scripts/check_grafana_manifest.py` を実行し、ダッシュボード JSON と manifest の不整合がないことを検証します。CI の `poc-live-smoke` ワークフローでも同じ検証が行われます。
 
 ###### Slack 通知の設定
 `scripts/poc_live_smoke.sh` は Slack Webhook を指定すると失敗時に通知を送信します。ローカルで確認する場合は以下を設定してください。
@@ -143,7 +145,6 @@ pm-service では `/app/state/pm-poc-state.json`（ホスト側では `services/
 1. Slack の Incoming Webhook URL を `SLACK_WEBHOOK_URL` に設定します（`.env.poc_live_smoke` など）。
 2. 成功時通知も欲しい場合は `SLACK_NOTIFY_ON_SUCCESS=true` を追加します。
 3. スクリプトは起動時に `.env` を読み込むため、`env $(cat scripts/.env.poc_live_smoke.example | xargs) scripts/poc_live_smoke.sh` のように一時的に上書きすることも可能です。
-
 #### GraphQL エンドポイント
 - `pm-service` は REST API に加えて `http://localhost:3001/graphql` で GraphQL を公開しています。
 - スキーマ例:
