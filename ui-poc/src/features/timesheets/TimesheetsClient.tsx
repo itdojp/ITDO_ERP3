@@ -93,6 +93,17 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
 
   const source: QuerySource = meta.fallback ? "mock" : "api";
 
+  const statusLabel = useMemo(() => {
+    if (filter === "all") {
+      return "すべて";
+    }
+    return STATUS_LABEL[filter];
+  }, [filter]);
+
+  const keywordSummary = appliedKeyword.trim().length > 0 ? `"${appliedKeyword}"` : "指定なし";
+  const apiReturned = meta.returned ?? timesheets.length;
+  const apiTotal = meta.total ?? timesheets.length;
+
   const filtered = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
     return timesheets.filter((entry) => {
@@ -196,6 +207,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           false,
           statusValue === "all" ? "all" : (statusValue as TimesheetStatus),
         );
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "list_fetch_succeeded",
+          level: "info",
+          detail: {
+            strategy: "graphql",
+            status: statusValue,
+            keyword: trimmedKeyword,
+            returned: normalized.length,
+            total: normalized.length,
+            fallback: false,
+          },
+        });
         finishLoading();
         return;
       } catch (error) {
@@ -230,6 +254,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         );
         reportClientTelemetry({
           component: "timesheets/client",
+          event: "list_fetch_succeeded",
+          level: "info",
+          detail: {
+            strategy: "rest",
+            status: statusValue,
+            keyword: trimmedKeyword,
+            returned: normalized.length,
+            total: rest.meta?.total ?? normalized.length,
+            fallback: rest.meta?.fallback ?? false,
+          },
+        });
+        reportClientTelemetry({
+          component: "timesheets/client",
           event: "rest_list_fallback",
           level: "info",
           detail: {
@@ -256,6 +293,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           .map((entry) => normalizeTimesheet(entry))
           .filter(Boolean) as TimesheetEntry[];
         assignTimesheets(fallbackItems, true, "all");
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "list_fetch_succeeded",
+          level: "info",
+          detail: {
+            strategy: "mock",
+            status: statusValue,
+            keyword: trimmedKeyword,
+            returned: fallbackItems.length,
+            total: fallbackItems.length,
+            fallback: true,
+          },
+        });
         finishLoading();
       }
     },
@@ -668,10 +718,14 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       </form>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>
-          表示件数: {filtered.length.toLocaleString()} / {meta.total.toLocaleString()} 件
+        <span data-testid="timesheets-summary-count">
+          表示件数: {filtered.length.toLocaleString()} 件 ({apiReturned.toLocaleString()} / {apiTotal.toLocaleString()} 件)
+        </span>
+        <span data-testid="timesheets-summary-filters">
+          フィルタ: {statusLabel} / キーワード: {keywordSummary}
         </span>
         <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
+        {meta.status ? <span>APIステータス: {meta.status}</span> : null}
         <span
           className={`rounded-full px-2 py-1 font-medium ${
             source === "api" ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"
