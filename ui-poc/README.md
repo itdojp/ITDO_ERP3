@@ -101,3 +101,4 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 ## 補助スクリプト
 - `node ../scripts/show_telemetry.js` — Telemetry API の最新イベントを CLI で確認します。`TELEMETRY_BASE` でベースURLを上書き可能です。
 - `node ../scripts/metrics_stream_stress.js` — 複数クライアントで `/metrics/stream` を購読する簡易ロードテスト。`METRICS_STREAM_CLIENTS`/`METRICS_STREAM_URL` などの環境変数で調整できます。
+- GitHub Actions やローカルでのライブ検証手順は `docs/live-testing.md` にまとめています。
