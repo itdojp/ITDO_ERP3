@@ -2,7 +2,7 @@ import { ComplianceClient } from "@/features/compliance/ComplianceClient";
 import { mockInvoices } from "@/features/compliance/mock-data";
 import type { InvoiceListResponse } from "@/features/compliance/types";
 import { COMPLIANCE_INVOICES_QUERY } from "@/features/compliance/queries";
-import { graphqlRequest } from "@/lib/api-client";
+import { graphqlRequest } from "@/lib/api-client.server";
 import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: InvoiceListResponse["meta"] = {
