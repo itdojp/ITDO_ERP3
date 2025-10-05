@@ -1,6 +1,8 @@
 import { TimesheetsClient } from "@/features/timesheets/TimesheetsClient";
 import { mockTimesheets } from "@/features/timesheets/mock-data";
+import { TIMESHEETS_PAGE_QUERY } from "@/features/timesheets/queries";
 import type { TimesheetListResponse } from "@/features/timesheets/types";
+import { graphqlRequest } from "@/lib/api-client";
 import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {
@@ -11,44 +13,18 @@ const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {
   status: "all",
 };
 
-const TIMESHEETS_QUERY = `
-  query TimesheetsPage($status: String) {
-    timesheets(status: $status) {
-      id
-      userName
-      projectCode
-      projectName
-      taskName
-      workDate
-      hours
-      approvalStatus
-      note
-      submittedAt
-    }
-  }
-`;
-
 async function fetchTimesheets(): Promise<TimesheetListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
   const status = "submitted";
   try {
-    const gql = await fetch(`${base}/graphql`, {
-      method: "POST",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: TIMESHEETS_QUERY, variables: { status } }),
+    const payload = await graphqlRequest<{
+      timesheets?: TimesheetListResponse["items"];
+    }>({
+      query: TIMESHEETS_PAGE_QUERY,
+      variables: { status },
+      baseUrl: base,
     });
-    if (!gql.ok) {
-      throw new Error(`graphql status ${gql.status}`);
-    }
-    const payload = (await gql.json()) as {
-      data?: { timesheets?: TimesheetListResponse["items"] };
-      errors?: Array<{ message: string }>;
-    };
-    if (payload.errors?.length) {
-      throw new Error(payload.errors.map((err) => err.message).join("; "));
-    }
-    const items = Array.isArray(payload.data?.timesheets) ? payload.data?.timesheets ?? [] : [];
+    const items = Array.isArray(payload.timesheets) ? payload.timesheets : [];
     return {
       items,
       meta: {

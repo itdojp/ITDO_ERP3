@@ -72,7 +72,7 @@ test.describe('Projects PoC', () => {
         return;
       }
 
-      if (query?.includes('TransitionProject')) {
+      if (query?.includes('TransitionProject') || query?.includes('projectTransition')) {
         createdProject = {
           ...createdProject,
           status: 'active',
@@ -86,6 +86,19 @@ test.describe('Projects PoC', () => {
       }
 
       await route.continue();
+    });
+
+    await page.route('**/api/v1/projects/*/activate', async (route) => {
+      if (!createdProject) {
+        await route.fulfill({ status: 500 });
+        return;
+      }
+      createdProject = { ...createdProject, status: 'active' };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, project: createdProject }),
+      });
     });
 
     await page.goto('/projects');

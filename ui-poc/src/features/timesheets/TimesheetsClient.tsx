@@ -12,6 +12,7 @@ import type {
   TimesheetStatus,
 } from "./types";
 import { ACTION_LABEL, STATUS_LABEL } from "./types";
+import { CREATE_TIMESHEET_MUTATION, TIMESHEET_ACTION_MUTATION } from "./queries";
 
 const statusFilters: Array<{ value: "all" | TimesheetStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -33,50 +34,6 @@ const dialogRequired: Record<TimesheetAction, boolean> = {
   reject: true,
   resubmit: true,
 };
-
-const CREATE_TIMESHEET_MUTATION = `
-  mutation CreateTimesheet($input: CreateTimesheetInput!) {
-    createTimesheet(input: $input) {
-      ok
-      error
-      message
-      timesheet {
-        id
-        userName
-        projectCode
-        projectName
-        taskName
-        workDate
-        hours
-        approvalStatus
-        note
-        submittedAt
-      }
-    }
-  }
-`;
-
-const TIMESHEET_ACTION_MUTATION = `
-  mutation TimesheetAction($input: TimesheetActionInput!) {
-    timesheetAction(input: $input) {
-      ok
-      error
-      message
-      timesheet {
-        id
-        userName
-        projectCode
-        projectName
-        workDate
-        hours
-        approvalStatus
-        note
-        submittedAt
-      }
-      eventId
-    }
-  }
-`;
 
 type QuerySource = "api" | "mock";
 
@@ -301,6 +258,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       if (!created) {
         throw new Error("GraphQL payload missing timesheet");
       }
+      const desiredStatus = created.approvalStatus ?? creationForm.status;
       setTimesheets((prev) => [created, ...prev]);
       setMeta((prev) => ({
         ...prev,
@@ -354,6 +312,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         if (!created) {
           throw new Error("REST payload missing timesheet");
         }
+        const desiredStatus = created.approvalStatus ?? creationForm.status;
         setTimesheets((prev) => [created, ...prev]);
         setMeta((prev) => ({
           ...prev,
@@ -370,7 +329,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           projectName: "",
           note: "",
         }));
-        setFilter("all");
+        setFilter(desiredStatus === "submitted" ? "submitted" : "all");
         reportClientTelemetry({
           component: "timesheets/client",
           event: "rest_create_succeeded",

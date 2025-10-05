@@ -1,6 +1,8 @@
 import { ProjectsClient } from "@/features/projects/ProjectsClient";
 import { mockProjects } from "@/features/projects/mock-data";
+import { PROJECTS_PAGE_QUERY } from "@/features/projects/queries";
 import type { ProjectListResponse } from "@/features/projects/types";
+import { graphqlRequest } from "@/lib/api-client";
 import { reportServerTelemetry } from "@/lib/telemetry";
 
 const defaultMeta: NonNullable<ProjectListResponse["meta"]> = {
@@ -9,43 +11,17 @@ const defaultMeta: NonNullable<ProjectListResponse["meta"]> = {
   fallback: true,
 };
 
-const PROJECTS_QUERY = `
-  query ProjectsPage($status: String) {
-    projects(status: $status) {
-      id
-      code
-      name
-      clientName
-      status
-      startOn
-      endOn
-      manager
-      health
-      tags
-    }
-  }
-`;
-
 async function fetchProjects(): Promise<ProjectListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
   try {
-    const gql = await fetch(`${base}/graphql`, {
-      method: "POST",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: PROJECTS_QUERY, variables: { status: "all" } }),
+    const gql = await graphqlRequest<{
+      projects?: ProjectListResponse["items"];
+    }>({
+      query: PROJECTS_PAGE_QUERY,
+      variables: { status: "all" },
+      baseUrl: base,
     });
-    if (!gql.ok) {
-      throw new Error(`graphql status ${gql.status}`);
-    }
-    const payload = (await gql.json()) as {
-      data?: { projects?: ProjectListResponse["items"] };
-      errors?: Array<{ message: string }>;
-    };
-    if (payload.errors?.length) {
-      throw new Error(payload.errors.map((err) => err.message).join("; "));
-    }
-    const items = Array.isArray(payload.data?.projects) ? payload.data?.projects ?? [] : [];
+    const items = Array.isArray(gql.projects) ? gql.projects : [];
     return {
       items,
       meta: {

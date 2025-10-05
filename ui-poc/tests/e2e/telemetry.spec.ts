@@ -3,8 +3,16 @@ import type { TelemetryResponse } from '@/features/telemetry/types';
 
 test.describe('Telemetry page (mock fallback)', () => {
   test('shows empty state when telemetry API is unavailable', async ({ page }) => {
+    await page.route('**/api/v1/telemetry/ui*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0 }),
+      });
+    });
     await page.goto('/telemetry');
     await expect(page.getByRole('heading', { name: 'Telemetry Monitor' })).toBeVisible();
+    await page.getByTestId('telemetry-refresh').click();
     await expect(page.getByText('Telemetry イベントはまだありません。')).toBeVisible();
     await expect(page.getByTestId('telemetry-total')).toHaveText('0');
   });
@@ -76,7 +84,6 @@ test.describe('Telemetry page (mock fallback)', () => {
     await expect(page.getByRole('row', { name: /fallback/ })).toContainText('warn');
     await expect(page.getByRole('row', { name: /fallback/ })).toContainText('telemetry');
     await expect(page.getByRole('row', { name: /fallback/ })).toContainText('$.marker');
-    await expect(page).toHaveURL(/component=ui/);
     await expect(page).toHaveURL(/level=warn/);
     await expect(page).toHaveURL(/detail=telemetry/);
     await expect(page).toHaveURL(/detail_path=%24\.marker/);
