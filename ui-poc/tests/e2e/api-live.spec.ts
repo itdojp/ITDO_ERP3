@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 const REQUIRE_API = process.env.E2E_EXPECT_API === 'true';
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? `http://localhost:${process.env.PM_PORT ?? '3001'}`;
+const PM_PORT = process.env.PM_PORT ?? '3001';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? `http://localhost:${PM_PORT}`;
+const MINIO_REQUIRED = (process.env.E2E_REQUIRE_MINIO ?? 'false').toLowerCase() === 'true';
 
 test.describe('API Live Integration', () => {
   test.skip(!REQUIRE_API, 'Set E2E_EXPECT_API=true to run API live checks.');
@@ -14,22 +16,27 @@ test.describe('API Live Integration', () => {
     await expect(page.getByText('API live')).toBeVisible();
 
     await page.goto('/compliance');
-    await expect(page.getByText('API live')).toBeVisible();
+    const liveBadge = page.getByText('API live');
+    await expect(liveBadge).toBeVisible();
   });
 
   test('compliance download provides signed url', async ({ page, request }) => {
     await page.goto('/compliance');
-    await expect(page.getByText('API live')).toBeVisible();
+    const liveBadge = page.getByText('API live');
+    await expect(liveBadge).toBeVisible();
 
     await page.locator('table tbody tr').first().click();
     const downloadButton = page.getByRole('button', { name: 'ダウンロード' }).first();
     await expect(downloadButton).toBeEnabled();
-    await expect(downloadButton).toHaveAttribute('data-download-url', /http:\/\//);
+    await expect(downloadButton).toHaveAttribute('data-download-url', /https?:\/\//);
 
-    const apiResponse = await request.get('http://localhost:3001/api/v1/compliance/invoices');
+    const apiResponse = await request.get(`${API_BASE}/api/v1/compliance/invoices`);
     expect(apiResponse.ok()).toBeTruthy();
     const payload = await apiResponse.json();
-    expect(payload.items?.[0]?.attachments?.[0]?.downloadUrl).toMatch(/^http:\/\/localhost:\d+\//);
+    const firstDownload = payload.items?.[0]?.attachments?.[0]?.downloadUrl as string | undefined;
+    expect(firstDownload).toBeTruthy();
+    const urlPattern = MINIO_REQUIRED ? /^https?:\/\/[^\s]+\/compliance\// : /^https?:\/\//;
+    expect(firstDownload).toMatch(urlPattern);
 
     await downloadButton.click();
   });
@@ -67,6 +74,68 @@ test.describe('API Live Integration', () => {
 
     const refresh = await request.get(`${API_BASE}/metrics/summary?refresh=true`);
     expect(refresh.ok()).toBeTruthy();
+  });
+
+  test('GraphQL metrics summary matches SSE payload', async ({ page, request }) => {
+    const graphqlResponse = await request.post(`${API_BASE}/graphql`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        query: `#graphql
+          query MetricsSummary($refresh: Boolean) {
+            metricsSummary(refresh: $refresh) {
+              events
+              projects
+              timesheets
+              invoices
+              cachedAt
+              stale
+            }
+          }
+        `,
+        variables: { refresh: true },
+      },
+    });
+    expect(graphqlResponse.ok()).toBeTruthy();
+    const payload = await graphqlResponse.json();
+    expect(payload.errors).toBeFalsy();
+    const summary = payload.data?.metricsSummary;
+    expect(summary).toBeTruthy();
+    expect(typeof summary.events).toBe('number');
+    expect(summary.cachedAt).toBeTruthy();
+
+    await page.goto('/');
+    const streamPayload = await page.evaluate(async (base: string) => {
+      return await new Promise<Record<string, unknown>>((resolve, reject) => {
+        try {
+          const url = new URL('/metrics/stream', base).toString();
+          const source = new EventSource(url);
+          const timer = setTimeout(() => {
+            source.close();
+            reject(new Error('SSE timeout'));
+          }, 8000);
+          source.onmessage = (event) => {
+            clearTimeout(timer);
+            source.close();
+            try {
+              resolve(JSON.parse(event.data));
+            } catch (error) {
+              reject(error);
+            }
+          };
+          source.onerror = (event) => {
+            clearTimeout(timer);
+            source.close();
+            reject(new Error(`SSE error: ${JSON.stringify(event)}`));
+          };
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }, API_BASE);
+
+    expect(streamPayload).toHaveProperty('events');
+    expect(streamPayload).toHaveProperty('projects');
+    expect(streamPayload).toHaveProperty('cachedAt');
   });
 
   test('telemetry page displays latest events', async ({ page, request }) => {
