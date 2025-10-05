@@ -25,19 +25,7 @@ const buildInitialSnapshot = (initial?: TelemetryFilters): TelemetryFilters => (
 });
 
 export function TelemetryFiltersProvider({ initialFilters, children }: { initialFilters?: TelemetryFilters; children: ReactNode }) {
-  const initialSnapshot = useMemo(
-    () => buildInitialSnapshot(initialFilters),
-    [
-      initialFilters?.component,
-      initialFilters?.event,
-      initialFilters?.detail,
-      initialFilters?.detailPath,
-      initialFilters?.level,
-      initialFilters?.origin,
-      initialFilters?.sort,
-      initialFilters?.order,
-    ],
-  );
+  const initialSnapshot = useMemo(() => buildInitialSnapshot(initialFilters), [initialFilters]);
 
   const { formFilters, setFormFilters, persistFilters, readFromStorage } = useTelemetryFilters(initialSnapshot);
   const [filters, setFiltersState] = useState<TelemetryFilters>(initialSnapshot);
@@ -56,19 +44,7 @@ export function TelemetryFiltersProvider({ initialFilters, children }: { initial
     setFiltersState(merged);
     setFormFilters(merged);
     persistFilters(merged);
-  }, [
-    initialSnapshot.component,
-    initialSnapshot.event,
-    initialSnapshot.detail,
-    initialSnapshot.detailPath,
-    initialSnapshot.level,
-    initialSnapshot.origin,
-    initialSnapshot.sort,
-    initialSnapshot.order,
-    persistFilters,
-    readFromStorage,
-    setFormFilters,
-  ]);
+  }, [initialSnapshot, persistFilters, readFromStorage, setFormFilters]);
 
   const applyFilters = useCallback(
     (next: TelemetryFilters) => {
