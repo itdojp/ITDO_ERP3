@@ -20,6 +20,17 @@ test.describe('API Live Integration', () => {
     await expect(liveBadge).toBeVisible();
   });
 
+  test('timesheets summary reflects filter changes', async ({ page }) => {
+    await page.goto('/timesheets');
+    await expect(page.getByText('API live')).toBeVisible();
+    await expect(page.getByTestId('timesheets-summary-count')).toContainText('表示件数');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('指定なし');
+
+    await page.getByTestId('timesheets-search-input').fill('DX');
+    await page.getByRole('button', { name: '検索' }).click();
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('"DX"');
+  });
+
   test('compliance download provides signed url', async ({ page, request }) => {
     await page.goto('/compliance');
     const liveBadge = page.getByText('API live');

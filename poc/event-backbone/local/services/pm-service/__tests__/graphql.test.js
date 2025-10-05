@@ -57,6 +57,29 @@ describe('GraphQL schema', () => {
     });
   });
 
+  test('filters projects by manager and tag', async () => {
+    const response = await graphql(
+      `
+        query Projects($manager: String, $tag: String) {
+          projects(manager: $manager, tag: $tag) {
+            id
+            manager
+            tags
+          }
+        }
+      `,
+      { manager: '山田', tag: 'dx' },
+    ).expect(200);
+
+    expect(response.body.errors).toBeUndefined();
+    const returned = response.body.data.projects;
+    expect(returned.length).toBeGreaterThan(0);
+    returned.forEach((project) => {
+      expect((project.manager || '').includes('山田')).toBeTruthy();
+      expect(project.tags).toContain('DX');
+    });
+  });
+
   test('creates and transitions project via GraphQL', async () => {
     const createRes = await graphql(
       `
@@ -154,6 +177,29 @@ describe('GraphQL schema', () => {
     rows.forEach((row) => {
       const haystack = `${row.projectCode} ${row.userName}`.toLowerCase();
       expect(haystack).toContain(keyword.toLowerCase());
+    });
+  });
+
+  test('filters timesheets by user and project code', async () => {
+    const response = await graphql(
+      `
+        query Timesheets($userName: String, $projectCode: String) {
+          timesheets(userName: $userName, projectCode: $projectCode) {
+            id
+            userName
+            projectCode
+          }
+        }
+      `,
+      { userName: '佐藤', projectCode: 'dx-2025-01' },
+    ).expect(200);
+
+    expect(response.body.errors).toBeUndefined();
+    const rows = response.body.data.timesheets;
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((row) => {
+      expect(row.projectCode.toLowerCase()).toBe('dx-2025-01');
+      expect(row.userName).toContain('佐藤');
     });
   });
 
