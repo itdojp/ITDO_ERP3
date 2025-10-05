@@ -101,7 +101,6 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   }, [filter]);
 
   const keywordSummary = appliedKeyword.trim().length > 0 ? `"${appliedKeyword}"` : "指定なし";
-
   const apiReturned = meta.returned ?? timesheets.length;
   const apiTotal = meta.total ?? timesheets.length;
 
@@ -208,6 +207,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           false,
           statusValue === "all" ? "all" : (statusValue as TimesheetStatus),
         );
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "list_fetch_succeeded",
+          level: "info",
+          detail: {
+            strategy: "graphql",
+            status: statusValue,
+            keyword: trimmedKeyword,
+            returned: normalized.length,
+            total: normalized.length,
+            fallback: false,
+          },
+        });
         finishLoading();
         return;
       } catch (error) {
@@ -242,6 +254,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         );
         reportClientTelemetry({
           component: "timesheets/client",
+          event: "list_fetch_succeeded",
+          level: "info",
+          detail: {
+            strategy: "rest",
+            status: statusValue,
+            keyword: trimmedKeyword,
+            returned: normalized.length,
+            total: rest.meta?.total ?? normalized.length,
+            fallback: rest.meta?.fallback ?? false,
+          },
+        });
+        reportClientTelemetry({
+          component: "timesheets/client",
           event: "rest_list_fallback",
           level: "info",
           detail: {
@@ -268,6 +293,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           .map((entry) => normalizeTimesheet(entry))
           .filter(Boolean) as TimesheetEntry[];
         assignTimesheets(fallbackItems, true, "all");
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "list_fetch_succeeded",
+          level: "info",
+          detail: {
+            strategy: "mock",
+            status: statusValue,
+            keyword: trimmedKeyword,
+            returned: fallbackItems.length,
+            total: fallbackItems.length,
+            fallback: true,
+          },
+        });
         finishLoading();
       }
     },
