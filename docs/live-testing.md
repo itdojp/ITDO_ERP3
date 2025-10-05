@@ -10,17 +10,18 @@
 
 ## 2. ローカルでのライブ検証
 ```bash
-# MinIO 有効・PM ポートを 3101 に変更した上でライブテストのみ実行
-FORCE_PM_PORT=3001 \
-  USE_MINIO=true \
-  PM_PORT=3101 \
-  UI_PORT=4100 \
-  UI_HEADLESS=true \
-  scripts/run_podman_ui_poc.sh --tests-only
+# デフォルト設定でライブテストのみ実行
+make live-tests
+
+# MinIO 署名 URL を必須にしたい場合
+make live-tests-minio PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true
+
+# 直接スクリプトを呼び出したい場合
+FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scripts/run_podman_ui_poc.sh --tests-only
 ```
 
 - `FORCE_PM_PORT=3001` : Playwright ライブテストを既定ポート 3001 で実行するためにスタックを再起動します。
-- `USE_MINIO=true` : MinIO サービスを有効化し、署名付き URL の生成をテストします。
+- `USE_MINIO=true` : MinIO サービスを有効化し、署名付き URL の生成をテストします（`make live-tests-minio` が自動で付与）。
 - `SKIP_GRAPHQL_PREFLIGHT=true` を指定すると、GraphQL ウォームアップをスキップして素早くテストに入れます（起動直後の 400 応答が気になる場合は `false` のままにしてください）。
 - `E2E_REQUIRE_MINIO=true` を併用すると、Playwright が MinIO 署名 URL の有無を検証します。
 

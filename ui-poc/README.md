@@ -95,6 +95,7 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 - Playwright ドライバの取得: `cd ui-poc && npx playwright install chromium`
 - テスト実行: `cd ui-poc && npm run test:e2e`
 - Podman を起動して API 連携（`API live` バッジ）を確認したい場合は `npm run test:e2e:live` を利用してください。MinIO を必須として検証する場合は `E2E_REQUIRE_MINIO=true` を併用し、GraphQL ウォームアップを無効化したいときは `SKIP_GRAPHQL_PREFLIGHT=true` を指定します。
+- ルートディレクトリの `Makefile` から `make live-tests` / `make live-tests-minio` を用いると、環境変数を毎回指定せずに Podman ライブ検証を実行できます。
 - GitHub Actions の `api-live-minio` ワークフローを実行すると、MinIO 有効化 (`USE_MINIO=true`) と署名付き URL 検証 (`E2E_REQUIRE_MINIO=true`) を含む Podman ベースのライブシナリオを CI 上で確認できます。
 - `npm run test:e2e` は Telemetry 再試行バナーと SSE の動作モック（`tests/e2e/metrics.spec.ts`）も検証します。ライブ API と組み合わせる場合は `E2E_EXPECT_API=true` を設定してください。
 
