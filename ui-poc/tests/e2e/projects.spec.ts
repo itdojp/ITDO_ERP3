@@ -74,6 +74,8 @@ test.describe('Projects PoC', () => {
     });
 
     await page.goto('/projects');
+    await page.evaluate(() => localStorage.removeItem('projects-filters-v1'));
+    await page.reload();
 
     await expect(page.locator('article')).toHaveCount(dataset.length);
     await page.getByTestId('projects-search-input').fill('Analytics');
@@ -81,8 +83,86 @@ test.describe('Projects PoC', () => {
     await expect(page.locator('article')).toHaveCount(1);
     await expect(page.locator('article').first()).toContainText('Analytics Platform');
 
-    await page.getByRole('button', { name: 'クリア' }).click();
+    await page.getByRole('button', { name: 'All' }).click();
+    await page.getByTestId('projects-search-input').fill('');
+    await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('article')).toHaveCount(dataset.length);
+  });
+
+  test('persists filters to query and localStorage', async ({ page }) => {
+    const dataset = [
+      {
+        id: 'PRJ-3000',
+        code: 'PRJ-3000',
+        name: 'Rev Ops Expansion',
+        clientName: 'Northwind',
+        status: 'planned',
+        startOn: '2025-04-01',
+        endOn: null,
+        manager: '田中',
+        health: 'green',
+        tags: ['ops'],
+      },
+      {
+        id: 'PRJ-4000',
+        code: 'ANL-4000',
+        name: 'Analytics Launcher',
+        clientName: 'Contoso',
+        status: 'active',
+        startOn: '2025-02-12',
+        endOn: null,
+        manager: '佐藤',
+        health: 'yellow',
+        tags: ['data'],
+      },
+    ];
+
+    await page.route('**/graphql', async (route) => {
+      const payload = JSON.parse(route.request().postData() ?? '{}');
+      const { query, variables = {} } = payload;
+      if (query?.includes('ProjectsPage')) {
+        const status = (variables.status ?? 'all').toLowerCase();
+        const keyword = (variables.keyword ?? '').toLowerCase();
+        let filtered = dataset;
+        if (status !== 'all') {
+          filtered = filtered.filter((project) => project.status === status);
+        }
+        if (keyword) {
+          filtered = filtered.filter((project) => {
+            const haystack = `${project.name} ${project.code} ${project.clientName ?? ''}`.toLowerCase();
+            return haystack.includes(keyword);
+          });
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { projects: filtered } }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto('/projects');
+    await page.evaluate(() => localStorage.removeItem('projects-filters-v1'));
+    await page.reload();
+
+    await page.getByRole('button', { name: 'Active' }).click();
+    await page.getByTestId('projects-search-input').fill('Analytics');
+    await page.getByRole('button', { name: '検索' }).click();
+
+    await expect(page).toHaveURL(/status=active/);
+    await expect(page).toHaveURL(/keyword=Analytics/);
+    await expect(page.locator('article')).toHaveCount(1);
+    await expect(page.locator('article').first()).toContainText('Analytics Launcher');
+
+    await page.reload();
+    await expect(page.getByTestId('projects-search-input')).toHaveValue('Analytics');
+    await expect(page.locator('article')).toHaveCount(1);
+
+    await page.goto('/projects', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('projects-search-input')).toHaveValue('Analytics');
+    await expect(page.locator('article')).toHaveCount(1);
   });
 
   test('creates project via GraphQL form with API stubs', async ({ page }) => {

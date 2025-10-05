@@ -11,14 +11,23 @@ const defaultMeta: NonNullable<ProjectListResponse["meta"]> = {
   fallback: true,
 };
 
-async function fetchProjects(): Promise<ProjectListResponse> {
+const ALLOWED_STATUS = new Set(["all", "planned", "active", "onhold", "closed"]);
+
+type ProjectFetchParams = {
+  status?: string | null;
+  keyword?: string | null;
+};
+
+async function fetchProjects({ status, keyword }: ProjectFetchParams = {}): Promise<ProjectListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
+  const normalizedStatus = typeof status === "string" && ALLOWED_STATUS.has(status) ? status : "all";
+  const normalizedKeyword = typeof keyword === "string" && keyword.trim().length > 0 ? keyword.trim() : undefined;
   try {
     const gql = await graphqlRequest<{
       projects?: ProjectListResponse["items"];
     }>({
       query: PROJECTS_PAGE_QUERY,
-      variables: { status: "all" },
+      variables: { status: normalizedStatus, keyword: normalizedKeyword },
       baseUrl: base,
     });
     const items = Array.isArray(gql.projects) ? gql.projects : [];
@@ -42,7 +51,11 @@ async function fetchProjects(): Promise<ProjectListResponse> {
       },
     });
     try {
-      const res = await fetch(`${base}/api/v1/projects`, { cache: "no-store" });
+      const url = new URL("/api/v1/projects", base);
+      if (normalizedStatus && normalizedStatus !== "all") {
+        url.searchParams.set("status", normalizedStatus);
+      }
+      const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }
@@ -86,8 +99,19 @@ async function fetchProjects(): Promise<ProjectListResponse> {
   }
 }
 
-export default async function ProjectsPage() {
-  const data = await fetchProjects();
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[]>;
+}) {
+  const statusParam = typeof searchParams?.status === "string" ? searchParams.status : Array.isArray(searchParams?.status) ? searchParams?.status[0] ?? null : null;
+  const keywordParam = typeof searchParams?.keyword === "string"
+    ? searchParams.keyword
+    : Array.isArray(searchParams?.keyword)
+      ? searchParams.keyword[0] ?? null
+      : null;
+
+  const data = await fetchProjects({ status: statusParam, keyword: keywordParam });
 
   return (
     <section className="space-y-6">
