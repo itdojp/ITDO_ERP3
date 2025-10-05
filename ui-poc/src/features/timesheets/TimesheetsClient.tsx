@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import type {
@@ -12,7 +12,8 @@ import type {
   TimesheetStatus,
 } from "./types";
 import { ACTION_LABEL, STATUS_LABEL } from "./types";
-import { CREATE_TIMESHEET_MUTATION, TIMESHEET_ACTION_MUTATION } from "./queries";
+import { mockTimesheets } from "./mock-data";
+import { CREATE_TIMESHEET_MUTATION, TIMESHEETS_PAGE_QUERY, TIMESHEET_ACTION_MUTATION } from "./queries";
 
 const statusFilters: Array<{ value: "all" | TimesheetStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -72,6 +73,11 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
   const [meta, setMeta] = useState(initialMeta);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const fetchTokenRef = useRef(0);
   const [creationForm, setCreationForm] = useState({
     userName: "",
     projectCode: "",
@@ -88,17 +94,24 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const source: QuerySource = meta.fallback ? "mock" : "api";
 
   const filtered = useMemo(() => {
-    if (filter === "all") return timesheets;
-    return timesheets.filter((ts) => ts.approvalStatus === filter);
-  }, [timesheets, filter]);
+    const keyword = appliedKeyword.trim().toLowerCase();
+    return timesheets.filter((entry) => {
+      const statusMatch = filter === "all" || entry.approvalStatus === filter;
+      if (!statusMatch) return false;
+      if (!keyword) return true;
+      const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [timesheets, filter, appliedKeyword]);
 
   const closeDialog = () => setDialog(initialDialog);
 
-  const normalizeTimesheet = (entry: Partial<TimesheetEntry> | null | undefined): TimesheetEntry | null => {
-    if (!entry?.id) return null;
-    const status = (entry.approvalStatus as TimesheetStatus) ?? "draft";
-    return {
-      id: entry.id,
+  const normalizeTimesheet = useCallback(
+    (entry: Partial<TimesheetEntry> | null | undefined): TimesheetEntry | null => {
+      if (!entry?.id) return null;
+      const status = (entry.approvalStatus as TimesheetStatus) ?? "draft";
+      return {
+        id: entry.id,
       userName: entry.userName ?? "",
       projectCode: entry.projectCode ?? "",
       projectName: entry.projectName ?? entry.projectCode ?? "",
@@ -106,10 +119,12 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       workDate: entry.workDate ?? new Date().toISOString().slice(0, 10),
       hours: Number.isFinite(entry.hours) ? Number(entry.hours) : 0,
       approvalStatus: status,
-      note: entry.note ?? undefined,
-      submittedAt: entry.submittedAt ?? undefined,
-    };
-  };
+        note: entry.note ?? undefined,
+        submittedAt: entry.submittedAt ?? undefined,
+      };
+    },
+    [],
+  );
 
   const updateTimesheetItem = (next: TimesheetEntry) => {
     setTimesheets((prev) =>
@@ -128,6 +143,128 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       fetchedAt: new Date().toISOString(),
     }));
   };
+
+  const fetchTimesheets = useCallback(
+    async (statusValue: TimesheetStatus | "all", keywordValue: string) => {
+      const trimmedKeyword = keywordValue.trim();
+      fetchTokenRef.current += 1;
+      const token = fetchTokenRef.current;
+      setListLoading(true);
+      setListError(null);
+
+      const assignTimesheets = (
+        items: TimesheetEntry[],
+        fallback: boolean,
+        statusMeta: TimesheetStatus | "all",
+      ) => {
+        if (token !== fetchTokenRef.current) {
+          return;
+        }
+        setTimesheets(items);
+        setMeta({
+          total: items.length,
+          returned: items.length,
+          fetchedAt: new Date().toISOString(),
+          fallback,
+          status: statusMeta,
+        });
+      };
+
+      const finishLoading = () => {
+        if (token === fetchTokenRef.current) {
+          setListLoading(false);
+        }
+      };
+
+      try {
+        const gql = await graphqlRequest<{
+          timesheets?: Partial<TimesheetEntry>[];
+        }>({
+          query: TIMESHEETS_PAGE_QUERY,
+          variables: {
+            status: statusValue,
+            keyword: trimmedKeyword.length > 0 ? trimmedKeyword : undefined,
+          },
+        });
+
+        const items = Array.isArray(gql.timesheets) ? gql.timesheets : [];
+        const normalized = items
+          .map((entry) => normalizeTimesheet(entry))
+          .filter(Boolean) as TimesheetEntry[];
+        assignTimesheets(
+          normalized,
+          false,
+          statusValue === "all" ? "all" : (statusValue as TimesheetStatus),
+        );
+        finishLoading();
+        return;
+      } catch (error) {
+        console.warn("[timesheets] graphql list failed, fallback to REST", error);
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "graphql_list_failed",
+          level: "warn",
+          detail: {
+            status: statusValue,
+            keyword: trimmedKeyword,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+
+      try {
+        const params = new URLSearchParams();
+        if (statusValue !== "all") {
+          params.set("status", statusValue);
+        }
+        const path = `/api/v1/timesheets${params.toString() ? `?${params.toString()}` : ""}`;
+        const rest = await apiRequest<TimesheetListResponse>({ path });
+        const items = Array.isArray(rest.items) ? rest.items : [];
+        const normalized = items
+          .map((entry) => normalizeTimesheet(entry))
+          .filter(Boolean) as TimesheetEntry[];
+        assignTimesheets(
+          normalized,
+          rest.meta?.fallback ?? false,
+          (rest.meta?.status as TimesheetStatus | "all") ?? statusValue ?? "all",
+        );
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "rest_list_fallback",
+          level: "info",
+          detail: {
+            status: statusValue,
+            keyword: trimmedKeyword,
+          },
+        });
+        finishLoading();
+        return;
+      } catch (restError) {
+        console.error("[timesheets] REST fallback failed, using mock", restError);
+        reportClientTelemetry({
+          component: "timesheets/client",
+          event: "rest_list_failed",
+          level: "error",
+          detail: {
+            status: statusValue,
+            keyword: trimmedKeyword,
+            error: restError instanceof Error ? restError.message : String(restError),
+          },
+        });
+        setListError("API から取得できなかったためモックデータを表示しています");
+        const fallbackItems = (mockTimesheets.items ?? [])
+          .map((entry) => normalizeTimesheet(entry))
+          .filter(Boolean) as TimesheetEntry[];
+        assignTimesheets(fallbackItems, true, "all");
+        finishLoading();
+      }
+    },
+    [normalizeTimesheet],
+  );
+
+  useEffect(() => {
+    void fetchTimesheets(filter, appliedKeyword);
+  }, [fetchTimesheets, filter, appliedKeyword]);
 
   const performAction = async (entry: TimesheetEntry, action: TimesheetAction, payload?: ActionPayload) => {
     setPendingId(entry.id);
@@ -275,11 +412,14 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         projectName: "",
         note: "",
       }));
-      if (desiredStatus !== filter && desiredStatus !== "submitted") {
-        setFilter("all");
-      } else {
-        setFilter(desiredStatus === "submitted" ? "submitted" : "all");
-      }
+      const nextFilter =
+        desiredStatus !== filter && desiredStatus !== "submitted"
+          ? "all"
+          : desiredStatus === "submitted"
+            ? "submitted"
+            : "all";
+      setFilter(nextFilter);
+      void fetchTimesheets(nextFilter, appliedKeyword);
       return;
     } catch (error) {
       console.warn("[timesheets] graphql create failed, fallback to REST", error);
@@ -329,7 +469,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           projectName: "",
           note: "",
         }));
-        setFilter(desiredStatus === "submitted" ? "submitted" : "all");
+        const nextFilter = desiredStatus === "submitted" ? "submitted" : "all";
+        setFilter(nextFilter);
         reportClientTelemetry({
           component: "timesheets/client",
           event: "rest_create_succeeded",
@@ -339,6 +480,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             timesheetId: created.id,
           },
         });
+        void fetchTimesheets(nextFilter, appliedKeyword);
       } catch (restError) {
         setCreationError((restError as Error).message ?? "タイムシート追加に失敗しました");
         reportClientTelemetry({
@@ -480,6 +622,51 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         ))}
       </div>
 
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(event: FormEvent<HTMLFormElement>) => {
+          event.preventDefault();
+          const keyword = searchTerm.trim();
+          if (keyword === appliedKeyword) {
+            void fetchTimesheets(filter, keyword);
+          }
+          setAppliedKeyword(keyword);
+        }}
+      >
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>キーワード検索</span>
+          <input
+            className="w-64 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="プロジェクト・メンバー名など"
+            data-testid="timesheets-search-input"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-md border border-sky-500 bg-sky-500/20 px-4 py-2 text-xs font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:text-slate-500"
+            disabled={listLoading && appliedKeyword === searchTerm.trim()}
+          >
+            検索
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTerm("");
+              if (appliedKeyword !== "") {
+                setAppliedKeyword("");
+              }
+            }}
+            className="rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
+            disabled={listLoading && appliedKeyword === "" && searchTerm.trim() === ""}
+          >
+            クリア
+          </button>
+        </div>
+      </form>
+
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span>
           表示件数: {filtered.length.toLocaleString()} / {meta.total.toLocaleString()} 件
@@ -492,6 +679,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         >
           {source === "api" ? "API live" : "Mock data"}
         </span>
+        {listLoading ? <span className="text-sky-300">読み込み中...</span> : null}
+        {listError ? <span className="text-amber-300">{listError}</span> : null}
       </div>
 
       {message ? <p className="text-xs text-sky-300">{message}</p> : null}

@@ -1,6 +1,6 @@
 export const TIMESHEETS_PAGE_QUERY = `#graphql
-  query TimesheetsPage($status: String) {
-    timesheets(status: $status) {
+  query TimesheetsPage($status: String, $keyword: String) {
+    timesheets(status: $status, keyword: $keyword) {
       id
       userName
       projectCode

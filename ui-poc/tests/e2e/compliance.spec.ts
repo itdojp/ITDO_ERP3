@@ -13,7 +13,9 @@ test.describe('Compliance PoC', () => {
     await expect(firstRow).toBeVisible();
 
     const SUBJECT_COLUMN_INDEX = 3;
-    const subjectText = (await firstRow.locator('td').nth(SUBJECT_COLUMN_INDEX).innerText()).trim();
+    const subjectCell = firstRow.locator('td').nth(SUBJECT_COLUMN_INDEX);
+    await expect(subjectCell).not.toHaveText('');
+    const subjectText = (await subjectCell.innerText()).trim();
 
     await firstRow.click();
     await expect(page.getByRole('heading', { name: subjectText })).toBeVisible();
@@ -30,7 +32,9 @@ test.describe('Compliance PoC', () => {
     await expect(meta).toContainText('ヒット件数');
 
     await page.getByLabel('並び順 (項目)').selectOption('amount');
-    await expect(page.locator('table tbody tr').first().locator('td').nth(3)).toContainText(/Laptop refresh program|Laptop/i);
+    const firstAmountCell = page.locator('table tbody tr').first().locator('td').nth(3);
+    await expect(firstAmountCell).not.toHaveText('');
+    await expect(firstAmountCell).toContainText(/Laptop refresh program|Laptop/i);
 
     await page.getByLabel('並び順 (方向)').selectOption('asc');
     await expect(page.locator('table tbody tr').first().locator('td').nth(3)).toContainText(/電力使用料|電力|Laptop refresh program/i);

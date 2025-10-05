@@ -301,15 +301,30 @@ export function createGraphQLSchema({
         args: {
           status: { type: GraphQLString },
           projectId: { type: GraphQLString },
+          keyword: { type: GraphQLString },
         },
         resolve: (_root, args) => {
           const status = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
           const projectId = typeof args?.projectId === 'string' ? args.projectId.trim() : '';
+          const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : '';
           const filteredTimesheets = timesheets.filter((sheet) => {
             const statusMatch = !status || status === 'all' || sheet.approvalStatus === status;
             if (!statusMatch) return false;
-            if (!projectId) return true;
-            return sheet.projectId === projectId || sheet.projectCode === projectId;
+            const projectMatch =
+              !projectId || sheet.projectId === projectId || sheet.projectCode === projectId;
+            if (!projectMatch) return false;
+            if (!keyword) return true;
+            const haystack = [
+              sheet.projectCode,
+              sheet.projectName,
+              sheet.userName,
+              sheet.note,
+              sheet.taskName,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+            return haystack.includes(keyword);
           });
           return cloneDeep(filteredTimesheets);
         },

@@ -19,6 +19,72 @@ test.describe('Projects PoC', () => {
     await expect(page.locator('article').first()).toContainText('Active');
   });
 
+  test('filters projects by keyword search', async ({ page }) => {
+    const dataset = [
+      {
+        id: 'PRJ-1000',
+        code: 'PRJ-1000',
+        name: 'Marketing Revamp',
+        clientName: 'Northwind Trading',
+        status: 'planned',
+        startOn: '2025-03-01',
+        endOn: null,
+        manager: '田中',
+        health: 'green',
+        tags: ['marketing'],
+      },
+      {
+        id: 'PRJ-2000',
+        code: 'ANL-2000',
+        name: 'Analytics Platform',
+        clientName: 'Contoso Analytics',
+        status: 'active',
+        startOn: '2025-01-15',
+        endOn: null,
+        manager: '佐藤',
+        health: 'yellow',
+        tags: ['data'],
+      },
+    ];
+
+    await page.route('**/graphql', async (route) => {
+      const payload = JSON.parse(route.request().postData() ?? '{}');
+      const { query, variables = {} } = payload;
+      if (query?.includes('ProjectsPage')) {
+        const keyword = (variables.keyword ?? '').toLowerCase();
+        const status = (variables.status ?? 'all').toLowerCase();
+        let filtered = dataset;
+        if (status !== 'all') {
+          filtered = filtered.filter((project) => project.status === status);
+        }
+        if (keyword) {
+          filtered = filtered.filter((project) => {
+            const haystack = `${project.name} ${project.code} ${project.clientName ?? ''}`.toLowerCase();
+            return haystack.includes(keyword);
+          });
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { projects: filtered } }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto('/projects');
+
+    await expect(page.locator('article')).toHaveCount(dataset.length);
+    await page.getByTestId('projects-search-input').fill('Analytics');
+    await page.getByRole('button', { name: '検索' }).click();
+    await expect(page.locator('article')).toHaveCount(1);
+    await expect(page.locator('article').first()).toContainText('Analytics Platform');
+
+    await page.getByRole('button', { name: 'クリア' }).click();
+    await expect(page.locator('article')).toHaveCount(dataset.length);
+  });
+
   test('creates project via GraphQL form with API stubs', async ({ page }) => {
     test.skip(API_MODE, 'GraphQL stub test runs only in mock mode');
     const baseProjects = [
@@ -43,10 +109,25 @@ test.describe('Projects PoC', () => {
       const { query, variables } = payload;
 
       if (query?.includes('ProjectsPage')) {
+        const keyword = (variables?.keyword ?? '').toLowerCase();
+        const status = (variables?.status ?? 'all').toLowerCase();
+        let responseProjects = [...baseProjects];
+        if (createdProject) {
+          responseProjects = [createdProject, ...responseProjects];
+        }
+        if (status !== 'all') {
+          responseProjects = responseProjects.filter((project) => project.status === status);
+        }
+        if (keyword) {
+          responseProjects = responseProjects.filter((project) => {
+            const haystack = `${project.name} ${project.code} ${project.clientName ?? ''}`.toLowerCase();
+            return haystack.includes(keyword);
+          });
+        }
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ data: { projects: baseProjects } }),
+          body: JSON.stringify({ data: { projects: responseProjects } }),
         });
         return;
       }
