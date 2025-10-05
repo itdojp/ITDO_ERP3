@@ -16,18 +16,30 @@ const ALLOWED_STATUS = new Set(["all", "planned", "active", "onhold", "closed"])
 type ProjectFetchParams = {
   status?: string | null;
   keyword?: string | null;
+  manager?: string | null;
+  tag?: string | null;
+  health?: string | null;
 };
 
-async function fetchProjects({ status, keyword }: ProjectFetchParams = {}): Promise<ProjectListResponse> {
+async function fetchProjects({ status, keyword, manager, tag, health }: ProjectFetchParams = {}): Promise<ProjectListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
   const normalizedStatus = typeof status === "string" && ALLOWED_STATUS.has(status) ? status : "all";
   const normalizedKeyword = typeof keyword === "string" && keyword.trim().length > 0 ? keyword.trim() : undefined;
+  const normalizedManager = typeof manager === "string" && manager.trim().length > 0 ? manager.trim() : undefined;
+  const normalizedTag = typeof tag === "string" && tag.trim().length > 0 ? tag.trim() : undefined;
+  const normalizedHealth = typeof health === "string" && ["green", "yellow", "red"].includes(health.trim()) ? health.trim() : undefined;
   try {
     const gql = await graphqlRequest<{
       projects?: ProjectListResponse["items"];
     }>({
       query: PROJECTS_PAGE_QUERY,
-      variables: { status: normalizedStatus, keyword: normalizedKeyword },
+      variables: {
+        status: normalizedStatus,
+        keyword: normalizedKeyword,
+        manager: normalizedManager,
+        tag: normalizedTag,
+        health: normalizedHealth,
+      },
       baseUrl: base,
     });
     const items = Array.isArray(gql.projects) ? gql.projects : [];
@@ -69,10 +81,34 @@ async function fetchProjects({ status, keyword }: ProjectFetchParams = {}): Prom
           items: data.items?.length ?? 0,
         },
       });
+      const filteredItems = (data.items ?? []).filter((project) => {
+        if (normalizedHealth && project.health !== normalizedHealth) {
+          return false;
+        }
+        if (normalizedManager) {
+          const managerValue = (project.manager ?? "").toString().toLowerCase();
+          if (!managerValue.includes(normalizedManager.toLowerCase())) {
+            return false;
+          }
+        }
+        if (normalizedTag) {
+          const tags = Array.isArray(project.tags) ? project.tags.map((value) => value?.toString().toLowerCase()) : [];
+          if (!tags.includes(normalizedTag.toLowerCase())) {
+            return false;
+          }
+        }
+        if (normalizedKeyword) {
+          const haystack = `${project.name ?? ""} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
+          if (!haystack.includes(normalizedKeyword.toLowerCase())) {
+            return false;
+          }
+        }
+        return true;
+      });
       return {
-        items: data.items ?? [],
+        items: filteredItems,
         meta: {
-          total: data.meta?.total ?? data.items?.length ?? 0,
+          total: filteredItems.length,
           fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
           fallback: data.meta?.fallback ?? false,
         },
@@ -110,8 +146,23 @@ export default async function ProjectsPage({
     : Array.isArray(searchParams?.keyword)
       ? searchParams.keyword[0] ?? null
       : null;
+  const managerParam = typeof searchParams?.manager === "string"
+    ? searchParams.manager
+    : Array.isArray(searchParams?.manager)
+      ? searchParams.manager[0] ?? null
+      : null;
+  const tagParam = typeof searchParams?.tag === "string"
+    ? searchParams.tag
+    : Array.isArray(searchParams?.tag)
+      ? searchParams.tag[0] ?? null
+      : null;
+  const healthParam = typeof searchParams?.health === "string"
+    ? searchParams.health
+    : Array.isArray(searchParams?.health)
+      ? searchParams.health[0] ?? null
+      : null;
 
-  const data = await fetchProjects({ status: statusParam, keyword: keywordParam });
+  const data = await fetchProjects({ status: statusParam, keyword: keywordParam, manager: managerParam, tag: tagParam, health: healthParam });
 
   return (
     <section className="space-y-6">
