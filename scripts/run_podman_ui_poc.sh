@@ -12,6 +12,7 @@ UI_HEADLESS="${UI_HEADLESS:-false}"
 RUN_TESTS=false
 TESTS_ONLY=false
 USE_MINIO_FLAG="${USE_MINIO:-false}"
+USE_BUILD="${PODMAN_BUILD:-true}"
 
 usage() {
   cat <<USAGE
@@ -21,10 +22,12 @@ Options:
   --run-tests      Execute \`npm run test:e2e:live\` after the stack becomes healthy.
   --tests-only     Run live tests and skip launching the Next.js dev server (implies --run-tests).
   --with-minio     Export USE_MINIO=true before starting the stack.
+  --no-build       Skip \`podman-compose --build\` and reuse existing images (or set PODMAN_BUILD=false).
+  --build          Force \`podman-compose --build\` regardless of PODMAN_BUILD.
   -h, --help       Show this help message.
 
 Environment variables:
-  PM_PORT, UI_PORT, PM_CONTAINER_PORT, UI_HEADLESS, USE_MINIO
+  PM_PORT, UI_PORT, PM_CONTAINER_PORT, UI_HEADLESS, USE_MINIO, PODMAN_BUILD
 USAGE
 }
 
@@ -41,6 +44,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-minio)
       USE_MINIO_FLAG=true
+      shift
+      ;;
+    --no-build)
+      USE_BUILD=false
+      shift
+      ;;
+    --build)
+      USE_BUILD=true
       shift
       ;;
     -h|--help)
@@ -118,7 +129,16 @@ cd "${PROJECT_DIR}"
 
 echo "[podman] Starting backend PoC stack via podman-compose"
 echo "[podman] USE_MINIO=${USE_MINIO_FLAG}"
-podman-compose -f "${COMPOSE_FILE}" up -d --build
+compose_args=(-f "${COMPOSE_FILE}" up -d)
+case "${USE_BUILD,,}" in
+  false|no|0)
+    echo "[podman] Skipping image build step (PODMAN_BUILD=${USE_BUILD})"
+    ;;
+  *)
+    compose_args+=(--build)
+    ;;
+esac
+podman-compose "${compose_args[@]}"
 
 echo "[health] Waiting for pm-service on http://localhost:${PM_HOST_PORT}"
 pm_service_up=false

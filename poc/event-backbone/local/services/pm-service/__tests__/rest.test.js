@@ -200,6 +200,44 @@ describe('Telemetry API', () => {
     expect(wildcardRes.body.items[0].detail.checks.second.status).toBe('pending');
   });
 
+  test('supports quoted keys and invalid JSONPath fallbacks', async () => {
+    const { app: telemetryApp } = createTestServer({ enableRest: true });
+
+    await request(telemetryApp)
+      .post('/api/v1/telemetry/ui')
+      .set('Content-Type', 'application/json')
+      .send({
+        component: 'gateway',
+        event: 'trace-recorded',
+        level: 'info',
+        detail: {
+          trace: {
+            'id.v1': 'trace-alpha',
+            segments: [{ status: 'ok' }, { status: 'degraded' }],
+          },
+        },
+      })
+      .expect(204);
+
+    const quotedKey = await request(telemetryApp)
+      .get('/api/v1/telemetry/ui')
+      .query({ detail: 'trace-alpha', detail_path: "trace['id.v1']" })
+      .expect(200);
+    expect(quotedKey.body.total).toBe(1);
+
+    const arrayWildcard = await request(telemetryApp)
+      .get('/api/v1/telemetry/ui')
+      .query({ detail: 'degraded', detail_path: 'trace.segments[*].status' })
+      .expect(200);
+    expect(arrayWildcard.body.total).toBe(1);
+
+    const invalidPath = await request(telemetryApp)
+      .get('/api/v1/telemetry/ui')
+      .query({ detail: 'trace-alpha', detail_path: 'trace[unknown].value' })
+      .expect(200);
+    expect(invalidPath.body.total).toBe(0);
+  });
+
   test('filters telemetry events by date range', async () => {
     const server = createTestServer({ enableRest: true });
     const { app: telemetryApp } = server;
