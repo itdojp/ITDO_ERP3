@@ -5,6 +5,17 @@ import type { TelemetryFilters } from './types';
 
 const STORAGE_KEY = 'ui-poc:telemetry-filters';
 
+const normalizeFilters = (base: TelemetryFilters, overrides?: Partial<TelemetryFilters>): TelemetryFilters => ({
+  component: overrides?.component ?? base.component ?? '',
+  event: overrides?.event ?? base.event ?? '',
+  detail: overrides?.detail ?? base.detail ?? '',
+  detailPath: overrides?.detailPath ?? base.detailPath ?? '',
+  level: overrides?.level ?? base.level ?? 'all',
+  origin: overrides?.origin ?? base.origin ?? 'all',
+  sort: overrides?.sort ?? base.sort ?? 'receivedAt',
+  order: overrides?.order ?? base.order ?? 'desc',
+});
+
 function readFromStorage(): TelemetryFilters | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -35,40 +46,27 @@ function readFromStorage(): TelemetryFilters | null {
 }
 
 export function useTelemetryFilters(initial: TelemetryFilters) {
-  const [formFilters, setFormFilters] = useState<TelemetryFilters>(initial);
+  const [formFilters, setFormFilters] = useState<TelemetryFilters>(() => normalizeFilters(initial));
 
   useEffect(() => {
     const stored = readFromStorage();
-    if (stored) {
-      setFormFilters(stored);
-    } else {
-      setFormFilters(initial);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const merged = stored ? normalizeFilters(initial, stored) : normalizeFilters(initial);
+    setFormFilters(merged);
+  }, [initial]);
 
-  useEffect(() => {
-    setFormFilters((current) => ({
-      component: current.component ?? initial.component,
-      event: current.event ?? initial.event,
-      detail: current.detail ?? initial.detail,
-      detailPath: current.detailPath ?? initial.detailPath,
-      level: current.level ?? initial.level,
-      origin: current.origin ?? initial.origin,
-      sort: current.sort ?? initial.sort,
-      order: current.order ?? initial.order,
-    }));
-  }, [initial.component, initial.event, initial.detail, initial.level, initial.origin, initial.sort, initial.order]);
-
-  const persistFilters = useCallback((filters: TelemetryFilters) => {
-    setFormFilters(filters);
+  const persistFilters = useCallback(
+    (filters: TelemetryFilters) => {
+      const normalized = normalizeFilters(initial, filters);
+      setFormFilters(normalized);
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     } catch (error) {
       console.warn('[telemetry] failed to persist filters', error);
     }
-  }, []);
+    },
+    [initial],
+  );
 
   const loadStoredFilters = useCallback(() => readFromStorage(), []);
 
