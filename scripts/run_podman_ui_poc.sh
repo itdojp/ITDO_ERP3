@@ -14,6 +14,7 @@ TESTS_ONLY=false
 USE_MINIO_FLAG="${USE_MINIO:-false}"
 FORCE_PM=${FORCE_PM_PORT:-3001}
 USE_BUILD="${PODMAN_BUILD:-true}"
+SKIP_GRAPHQL_PREFLIGHT="${SKIP_GRAPHQL_PREFLIGHT:-false}"
 
 usage() {
   cat <<USAGE
@@ -110,6 +111,26 @@ check_ui_port() {
   fi
 }
 
+wait_for_graphql() {
+  if [[ "${SKIP_GRAPHQL_PREFLIGHT}" == "true" ]]; then
+    return 0
+  fi
+  local port="$1"
+  local attempts=0
+  local max_attempts=20
+  local payload='{"query":"query ComplianceProbe($filter: ComplianceInvoiceFilterInput) { complianceInvoices(filter: $filter) { meta { total } } }","variables":{"filter":{"page":1,"pageSize":1}}}'
+  echo "[health] Waiting for GraphQL endpoint on http://localhost:${port}/graphql"
+  while (( attempts < max_attempts )); do
+    if curl -fsS -H 'Content-Type: application/json' -d "$payload" "http://localhost:${port}/graphql" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    attempts=$((attempts + 1))
+  done
+  echo "[health] ERROR: GraphQL endpoint not ready on port ${port}." >&2
+  return 1
+}
+
 # Export variables for podman-compose so that host/container port values are respected.
 export PM_PORT="${PM_HOST_PORT}"
 export PM_CONTAINER_PORT
@@ -155,6 +176,10 @@ done
 if [ "$pm_service_up" = false ]; then
   echo "[health] ERROR: pm-service did not become available after 60 seconds. Exiting." >&2
   exit 2
+fi
+
+if ! wait_for_graphql "$PM_HOST_PORT"; then
+  exit 5
 fi
 
 if [ "$RUN_TESTS" = true ]; then
