@@ -15,6 +15,7 @@ USE_MINIO_FLAG="${USE_MINIO:-false}"
 FORCE_PM=${FORCE_PM_PORT:-3001}
 USE_BUILD="${PODMAN_BUILD:-true}"
 SKIP_GRAPHQL_PREFLIGHT="${SKIP_GRAPHQL_PREFLIGHT:-false}"
+DETACH=false
 
 usage() {
   cat <<USAGE
@@ -26,6 +27,7 @@ Options:
   --with-minio     Export USE_MINIO=true before starting the stack.
   --no-build       Skip \`podman-compose --build\` and reuse existing images (or set PODMAN_BUILD=false).
   --build          Force \`podman-compose --build\` regardless of PODMAN_BUILD.
+  --detach         Keep Podman/Next.js running in background (implies UI_HEADLESS=true).
   -h, --help       Show this help message.
 
 Environment variables:
@@ -55,6 +57,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --build)
       USE_BUILD=true
+      shift
+      ;;
+    --detach)
+      DETACH=true
+      UI_HEADLESS=true
       shift
       ;;
     -h|--help)
@@ -229,7 +236,16 @@ if [ "${UI_HEADLESS}" = 'true' ]; then
       POC_API_BASE="http://localhost:${PM_HOST_PORT}" \
       npm run dev -- --hostname 0.0.0.0 --port "${UI_PORT_VALUE}" > "${LOG_FILE}" 2>&1 &
   NEXT_DEV_PID=$!
-  echo "[ui] Next.js dev server running (PID ${NEXT_DEV_PID}). Press Ctrl+C to stop."
+  echo "[ui] Next.js dev server running (PID ${NEXT_DEV_PID})."
+  if [ "${DETACH}" = 'true' ]; then
+    printf '\n[ui] Detach mode enabled. Stack will continue running in the background.\n'
+    printf '     Stop it manually with:\n'
+    printf '       (cd %s && podman-compose -f %s down)\n' "${PROJECT_DIR}" "${COMPOSE_FILE}"
+    printf '       kill %s  # Next.js dev server\n' "${NEXT_DEV_PID}"
+    trap - EXIT
+    exit 0
+  fi
+  echo "[ui] Press Ctrl+C to stop."
   wait ${NEXT_DEV_PID}
 else
   env NEXT_PUBLIC_API_BASE="http://localhost:${PM_HOST_PORT}" \

@@ -41,6 +41,20 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 > Live テスト (`--run-tests` / `--tests-only`) を利用する場合は、Playwright の実行前に PoC API を既定ポート（3001）へ一旦リダイレクトするため、環境変数 `FORCE_PM_PORT` で強制ポートを指定できます。Podman スタックを独自ポートで常用している場合は、テスト専用に `FORCE_PM_PORT=3001` を維持するか、Playwright 側の `PM_PORT` を合わせて上書きしてください。
 ```
 
+#### Detach モード
+
+同じターミナルで追加作業を継続したい場合は `--detach` を付与すると Podman スタックと Next.js Dev Server をバックグラウンドで起動し、スクリプトは即時終了します。
+
+```bash
+PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh --detach
+
+# 停止する際は明示的に以下を実行
+(cd poc/event-backbone/local && podman-compose -f podman-compose.yml down)
+pkill -f "next dev --hostname 0.0.0.0 --port 4100"
+```
+
+ログは `.next/dev.log` に記録されます。Detach を有効にすると自動クリーンアップが行われないため、検証終了後は手動でスタックを停止してください。
+
 ## ディレクトリ構成（抜粋）
 
 - `src/app` … App Router を用いた画面コンポーネント
@@ -54,6 +68,8 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh
 - 実データ/モックデータの表示やUIパターンの実装
 - Podman スタックとの結合テスト強化
 - UX検討のための操作シナリオドキュメント整備
+
+補助資料: [`docs/podman-ui-workflow.md`](../docs/podman-ui-workflow.md) に Podman スタックの起動・操作・停止フローと代表的な検証手順をまとめています。
 
 > ⚠️ このプロジェクトは PoC 目的のため、本番品質を前提としていません。
 
