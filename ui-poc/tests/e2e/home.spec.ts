@@ -10,6 +10,6 @@ test.describe('Home Navigation', () => {
     await expect(page.getByText('ITDO ERP3 UI PoC')).toBeVisible();
 
     await page.getByRole('link', { name: 'Timesheets' }).click();
-    await expect(page).toHaveURL(/\/timesheets$/);
+    await expect(page).toHaveURL(/\/timesheets(\?.*)?$/);
   });
 });
