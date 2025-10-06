@@ -241,7 +241,7 @@ if [ "${UI_HEADLESS}" = 'true' ]; then
     printf '\n[ui] Detach mode enabled. Stack will continue running in the background.\n'
     printf '     Stop it manually with:\n'
     printf '       (cd %s && podman-compose -f %s down)\n' "${PROJECT_DIR}" "${COMPOSE_FILE}"
-    printf '       kill %s  # Next.js dev server\n' "${NEXT_DEV_PID}"
+    printf '       pkill -f "next dev --hostname 0.0.0.0 --port %s"\n' "${UI_PORT_VALUE}"
     trap - EXIT
     exit 0
   fi

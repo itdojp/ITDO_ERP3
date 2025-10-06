@@ -50,7 +50,7 @@ PM_PORT=3101 UI_PORT=4100 scripts/run_podman_ui_poc.sh --detach
 
 # 停止する際は明示的に以下を実行
 (cd poc/event-backbone/local && podman-compose -f podman-compose.yml down)
-pkill -f "next dev --hostname 0.0.0.0 --port 4100"
+pkill -f "next dev --hostname 0.0.0.0 --port $UI_PORT"
 ```
 
 ログは `.next/dev.log` に記録されます。Detach を有効にすると自動クリーンアップが行われないため、検証終了後は手動でスタックを停止してください。
