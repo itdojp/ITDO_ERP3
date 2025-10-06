@@ -133,14 +133,14 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     return timesheets.filter((entry) => {
       const statusMatch = filter === "all" || entry.approvalStatus === filter;
       if (!statusMatch) return false;
-      if (manager && !entry.userName.toLowerCase().includes(manager)) {
+      if (manager && !(entry.userName ?? "").toLowerCase().includes(manager)) {
         return false;
       }
-      if (projectCode && entry.projectCode.toLowerCase() !== projectCode) {
+      if (projectCode && (entry.projectCode ?? "").toLowerCase() !== projectCode) {
         return false;
       }
       if (!keyword) return true;
-      const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
+      const haystack = `${entry.projectCode ?? ""} ${entry.projectName ?? ""} ${entry.userName ?? ""} ${entry.note ?? ""}`.toLowerCase();
       return haystack.includes(keyword);
     });
   }, [timesheets, filter, appliedKeyword, appliedManager, appliedProjectCode]);
@@ -291,14 +291,14 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           .map((entry) => normalizeTimesheet(entry))
           .filter(Boolean) as TimesheetEntry[];
         const refined = normalized.filter((entry) => {
-          if (managerValue && !entry.userName.toLowerCase().includes(managerValue)) {
+          if (managerValue && !(entry.userName ?? "").toLowerCase().includes(managerValue)) {
             return false;
           }
-          if (projectCodeValue && entry.projectCode.toLowerCase() !== projectCodeValue) {
+          if (projectCodeValue && (entry.projectCode ?? "").toLowerCase() !== projectCodeValue) {
             return false;
           }
           if (keywordLower.length > 0) {
-            const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
+            const haystack = `${entry.projectCode ?? ""} ${entry.projectName ?? ""} ${entry.userName ?? ""} ${entry.note ?? ""}`.toLowerCase();
             if (!haystack.includes(keywordLower)) {
               return false;
             }
@@ -353,14 +353,14 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           .map((entry) => normalizeTimesheet(entry))
           .filter(Boolean) as TimesheetEntry[];
         const refinedFallback = fallbackItems.filter((entry) => {
-          if (managerValue && !entry.userName.toLowerCase().includes(managerValue)) {
+          if (managerValue && !(entry.userName ?? "").toLowerCase().includes(managerValue)) {
             return false;
           }
-          if (projectCodeValue && entry.projectCode.toLowerCase() !== projectCodeValue) {
+          if (projectCodeValue && (entry.projectCode ?? "").toLowerCase() !== projectCodeValue) {
             return false;
           }
           if (keywordLower.length > 0) {
-            const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
+            const haystack = `${entry.projectCode ?? ""} ${entry.projectName ?? ""} ${entry.userName ?? ""} ${entry.note ?? ""}`.toLowerCase();
             return haystack.includes(keywordLower);
           }
           return true;
@@ -489,21 +489,21 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       let normalizedKeyword = "";
       if (keywordFromQuery && keywordFromQuery.trim().length > 0) {
         normalizedKeyword = keywordFromQuery.trim();
-      } else if (typeof stored?.keyword === 'string') {
+      } else if (typeof stored?.keyword === "string") {
         normalizedKeyword = stored.keyword;
       }
 
       let normalizedManager = "";
       if (managerFromQuery && managerFromQuery.trim().length > 0) {
         normalizedManager = managerFromQuery.trim();
-      } else if (typeof stored?.manager === 'string') {
+      } else if (typeof stored?.manager === "string") {
         normalizedManager = stored.manager;
       }
 
       let normalizedProjectCode = "";
       if (projectCodeFromQuery && projectCodeFromQuery.trim().length > 0) {
         normalizedProjectCode = projectCodeFromQuery.trim();
-      } else if (typeof stored?.projectCode === 'string') {
+      } else if (typeof stored?.projectCode === "string") {
         normalizedProjectCode = stored.projectCode;
       }
 
@@ -539,9 +539,9 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
 
     parseFilters();
     const handlePop = () => parseFilters();
-    window.addEventListener('popstate', handlePop);
+    window.addEventListener("popstate", handlePop);
     return () => {
-      window.removeEventListener('popstate', handlePop);
+      window.removeEventListener("popstate", handlePop);
     };
   }, [initialFilter]);
 
