@@ -55,6 +55,8 @@ pkill -f "next dev --hostname 0.0.0.0 --port $UI_PORT"
 
 ログは `.next/dev.log` に記録されます。Detach を有効にすると自動クリーンアップが行われないため、検証終了後は手動でスタックを停止してください。
 
+ヘルスチェックには `scripts/podman_status.sh` を利用できます。`PM_PORT` / `UI_PORT` を合わせて実行すると、コンテナ一覧と主要エンドポイントの状態をまとめて確認できます。
+
 ## ディレクトリ構成（抜粋）
 
 - `src/app` … App Router を用いた画面コンポーネント
