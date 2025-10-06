@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import type {
@@ -36,6 +37,8 @@ const dialogRequired: Record<TimesheetAction, boolean> = {
   resubmit: true,
 };
 
+const STORAGE_KEY = "timesheets-filters-v1";
+
 type QuerySource = "api" | "mock";
 
 type TimesheetsClientProps = {
@@ -68,13 +71,21 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       status: "submitted",
     };
   const [timesheets, setTimesheets] = useState(initialTimesheets.items);
-  const [filter, setFilter] = useState<(typeof statusFilters)[number]["value"]>("submitted");
+  const initialFilter =
+    (initialMeta.status && statusFilters.some((item) => item.value === initialMeta.status)
+      ? (initialMeta.status as (typeof statusFilters)[number]["value"])
+      : "submitted");
+  const [filter, setFilter] = useState<(typeof statusFilters)[number]["value"]>(initialFilter);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
   const [meta, setMeta] = useState(initialMeta);
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [managerTerm, setManagerTerm] = useState("");
+  const [appliedManager, setAppliedManager] = useState("");
+  const [projectCodeTerm, setProjectCodeTerm] = useState("");
+  const [appliedProjectCode, setAppliedProjectCode] = useState("");
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const fetchTokenRef = useRef(0);
@@ -101,19 +112,38 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   }, [filter]);
 
   const keywordSummary = appliedKeyword.trim().length > 0 ? `"${appliedKeyword}"` : "指定なし";
+  const managerSummary = appliedManager.trim().length > 0 ? appliedManager : "指定なし";
+  const projectCodeSummary = appliedProjectCode.trim().length > 0 ? appliedProjectCode : "指定なし";
   const apiReturned = meta.returned ?? timesheets.length;
   const apiTotal = meta.total ?? timesheets.length;
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const hydratedRef = useRef(false);
+  const lastSyncedQueryRef = useRef<string | null>(null);
+  const filterRef = useRef(filter);
+  const keywordRef = useRef(appliedKeyword);
+  const managerRef = useRef(appliedManager);
+  const projectCodeRef = useRef(appliedProjectCode);
+
   const filtered = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
+    const manager = appliedManager.trim().toLowerCase();
+    const projectCode = appliedProjectCode.trim().toLowerCase();
     return timesheets.filter((entry) => {
       const statusMatch = filter === "all" || entry.approvalStatus === filter;
       if (!statusMatch) return false;
+      if (manager && !entry.userName.toLowerCase().includes(manager)) {
+        return false;
+      }
+      if (projectCode && entry.projectCode.toLowerCase() !== projectCode) {
+        return false;
+      }
       if (!keyword) return true;
       const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [timesheets, filter, appliedKeyword]);
+  }, [timesheets, filter, appliedKeyword, appliedManager, appliedProjectCode]);
 
   const closeDialog = () => setDialog(initialDialog);
 
@@ -123,13 +153,13 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       const status = (entry.approvalStatus as TimesheetStatus) ?? "draft";
       return {
         id: entry.id,
-      userName: entry.userName ?? "",
-      projectCode: entry.projectCode ?? "",
-      projectName: entry.projectName ?? entry.projectCode ?? "",
-      taskName: entry.taskName ?? undefined,
-      workDate: entry.workDate ?? new Date().toISOString().slice(0, 10),
-      hours: Number.isFinite(entry.hours) ? Number(entry.hours) : 0,
-      approvalStatus: status,
+        userName: entry.userName ?? "",
+        projectCode: entry.projectCode ?? "",
+        projectName: entry.projectName ?? entry.projectCode ?? "",
+        taskName: entry.taskName ?? undefined,
+        workDate: entry.workDate ?? new Date().toISOString().slice(0, 10),
+        hours: Number.isFinite(entry.hours) ? Number(entry.hours) : 0,
+        approvalStatus: status,
         note: entry.note ?? undefined,
         submittedAt: entry.submittedAt ?? undefined,
       };
@@ -156,8 +186,17 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   };
 
   const fetchTimesheets = useCallback(
-    async (statusValue: TimesheetStatus | "all", keywordValue: string) => {
+    async (
+      statusValue: TimesheetStatus | "all",
+      keywordValue: string,
+      options: { manager?: string; projectCode?: string } = {},
+    ) => {
       const trimmedKeyword = keywordValue.trim();
+      const keywordLower = trimmedKeyword.toLowerCase();
+      const managerRaw = options.manager?.trim() ?? "";
+      const managerValue = managerRaw.toLowerCase();
+      const projectCodeRaw = options.projectCode?.trim() ?? "";
+      const projectCodeValue = projectCodeRaw.toLowerCase();
       fetchTokenRef.current += 1;
       const token = fetchTokenRef.current;
       setListLoading(true);
@@ -195,6 +234,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           variables: {
             status: statusValue,
             keyword: trimmedKeyword.length > 0 ? trimmedKeyword : undefined,
+            userName: managerRaw.length > 0 ? managerRaw : undefined,
+            projectCode: projectCodeRaw.length > 0 ? projectCodeRaw : undefined,
           },
         });
 
@@ -215,6 +256,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             strategy: "graphql",
             status: statusValue,
             keyword: trimmedKeyword,
+            manager: managerRaw,
+            projectCode: projectCodeRaw,
             returned: normalized.length,
             total: normalized.length,
             fallback: false,
@@ -247,8 +290,23 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         const normalized = items
           .map((entry) => normalizeTimesheet(entry))
           .filter(Boolean) as TimesheetEntry[];
+        const refined = normalized.filter((entry) => {
+          if (managerValue && !entry.userName.toLowerCase().includes(managerValue)) {
+            return false;
+          }
+          if (projectCodeValue && entry.projectCode.toLowerCase() !== projectCodeValue) {
+            return false;
+          }
+          if (keywordLower.length > 0) {
+            const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
+            if (!haystack.includes(keywordLower)) {
+              return false;
+            }
+          }
+          return true;
+        });
         assignTimesheets(
-          normalized,
+          refined,
           rest.meta?.fallback ?? false,
           (rest.meta?.status as TimesheetStatus | "all") ?? statusValue ?? "all",
         );
@@ -260,8 +318,10 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             strategy: "rest",
             status: statusValue,
             keyword: trimmedKeyword,
-            returned: normalized.length,
-            total: rest.meta?.total ?? normalized.length,
+            manager: managerRaw,
+            projectCode: projectCodeRaw,
+            returned: refined.length,
+            total: rest.meta?.total ?? refined.length,
             fallback: rest.meta?.fallback ?? false,
           },
         });
@@ -292,7 +352,20 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         const fallbackItems = (mockTimesheets.items ?? [])
           .map((entry) => normalizeTimesheet(entry))
           .filter(Boolean) as TimesheetEntry[];
-        assignTimesheets(fallbackItems, true, "all");
+        const refinedFallback = fallbackItems.filter((entry) => {
+          if (managerValue && !entry.userName.toLowerCase().includes(managerValue)) {
+            return false;
+          }
+          if (projectCodeValue && entry.projectCode.toLowerCase() !== projectCodeValue) {
+            return false;
+          }
+          if (keywordLower.length > 0) {
+            const haystack = `${entry.projectCode} ${entry.projectName} ${entry.userName} ${entry.note ?? ""}`.toLowerCase();
+            return haystack.includes(keywordLower);
+          }
+          return true;
+        });
+        assignTimesheets(refinedFallback, true, "all");
         reportClientTelemetry({
           component: "timesheets/client",
           event: "list_fetch_succeeded",
@@ -301,8 +374,10 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             strategy: "mock",
             status: statusValue,
             keyword: trimmedKeyword,
-            returned: fallbackItems.length,
-            total: fallbackItems.length,
+            manager: managerRaw,
+            projectCode: projectCodeRaw,
+            returned: refinedFallback.length,
+            total: refinedFallback.length,
             fallback: true,
           },
         });
@@ -313,8 +388,169 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   );
 
   useEffect(() => {
-    void fetchTimesheets(filter, appliedKeyword);
-  }, [fetchTimesheets, filter, appliedKeyword]);
+    filterRef.current = filter;
+  }, [filter]);
+
+  useEffect(() => {
+    keywordRef.current = appliedKeyword;
+  }, [appliedKeyword]);
+
+  useEffect(() => {
+    managerRef.current = appliedManager;
+  }, [appliedManager]);
+
+  useEffect(() => {
+    projectCodeRef.current = appliedProjectCode;
+  }, [appliedProjectCode]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      return;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            status: filter,
+            keyword: appliedKeyword,
+            manager: appliedManager,
+            projectCode: appliedProjectCode,
+          }),
+        );
+      } catch (error) {
+        console.warn("[timesheets] failed to persist filters", error);
+      }
+    }
+
+    const desiredStatusParam = filter === "all" ? null : filter;
+    const desiredKeywordParam = appliedKeyword.trim();
+    const desiredManagerParam = appliedManager.trim();
+    const desiredProjectCodeParam = appliedProjectCode.trim();
+
+    const params = new URLSearchParams();
+    if (desiredStatusParam) {
+      params.set("status", desiredStatusParam);
+    }
+    if (desiredKeywordParam.length > 0) {
+      params.set("keyword", desiredKeywordParam);
+    }
+    if (desiredManagerParam.length > 0) {
+      params.set("manager", desiredManagerParam);
+    }
+    if (desiredProjectCodeParam.length > 0) {
+      params.set("projectCode", desiredProjectCodeParam);
+    }
+    const nextQuery = params.toString();
+    if (lastSyncedQueryRef.current === nextQuery) {
+      return;
+    }
+    lastSyncedQueryRef.current = nextQuery;
+    const target = nextQuery.length > 0 ? `${pathname}?${nextQuery}` : pathname;
+    try {
+      router.replace(target, { scroll: false });
+    } catch (error) {
+      console.warn("[timesheets] router.replace failed", error);
+    }
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", target);
+    }
+  }, [filter, appliedKeyword, appliedManager, appliedProjectCode, pathname, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const parseFilters = () => {
+      let stored: { status?: string; keyword?: string; manager?: string; projectCode?: string } | null = null;
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          stored = JSON.parse(raw);
+        }
+      } catch (error) {
+        console.warn("[timesheets] failed to parse stored filters", error);
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const statusFromQuery = params.get("status");
+      const keywordFromQuery = params.get("keyword");
+      const managerFromQuery = params.get("manager");
+      const projectCodeFromQuery = params.get("projectCode");
+
+      let normalizedStatus: TimesheetStatus | "all" = initialFilter;
+      if (statusFromQuery && statusFilters.some((item) => item.value === statusFromQuery)) {
+        normalizedStatus = statusFromQuery as TimesheetStatus | "all";
+      } else if (stored?.status && statusFilters.some((item) => item.value === stored.status)) {
+        normalizedStatus = stored.status as TimesheetStatus | "all";
+      }
+
+      let normalizedKeyword = "";
+      if (keywordFromQuery && keywordFromQuery.trim().length > 0) {
+        normalizedKeyword = keywordFromQuery.trim();
+      } else if (typeof stored?.keyword === 'string') {
+        normalizedKeyword = stored.keyword;
+      }
+
+      let normalizedManager = "";
+      if (managerFromQuery && managerFromQuery.trim().length > 0) {
+        normalizedManager = managerFromQuery.trim();
+      } else if (typeof stored?.manager === 'string') {
+        normalizedManager = stored.manager;
+      }
+
+      let normalizedProjectCode = "";
+      if (projectCodeFromQuery && projectCodeFromQuery.trim().length > 0) {
+        normalizedProjectCode = projectCodeFromQuery.trim();
+      } else if (typeof stored?.projectCode === 'string') {
+        normalizedProjectCode = stored.projectCode;
+      }
+
+      if (!hydratedRef.current) {
+        setFilter(normalizedStatus);
+        setAppliedKeyword(normalizedKeyword);
+        setSearchTerm(normalizedKeyword);
+        setAppliedManager(normalizedManager);
+        setManagerTerm(normalizedManager);
+        setAppliedProjectCode(normalizedProjectCode);
+        setProjectCodeTerm(normalizedProjectCode);
+        hydratedRef.current = true;
+      } else {
+        if (normalizedStatus !== filterRef.current) {
+          setFilter(normalizedStatus);
+        }
+        if (normalizedKeyword !== keywordRef.current) {
+          setAppliedKeyword(normalizedKeyword);
+          setSearchTerm(normalizedKeyword);
+        }
+        if (normalizedManager !== managerRef.current) {
+          setAppliedManager(normalizedManager);
+          setManagerTerm(normalizedManager);
+        }
+        if (normalizedProjectCode !== projectCodeRef.current) {
+          setAppliedProjectCode(normalizedProjectCode);
+          setProjectCodeTerm(normalizedProjectCode);
+        }
+      }
+
+      lastSyncedQueryRef.current = params.toString();
+    };
+
+    parseFilters();
+    const handlePop = () => parseFilters();
+    window.addEventListener('popstate', handlePop);
+    return () => {
+      window.removeEventListener('popstate', handlePop);
+    };
+  }, [initialFilter]);
+
+  useEffect(() => {
+    void fetchTimesheets(filter, appliedKeyword, {
+      manager: appliedManager,
+      projectCode: appliedProjectCode,
+    });
+  }, [fetchTimesheets, filter, appliedKeyword, appliedManager, appliedProjectCode]);
 
   const performAction = async (entry: TimesheetEntry, action: TimesheetAction, payload?: ActionPayload) => {
     setPendingId(entry.id);
@@ -449,8 +685,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       setTimesheets((prev) => [created, ...prev]);
       setMeta((prev) => ({
         ...prev,
-        total: prev.total + 1,
-        returned: (prev.returned ?? prev.total) + 1,
+        total: (prev.total ?? 0) + 1,
+        returned: (prev.returned ?? prev.total ?? 0) + 1,
         fallback: false,
         fetchedAt: new Date().toISOString(),
       }));
@@ -469,7 +705,10 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             ? "submitted"
             : "all";
       setFilter(nextFilter);
-      void fetchTimesheets(nextFilter, appliedKeyword);
+      void fetchTimesheets(nextFilter, appliedKeyword, {
+        manager: appliedManager,
+        projectCode: appliedProjectCode,
+      });
       return;
     } catch (error) {
       console.warn("[timesheets] graphql create failed, fallback to REST", error);
@@ -506,8 +745,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         setTimesheets((prev) => [created, ...prev]);
         setMeta((prev) => ({
           ...prev,
-          total: prev.total + 1,
-          returned: (prev.returned ?? prev.total) + 1,
+          total: (prev.total ?? 0) + 1,
+          returned: (prev.returned ?? prev.total ?? 0) + 1,
           fallback: false,
           fetchedAt: new Date().toISOString(),
         }));
@@ -530,7 +769,10 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             timesheetId: created.id,
           },
         });
-        void fetchTimesheets(nextFilter, appliedKeyword);
+        void fetchTimesheets(nextFilter, appliedKeyword, {
+          manager: appliedManager,
+          projectCode: appliedProjectCode,
+        });
       } catch (restError) {
         setCreationError((restError as Error).message ?? "タイムシート追加に失敗しました");
         reportClientTelemetry({
@@ -673,31 +915,49 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       </div>
 
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="grid gap-3 md:grid-cols-4 items-end"
         onSubmit={(event: FormEvent<HTMLFormElement>) => {
           event.preventDefault();
-          const keyword = searchTerm.trim();
-          if (keyword === appliedKeyword) {
-            void fetchTimesheets(filter, keyword);
-          }
-          setAppliedKeyword(keyword);
+          setAppliedKeyword(searchTerm.trim());
+          setAppliedManager(managerTerm.trim());
+          setAppliedProjectCode(projectCodeTerm.trim());
         }}
       >
         <label className="flex flex-col gap-1 text-xs text-slate-300">
-          <span>キーワード検索</span>
+          <span>キーワード</span>
           <input
-            className="w-64 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="プロジェクト・メンバー名など"
+            placeholder="プロジェクト名・メモなど"
             data-testid="timesheets-search-input"
           />
         </label>
-        <div className="flex gap-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>メンバー名</span>
+          <input
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={managerTerm}
+            onChange={(event) => setManagerTerm(event.target.value)}
+            placeholder="例: 佐藤"
+            data-testid="timesheets-filter-member"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <span>プロジェクトコード</span>
+          <input
+            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            value={projectCodeTerm}
+            onChange={(event) => setProjectCodeTerm(event.target.value)}
+            placeholder="例: DX-2025-01"
+            data-testid="timesheets-filter-project"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2 md:col-span-4">
           <button
             type="submit"
             className="rounded-md border border-sky-500 bg-sky-500/20 px-4 py-2 text-xs font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:text-slate-500"
-            disabled={listLoading && appliedKeyword === searchTerm.trim()}
+            disabled={listLoading}
           >
             検索
           </button>
@@ -705,12 +965,14 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             type="button"
             onClick={() => {
               setSearchTerm("");
-              if (appliedKeyword !== "") {
-                setAppliedKeyword("");
-              }
+              setManagerTerm("");
+              setProjectCodeTerm("");
+              setAppliedKeyword("");
+              setAppliedManager("");
+              setAppliedProjectCode("");
             }}
             className="rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
-            disabled={listLoading && appliedKeyword === "" && searchTerm.trim() === ""}
+            disabled={listLoading}
           >
             クリア
           </button>
@@ -722,7 +984,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           表示件数: {filtered.length.toLocaleString()} 件 ({apiReturned.toLocaleString()} / {apiTotal.toLocaleString()} 件)
         </span>
         <span data-testid="timesheets-summary-filters">
-          フィルタ: {statusLabel} / キーワード: {keywordSummary}
+          フィルタ: 状態={statusLabel} / キーワード={keywordSummary} / メンバー={managerSummary} / プロジェクト={projectCodeSummary}
         </span>
         <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
         {meta.status ? <span>APIステータス: {meta.status}</span> : null}
