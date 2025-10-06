@@ -51,6 +51,21 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 
 `podman-compose down` は現在のネットワークとコンテナを全て削除します。次回起動時には `run_podman_ui_poc.sh --detach` を再実行してください。
 
+
+## ログ記録とサンプル
+
+- 簡易ヘルスチェック: `PM_PORT=3103 UI_PORT=4103 scripts/podman_status.sh`
+- テンプレート: [`docs/podman-manual-log-template.md`](podman-manual-log-template.md)
+
+### 実施例 (2025-10-07 08:00 JST)
+| 項目 | 結果 | 備考 |
+| ---- | ---- | ---- |
+| `scripts/podman_status.sh` | ok | すべてのヘルスチェックが `ok` |
+| Projects 件数 | 4 | `curl http://localhost:3103/api/v1/projects` |
+| Timesheets submitted | 2 | `curl http://localhost:3103/api/v1/timesheets?status=submitted` |
+| Compliance (limit=5) | 3 | `curl http://localhost:3103/api/v1/compliance/invoices?limit=5` |
+| Telemetry | 0 | `TELEMETRY_BASE=http://localhost:3103 node scripts/show_telemetry.js` |
+
 ## トラブルシューティング
 
 - **UI ポートが競合する**: `UI_PORT` を変更するか、既存の Next.js プロセスを停止します。
