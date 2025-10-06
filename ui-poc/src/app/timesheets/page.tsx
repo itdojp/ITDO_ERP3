@@ -13,15 +13,32 @@ const defaultMeta: NonNullable<TimesheetListResponse["meta"]> = {
   status: "all",
 };
 
-async function fetchTimesheets(): Promise<TimesheetListResponse> {
+const ALLOWED_STATUS = new Set(["all", "submitted", "rejected", "approved", "draft"]);
+
+type TimesheetFetchParams = {
+  status?: string | null;
+  keyword?: string | null;
+  manager?: string | null;
+  projectCode?: string | null;
+};
+
+async function fetchTimesheets({ status, keyword, manager, projectCode }: TimesheetFetchParams = {}): Promise<TimesheetListResponse> {
   const base = process.env.POC_API_BASE ?? "http://localhost:3001";
-  const status = "submitted";
+  const normalizedStatus = typeof status === "string" && ALLOWED_STATUS.has(status) ? status : "submitted";
+  const normalizedKeyword = typeof keyword === "string" && keyword.trim().length > 0 ? keyword.trim() : undefined;
+  const normalizedManager = typeof manager === "string" && manager.trim().length > 0 ? manager.trim() : undefined;
+  const normalizedProjectCode = typeof projectCode === "string" && projectCode.trim().length > 0 ? projectCode.trim() : undefined;
   try {
     const payload = await graphqlRequest<{
       timesheets?: TimesheetListResponse["items"];
     }>({
       query: TIMESHEETS_PAGE_QUERY,
-      variables: { status },
+      variables: {
+        status: normalizedStatus,
+        keyword: normalizedKeyword,
+        userName: normalizedManager,
+        projectCode: normalizedProjectCode,
+      },
       baseUrl: base,
     });
     const items = Array.isArray(payload.timesheets) ? payload.timesheets : [];
@@ -32,7 +49,7 @@ async function fetchTimesheets(): Promise<TimesheetListResponse> {
         returned: items.length,
         fetchedAt: new Date().toISOString(),
         fallback: false,
-        status,
+        status: normalizedStatus,
       },
     } satisfies TimesheetListResponse;
   } catch (error) {
@@ -43,12 +60,16 @@ async function fetchTimesheets(): Promise<TimesheetListResponse> {
       level: "warn",
       detail: {
         stage: "initial",
-        status,
+        status: normalizedStatus,
         error: error instanceof Error ? error.message : String(error),
       },
     });
     try {
-      const res = await fetch(`${base}/api/v1/timesheets?status=${status}`, { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (normalizedStatus !== "all") {
+        params.set("status", normalizedStatus);
+      }
+      const res = await fetch(`${base}/api/v1/timesheets${params.toString() ? `?${params.toString()}` : ""}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }
@@ -59,18 +80,34 @@ async function fetchTimesheets(): Promise<TimesheetListResponse> {
         level: "info",
         detail: {
           stage: "initial",
-          status,
+          status: normalizedStatus,
           items: data.items?.length ?? 0,
         },
       });
+      const filteredItems = (data.items ?? []).filter((entry) => {
+        if (normalizedStatus !== "all" && entry.approvalStatus !== normalizedStatus) {
+          return false;
+        }
+        if (normalizedManager && !(entry.userName ?? '').toLowerCase().includes(normalizedManager.toLowerCase())) {
+          return false;
+        }
+        if (normalizedProjectCode && (entry.projectCode ?? '').toLowerCase() !== normalizedProjectCode.toLowerCase()) {
+          return false;
+        }
+        if (normalizedKeyword) {
+          const haystack = `${entry.projectCode ?? ''} ${entry.projectName ?? ''} ${entry.userName ?? ''} ${entry.note ?? ''}`.toLowerCase();
+          return haystack.includes(normalizedKeyword.toLowerCase());
+        }
+        return true;
+      });
       return {
-        items: data.items ?? [],
+        items: filteredItems,
         meta: {
-          total: data.meta?.total ?? data.items?.length ?? 0,
-          returned: data.meta?.returned ?? data.items?.length ?? 0,
+          total: filteredItems.length,
+          returned: filteredItems.length,
           fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
           fallback: data.meta?.fallback ?? false,
-          status: (data.meta?.status as string | undefined) ?? status,
+          status: normalizedStatus,
         },
       } satisfies TimesheetListResponse;
     } catch (restError) {
@@ -81,7 +118,7 @@ async function fetchTimesheets(): Promise<TimesheetListResponse> {
         level: "warn",
         detail: {
           stage: "initial",
-          status,
+          status: normalizedStatus,
           error: restError instanceof Error ? restError.message : String(restError),
         },
       });
@@ -96,8 +133,34 @@ async function fetchTimesheets(): Promise<TimesheetListResponse> {
   }
 }
 
-export default async function TimesheetsPage() {
-  const data = await fetchTimesheets();
+export default async function TimesheetsPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[]>;
+}) {
+  const statusParam = typeof searchParams?.status === "string" ? searchParams.status : Array.isArray(searchParams?.status) ? searchParams.status[0] ?? null : null;
+  const keywordParam = typeof searchParams?.keyword === "string"
+    ? searchParams.keyword
+    : Array.isArray(searchParams?.keyword)
+      ? searchParams.keyword[0] ?? null
+      : null;
+  const managerParam = typeof searchParams?.manager === "string"
+    ? searchParams.manager
+    : Array.isArray(searchParams?.manager)
+      ? searchParams.manager[0] ?? null
+      : null;
+  const projectCodeParam = typeof searchParams?.projectCode === "string"
+    ? searchParams.projectCode
+    : Array.isArray(searchParams?.projectCode)
+      ? searchParams.projectCode[0] ?? null
+      : null;
+
+  const data = await fetchTimesheets({
+    status: statusParam,
+    keyword: keywordParam,
+    manager: managerParam,
+    projectCode: projectCodeParam,
+  });
 
   return (
     <section className="space-y-6">

@@ -16,7 +16,7 @@ test.describe('Timesheets PoC', () => {
     await expect(actionsCell.getByRole('button').first()).toBeVisible();
 
     await expect(page.getByTestId('timesheets-summary-count')).toContainText('表示件数');
-    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('フィルタ');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('メンバー=指定なし');
   });
 
   test('filters timesheets by keyword search', async ({ page }) => {
@@ -24,8 +24,8 @@ test.describe('Timesheets PoC', () => {
       {
         id: 'TS-1000',
         userName: 'Alice',
-        projectCode: 'PRJ-MKT',
-        projectName: 'Marketing Revamp',
+        projectCode: 'PRJ-ANL',
+        projectName: 'Analytics Platform',
         taskName: null,
         workDate: '2025-03-05',
         hours: 7.5,
@@ -36,8 +36,8 @@ test.describe('Timesheets PoC', () => {
       {
         id: 'TS-2000',
         userName: 'Bob',
-        projectCode: 'PRJ-ANL',
-        projectName: 'Analytics Platform',
+        projectCode: 'PRJ-MKT',
+        projectName: 'Marketing Revamp',
         taskName: null,
         workDate: '2025-03-06',
         hours: 8,
@@ -65,6 +65,8 @@ test.describe('Timesheets PoC', () => {
       if (query?.includes('TimesheetsPage')) {
         const keyword = (variables.keyword ?? '').toLowerCase();
         const status = (variables.status ?? 'all').toLowerCase();
+        const userName = (variables.userName ?? '').toLowerCase();
+        const projectCode = (variables.projectCode ?? '').toLowerCase();
         let filtered = dataset;
         if (status !== 'all') {
           filtered = filtered.filter((entry) => entry.approvalStatus === status);
@@ -74,6 +76,12 @@ test.describe('Timesheets PoC', () => {
             const haystack = `${entry.projectName} ${entry.projectCode} ${entry.userName} ${entry.note ?? ''}`.toLowerCase();
             return haystack.includes(keyword);
           });
+        }
+        if (userName) {
+          filtered = filtered.filter((entry) => entry.userName.toLowerCase().includes(userName));
+        }
+        if (projectCode) {
+          filtered = filtered.filter((entry) => entry.projectCode.toLowerCase() === projectCode);
         }
         await route.fulfill({
           status: 200,
@@ -92,11 +100,14 @@ test.describe('Timesheets PoC', () => {
     await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('table tbody tr')).toHaveCount(1);
     await expect(page.locator('table tbody tr').first()).toContainText('Analytics Platform');
-    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('"Analytics"');
+    await page.getByTestId('timesheets-filter-member').fill('Alice');
+    await page.getByRole('button', { name: '検索' }).click();
+    await expect(page.locator('table tbody tr')).toHaveCount(1);
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('メンバー=Alice');
 
     await page.getByRole('button', { name: 'クリア' }).click();
     await expect(page.locator('table tbody tr')).toHaveCount(2);
-    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('指定なし');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('メンバー=指定なし');
   });
 
   test('adds and approves timesheet via GraphQL form with API stubs', async ({ page }) => {
@@ -124,6 +135,8 @@ test.describe('Timesheets PoC', () => {
       if (query?.includes('TimesheetsPage')) {
         const status = (variables?.status ?? 'all').toLowerCase();
         const keyword = (variables?.keyword ?? '').toLowerCase();
+        const userName = (variables?.userName ?? '').toLowerCase();
+        const projectCode = (variables?.projectCode ?? '').toLowerCase();
         let responseEntries = [...baseTimesheets];
         if (createdTimesheet) {
           responseEntries = [createdTimesheet, ...responseEntries];
@@ -136,6 +149,12 @@ test.describe('Timesheets PoC', () => {
             const haystack = `${entry.projectName} ${entry.projectCode} ${entry.userName} ${entry.note ?? ''}`.toLowerCase();
             return haystack.includes(keyword);
           });
+        }
+        if (userName) {
+          responseEntries = responseEntries.filter((entry) => entry.userName.toLowerCase().includes(userName));
+        }
+        if (projectCode) {
+          responseEntries = responseEntries.filter((entry) => entry.projectCode.toLowerCase() === projectCode);
         }
         await route.fulfill({
           status: 200,
@@ -184,9 +203,9 @@ test.describe('Timesheets PoC', () => {
 
     await page.goto('/timesheets');
 
-    await page.getByLabel('メンバー', { exact: false }).fill('GraphQL Worker');
-    await page.getByLabel('プロジェクトコード', { exact: false }).fill('PRJ-GQL');
-    await page.getByLabel('工数', { exact: false }).fill('6');
+    await page.getByLabel('メンバー *').fill('GraphQL Worker');
+    await page.getByLabel('プロジェクトコード *').fill('PRJ-GQL');
+    await page.getByLabel('工数 (h)').fill('6');
     await page.getByRole('button', { name: 'GraphQLで追加' }).click();
 
     await expect(page.getByText('タイムシートを追加しました')).toBeVisible();
@@ -195,7 +214,9 @@ test.describe('Timesheets PoC', () => {
     await newRow.getByRole('button', { name: 'Approve' }).click();
     await expect(page.getByText('GraphQL Worker / PRJ-GQL: Approve 完了')).toBeVisible();
     await page.getByRole('button', { name: 'All' }).click();
+    await page.getByTestId('timesheets-filter-project').fill('prj-gql');
+    await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('table tbody tr', { hasText: 'GraphQL Worker' }).first()).toContainText('Approved');
-    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('すべて');
+    await expect(page.getByTestId('timesheets-summary-filters')).toContainText('プロジェクト=prj-gql');
   });
 });
