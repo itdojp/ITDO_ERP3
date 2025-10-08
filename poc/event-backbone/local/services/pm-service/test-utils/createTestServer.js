@@ -2,7 +2,7 @@ import express from 'express';
 import { graphqlHTTP } from 'express-graphql';
 import { nanoid } from 'nanoid';
 import { createGraphQLSchema } from '../graphql-schema.js';
-import { projectSeed, timesheetSeed, invoiceSeed, filterInvoices } from '../sample-data.js';
+import { projectSeed, timesheetSeed, invoiceSeed, telemetrySeed, filterInvoices } from '../sample-data.js';
 
 const PROJECT_ACTIONS = new Set(['activate', 'hold', 'resume', 'close']);
 const TIMESHEET_ACTIONS = new Set(['submit', 'approve', 'reject', 'resubmit']);
@@ -201,12 +201,64 @@ export function createTestServer(options = {}) {
     useMinio = false,
     attachDownloadUrls = async (items) => items,
     enableRest = false,
+    seedTelemetry = false,
   } = options;
   const projects = cloneDeep(projectSeed);
   const timesheets = cloneDeep(timesheetSeed);
   const invoices = cloneDeep(invoiceSeed);
   const eventLog = [];
   let telemetryLog = [];
+
+  const ingestTelemetryEvent = (payload, options = {}) => {
+    const base =
+      typeof payload === 'object' && payload !== null
+        ? payload
+        : { detail: { message: String(payload ?? 'invalid payload') } };
+    const {
+      source = 'ui:ingest',
+      ip = base.ip ?? '127.0.0.1',
+      timestamp,
+    } = options;
+    const resolvedTimestamp = timestamp ?? base.timestamp ?? new Date().toISOString();
+    const enriched = {
+      ...base,
+      timestamp: base.timestamp ?? resolvedTimestamp,
+      receivedAt: base.receivedAt ?? resolvedTimestamp,
+      ip,
+    };
+    telemetryLog.push(enriched);
+    if (telemetryLog.length > 200) {
+      telemetryLog = telemetryLog.slice(-200);
+    }
+    return enriched;
+  };
+
+  if (seedTelemetry && Array.isArray(telemetrySeed) && telemetrySeed.length > 0) {
+    const now = Date.now();
+    telemetrySeed.forEach((entry, index) => {
+      const baseDetail =
+        entry && typeof entry.detail === 'object' && entry.detail !== null
+          ? cloneDeep(entry.detail)
+          : entry?.detail !== undefined
+            ? { message: String(entry.detail) }
+            : {};
+      const timestamp = new Date(now - (telemetrySeed.length - index) * 1500).toISOString();
+      ingestTelemetryEvent(
+        {
+          ...entry,
+          detail: {
+            ...baseDetail,
+            seeded: true,
+          },
+        },
+        {
+          source: 'seed',
+          ip: 'seed::test',
+          timestamp,
+        },
+      );
+    });
+  }
 
   let metricsSnapshot = null;
 
@@ -297,15 +349,8 @@ export function createTestServer(options = {}) {
     app.use(express.json());
 
     app.post('/api/v1/telemetry/ui', (req, res) => {
-      const payload = {
-        ...(typeof req.body === 'object' && req.body ? req.body : {}),
-        receivedAt: new Date().toISOString(),
-        ip: req.ip,
-      };
-      telemetryLog.push(payload);
-      if (telemetryLog.length > 200) {
-        telemetryLog = telemetryLog.slice(-200);
-      }
+      const payload = (typeof req.body === 'object' && req.body) || {};
+      ingestTelemetryEvent(payload, { source: 'ui:ingest', ip: req.ip });
       res.status(204).end();
     });
 

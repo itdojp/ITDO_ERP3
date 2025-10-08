@@ -211,6 +211,63 @@ export const invoiceSeed = [
   },
 ];
 
+export const telemetrySeed = [
+  {
+    component: "ui/projects",
+    event: "page.view",
+    level: "info",
+    origin: "seed/podman",
+    detail: {
+      message: "プロジェクト一覧画面を表示",
+      flow: "projects",
+      context: "initial-demo",
+    },
+  },
+  {
+    component: "ui/timesheets",
+    event: "queue.load",
+    level: "info",
+    origin: "seed/podman",
+    detail: {
+      message: "承認待ちタイムシートを読み込み",
+      queueSize: 2,
+      context: "initial-demo",
+    },
+  },
+  {
+    component: "ui/timesheets",
+    event: "action.approve",
+    level: "info",
+    origin: "seed/podman",
+    detail: {
+      message: "タイムシート TS-002 を承認",
+      timesheetId: "TS-002",
+      actor: "demo-manager",
+    },
+  },
+  {
+    component: "ui/compliance",
+    event: "download.request",
+    level: "warn",
+    origin: "seed/podman",
+    detail: {
+      message: "INV-2024-0002 の証憑ダウンロードをリトライ",
+      invoiceId: "inv-2024-0002",
+      attachment: "INV-2024-0002.pdf",
+    },
+  },
+  {
+    component: "ui/telemetry",
+    event: "filters.apply",
+    level: "debug",
+    origin: "seed/podman",
+    detail: {
+      message: "Telemetryビューでコンポーネントフィルタを適用",
+      filter: { component: "ui" },
+    },
+  },
+];
+
 function parseAmount(value) {
   if (value === undefined || value === null) return null;
   const num = Number.parseFloat(String(value));
