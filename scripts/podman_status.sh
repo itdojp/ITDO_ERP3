@@ -7,6 +7,8 @@ PROJECT_DIR="${ROOT_DIR}/poc/event-backbone/local"
 TELEMETRY_SEED_AUTO_RESET="${TELEMETRY_SEED_AUTO_RESET:-false}"
 TELEMETRY_SEED_RESET_WITH_MINIO="${TELEMETRY_SEED_RESET_WITH_MINIO:-false}"
 TELEMETRY_SEED_RESET_TIMEOUT="${TELEMETRY_SEED_RESET_TIMEOUT:-60}"
+TELEMETRY_SEED_MAX_ATTEMPTS="${TELEMETRY_SEED_MAX_ATTEMPTS:-2}"
+TELEMETRY_SEED_SETTLE_SECONDS="${TELEMETRY_SEED_SETTLE_SECONDS:-2}"
 
 print_section() {
   local title=$1
@@ -43,7 +45,10 @@ if ! command -v python3 >/dev/null 2>&1; then
 else
   telemetry_attempts=1
   if [[ ${TELEMETRY_SEED_AUTO_RESET,,} == "true" ]]; then
-    telemetry_attempts=2
+    telemetry_attempts="${TELEMETRY_SEED_MAX_ATTEMPTS}"
+    if ! [[ "${telemetry_attempts}" =~ ^[0-9]+$ ]] || (( telemetry_attempts < 2 )); then
+      telemetry_attempts=2
+    fi
   fi
   telemetry_status=1
   telemetry_message=""
@@ -108,10 +113,15 @@ PY2
       if [[ ${TELEMETRY_SEED_RESET_WITH_MINIO,,} == "true" ]]; then
         reset_args+=(--with-minio)
       fi
-      if ! "${ROOT_DIR}/scripts/reset_pm_state.sh" "${reset_args[@]}"; then
+      reset_pm_state_output=$(mktemp)
+      if ! "${ROOT_DIR}/scripts/reset_pm_state.sh" "${reset_args[@]}" >"${reset_pm_state_output}" 2>&1; then
         echo "[telemetry] reset_pm_state.sh execution failed" >&2
+        echo "[telemetry] Output:" >&2
+        cat "${reset_pm_state_output}" >&2
+        rm -f "${reset_pm_state_output}"
         break
       fi
+      rm -f "${reset_pm_state_output}"
       echo "[telemetry] restarting pm-service for telemetry reseed" >&2
       if ! (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" restart pm-service >/dev/null 2>&1); then
         echo "[telemetry] pm-service restart failed" >&2
@@ -130,7 +140,7 @@ PY2
         echo "[telemetry] pm-service did not recover within ${TELEMETRY_SEED_RESET_TIMEOUT}s" >&2
         break
       fi
-      sleep 2
+      sleep "${TELEMETRY_SEED_SETTLE_SECONDS}"
       continue
     fi
   done
