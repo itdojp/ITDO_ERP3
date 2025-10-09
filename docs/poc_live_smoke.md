@@ -32,6 +32,8 @@ Slack 通知例:
 
 > 互換性のため `PODMAN_AUTO_HOST_FALLBACK=false` を指定するとフォールバックが完全に無効化され、`PODMAN_HOST_FALLBACK_MODE` が `auto` の場合でも `never` に強制されます。新しいモード指定を優先的に使用してください。
 
+> 動作確認のヒント: WSL2 では `PODMAN_HOST_FALLBACK_MODE=force` で実行し、Slack 通知や `scripts/poc_live_smoke.sh` のログに `fallback_used": true` が記録されることを確認します。Linux ネイティブ環境では `never` に切り替えても成功し、`fallback_used": false` となるのが理想です。
+
 ## Telemetry seed 検証
 
 | 変数 | 既定値 | 役割 |

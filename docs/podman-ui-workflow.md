@@ -94,3 +94,9 @@ PM_PORT=3105 UI_PORT=4105 scripts/podman_live_tests.sh --with-minio
 ```
 
 任意のポートやフォールバック設定は環境変数で上書き可能です（例: `PODMAN_HOST_FALLBACK_MODE=never scripts/podman_live_tests.sh`）。実行が完了するとスタックは自動的に停止します。
+
+## 環境別フォールバック確認メモ
+
+- **WSL2 (Ubuntu)**: `PODMAN_HOST_FALLBACK_MODE=force PM_PORT=3103 UI_PORT=4103 scripts/run_podman_ui_poc.sh --detach` を実行し、ログに `Host fallback forced by configuration` のみが表示されることを確認してください。`scripts/podman_status.sh` が `http://localhost:3103` のヘルスチェックに成功すればネットワーク解決は完了です。
+- **macOS (Podman Desktop)**: まず `PODMAN_HOST_FALLBACK_MODE=never` で起動して 60 秒以内に pm-service が立ち上がるか確認し、失敗した場合は `force` で再試行します。`podman logs local_pm-service_1` 内に `connected to RabbitMQ` が出力されればフォールバックで解決できています。
+- **Linux ネイティブ環境**: 既定の `auto` で `scripts/run_podman_ui_poc.sh --detach` を実行し、フォールバックが不要であること（`fallback_attempted` のログが出ないこと）を確認します。環境診断として `PODMAN_HOST_FALLBACK_MODE=never` で再実行すると DNS 設定の健全性がチェックできます。
