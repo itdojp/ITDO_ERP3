@@ -10,3 +10,8 @@
 
 ## UI Feedback
 - [UI PoC フィードバック・バックログ](ui-poc-feedback-backlog.md)
+- [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
+<<<<<<< HEAD
+=======
+- [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
+>>>>>>> db8f102 (Add guide for Grafana telemetry dashboard)
