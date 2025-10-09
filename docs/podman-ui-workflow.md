@@ -38,6 +38,8 @@
 
 > 💡 テレメトリ PoC では、pm-service 起動時にサンプルイベントが自動投入されます。実検証用に空の状態で開始したい場合は `TELEMETRY_SEED_DISABLE=true` を環境変数として渡してください。
 
+`scripts/podman_status.sh` を実行すると `Telemetry seed verification` セクションでシードイベント件数が自動判定されます。閾値を変更する場合は `TELEMETRY_MIN_SEEDED` 環境変数で上書きしてください。
+
 検証結果は Issue コメントに箇条書きで残し、UI/UX 上の気付きや不具合を新規 Issue に切り出してください。
 
 ## 停止手順
@@ -56,7 +58,7 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 
 ## ログ記録とサンプル
 
-- 簡易ヘルスチェック: `PM_PORT=3103 UI_PORT=4103 scripts/podman_status.sh`
+- 簡易ヘルスチェック: `PM_PORT=3103 UI_PORT=4103 scripts/podman_status.sh` （Telemetry seed verification で seeded 件数を自動チェック）
 - テンプレート: [`docs/podman-manual-log-template.md`](podman-manual-log-template.md)
 - Telemetryイベント送信（追加が必要な場合）: `PM_PORT=3103 TELEMETRY_BASE=http://localhost:3103 scripts/send_telemetry_sample.sh manual/ui-check event_info` (curl のレスポンスは自動でログに記録されますが、エラーとなった場合は標準エラー出力にメッセージが表示されます)
 
