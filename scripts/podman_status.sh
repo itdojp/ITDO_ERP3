@@ -9,6 +9,7 @@ TELEMETRY_SEED_RESET_WITH_MINIO="${TELEMETRY_SEED_RESET_WITH_MINIO:-false}"
 TELEMETRY_SEED_RESET_TIMEOUT="${TELEMETRY_SEED_RESET_TIMEOUT:-60}"
 TELEMETRY_SEED_MAX_ATTEMPTS="${TELEMETRY_SEED_MAX_ATTEMPTS:-2}"
 TELEMETRY_SEED_SETTLE_SECONDS="${TELEMETRY_SEED_SETTLE_SECONDS:-2}"
+SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
 
 print_section() {
   local title=$1
@@ -21,6 +22,43 @@ print_section "Podman containers"
   cd "${PROJECT_DIR}"
   podman-compose -f "${COMPOSE_FILE}" ps
 )
+
+notify_slack() {
+  local status="$1"
+  local message="$2"
+  if [[ -z "${SLACK_WEBHOOK_URL}" ]]; then
+    return
+  fi
+  local color="#36a64f"
+  local emoji=":white_check_mark:"
+  case "$status" in
+    warning)
+      color="#f59e0b"
+      emoji=":warning:"
+      ;;
+    failure)
+      color="#d73a4a"
+      emoji=":x:"
+      ;;
+  esac
+  local payload
+  payload=$(cat <<JSON
+{
+  "attachments": [
+    {
+      "color": "${color}",
+      "title": "PoC podman status (${status})",
+      "text": "${emoji} ${message}",
+      "mrkdwn_in": ["text"]
+    }
+  ]
+}
+JSON
+)
+  if ! curl -s -X POST -H 'Content-Type: application/json' -d "${payload}" "${SLACK_WEBHOOK_URL}" >/dev/null 2>&1; then
+    echo "[slack] warning: failed to send notification (status=${status})" >&2
+  fi
+}
 
 print_section "Service health"
 PM_HOST_PORT=${PM_PORT:-3001}
@@ -42,6 +80,7 @@ TELEMETRY_MIN_SEEDED=${TELEMETRY_MIN_SEEDED:-5}
 printf "%-45s : " "${TELEMETRY_ENDPOINT}"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "skipped (python3 not available)"
+  notify_slack "failure" "podman_status telemetry seed skipped (python3 not available)"
 else
   telemetry_attempts=1
   if [[ ${TELEMETRY_SEED_AUTO_RESET,,} == "true" ]]; then
@@ -53,12 +92,13 @@ else
   telemetry_status=1
   telemetry_message=""
   fallback_used=false
+  slack_fallback_sent=false
   attempt=0
   while (( attempt < telemetry_attempts )); do
     attempt=$((attempt + 1))
     if ! response=$(curl -fsS "${TELEMETRY_ENDPOINT}" 2>/dev/null); then
       telemetry_message="failed to fetch telemetry payload"
-    else
+  else
       export TELEMETRY_MIN_SEEDED
       export TELEMETRY_PAYLOAD="${response}"
       set +e
@@ -109,6 +149,10 @@ PY2
     if (( attempt < telemetry_attempts )); then
       fallback_used=true
       echo "[telemetry] seed verification failed (attempt ${attempt}); resetting state" >&2
+      if [[ "${slack_fallback_sent}" != "true" ]]; then
+        notify_slack "warning" "podman_status telemetry seed fallback triggered (attempt ${attempt})"
+        slack_fallback_sent=true
+      fi
       reset_args=()
       if [[ ${TELEMETRY_SEED_RESET_WITH_MINIO,,} == "true" ]]; then
         reset_args+=(--with-minio)
@@ -148,14 +192,18 @@ PY2
   if [ "${telemetry_status}" -eq 0 ]; then
     if [[ "${fallback_used}" == "true" ]]; then
       echo "ok - ${telemetry_message} (after auto reset)"
+      notify_slack "success" "podman_status telemetry seed verified after reset (${telemetry_message})"
     else
       echo "ok - ${telemetry_message}"
+      notify_slack "success" "podman_status telemetry seed ok (${telemetry_message})"
     fi
   else
     if [ -n "${telemetry_message}" ]; then
       echo "error - ${telemetry_message}"
+      notify_slack "failure" "podman_status telemetry seed failed: ${telemetry_message}"
     else
       echo "error - telemetry seed verification failed"
+      notify_slack "failure" "podman_status telemetry seed verification failed"
     fi
   fi
 fi
