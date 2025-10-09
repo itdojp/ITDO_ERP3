@@ -767,5 +767,8 @@ if [[ "$STATUS" == "success" ]]; then
   fi
   local telemetry_note="telemetry=${TELEMETRY_SEED_STATUS}"
   telemetry_note+=" (seeded=${TELEMETRY_SEEDED_COUNT}, min=${TELEMETRY_MIN_SEEDED}, attempts=${TELEMETRY_SEED_ATTEMPTS_USED})"
+  if [[ -n "${TELEMETRY_SEED_ATTEMPTS_USED:-}" && ${TELEMETRY_SEED_ATTEMPTS_USED} -gt 1 ]]; then
+    telemetry_note+=" (auto-reset retried)"
+  fi
   notify_slack "success" "Live smoke completed successfully (runs=${LOOP_COUNT}, ${fallback_note}, ${telemetry_note})"
 fi
