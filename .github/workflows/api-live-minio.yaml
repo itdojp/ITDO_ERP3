@@ -84,7 +84,7 @@ jobs:
         run: |
           if [[ -d logs/poc-smoke ]]; then
             echo "[slack] collected logs:";
-            grep -h "Slack" -r logs/poc-smoke || echo "(no Slack markers in logs/poc-smoke)"
+            grep -ih "Slack" -r logs/poc-smoke || echo "(no Slack markers in logs/poc-smoke)"
           else
             echo "[slack] logs/poc-smoke not found"
           fi
