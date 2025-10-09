@@ -54,6 +54,7 @@ PODMAN_HOST_FALLBACK_ACTIVE="${PODMAN_HOST_FALLBACK_ACTIVE:-false}"
 fallback_attempted=false
 fallback_used_overall=false
 TELEMETRY_SEED_STATUS="pending"
+TELEMETRY_SEEDED_COUNT="unknown"
 TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
 TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
 
@@ -358,6 +359,7 @@ check_telemetry_seed() {
     collect_logs "telemetry-seed"
     notify_slack "failure" "telemetry seed verification skipped (no python)"
     TELEMETRY_SEED_STATUS="skipped-no-python"
+    TELEMETRY_SEEDED_COUNT="n/a"
     return 1
   fi
   local response
@@ -366,6 +368,7 @@ check_telemetry_seed() {
     collect_logs "telemetry-seed"
     notify_slack "failure" "telemetry seed endpoint unreachable"
     TELEMETRY_SEED_STATUS="failed-endpoint"
+    TELEMETRY_SEEDED_COUNT="unreachable"
     return 1
   fi
   local output
@@ -414,10 +417,16 @@ PY2
     collect_logs "telemetry-seed"
     notify_slack "failure" "telemetry seed verification failed"
     TELEMETRY_SEED_STATUS="failed"
+    TELEMETRY_SEEDED_COUNT="failed"
     return 1
   fi
   echo "[health] telemetry seed ok - $output"
   TELEMETRY_SEED_STATUS="verified"
+  if [[ "$output" =~ seeded\ events:\ ([0-9]+) ]]; then
+    TELEMETRY_SEEDED_COUNT="${BASH_REMATCH[1]}"
+  else
+    TELEMETRY_SEEDED_COUNT="unknown"
+  fi
   return 0
 }
 
@@ -765,5 +774,8 @@ if [[ "$STATUS" == "success" ]]; then
     fallback_note="fallback=used"
   fi
   local telemetry_note="telemetry=${TELEMETRY_SEED_STATUS}"
+  if [[ -n "${TELEMETRY_SEEDED_COUNT:-}" ]]; then
+    telemetry_note+=" (seeded=${TELEMETRY_SEEDED_COUNT})"
+  fi
   notify_slack "success" "Live smoke completed successfully (runs=${LOOP_COUNT}, ${fallback_note}, ${telemetry_note})"
 fi
