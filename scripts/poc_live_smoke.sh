@@ -199,9 +199,21 @@ write_summary() {
   if [[ -z "${fallback}" ]]; then
     fallback=false
   fi
+  local fallback_json=false
+  if [[ "${fallback,,}" == "true" ]]; then
+    fallback_json=true
+  fi
   local telemetry_status="${TELEMETRY_SEED_STATUS:-unknown}"
   local telemetry_seeded="${TELEMETRY_SEEDED_COUNT:-unknown}"
   local telemetry_attempts="${TELEMETRY_SEED_ATTEMPTS_USED:-0}"
+  local telemetry_seeded_json="\"${telemetry_seeded}\""
+  if [[ "${telemetry_seeded}" =~ ^[0-9]+$ ]]; then
+    telemetry_seeded_json="${telemetry_seeded}"
+  fi
+  local telemetry_attempts_json="\"${telemetry_attempts}\""
+  if [[ "${telemetry_attempts}" =~ ^[0-9]+$ ]]; then
+    telemetry_attempts_json="${telemetry_attempts}"
+  fi
   mkdir -p "${LOG_DIR}"
   cat >"${file}" <<JSON
 {
@@ -209,11 +221,11 @@ write_summary() {
   "failure_reason": "${FAIL_REASON:-}",
   "runs": ${LOOP_COUNT:-0},
   "attempt": ${ATTEMPT:-0},
-  "fallback_used": ${fallback,,},
+  "fallback_used": ${fallback_json},
   "telemetry": {
     "status": "${telemetry_status}",
-    "seeded_count": "${telemetry_seeded}",
-    "attempts": "${telemetry_attempts}"
+    "seeded_count": ${telemetry_seeded_json},
+    "attempts": ${telemetry_attempts_json}
   }
 }
 JSON
