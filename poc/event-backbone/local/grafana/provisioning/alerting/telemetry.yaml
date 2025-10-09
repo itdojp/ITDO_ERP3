@@ -11,6 +11,11 @@ groups:
         data:
           - refId: A
             datasourceUid: poc-loki
+            relativeTimeRange:
+              from: 300
+              to: 0
+            intervalMs: 60000
+            maxDataPoints: 43200
             model:
               datasource:
                 type: loki
@@ -28,10 +33,10 @@ groups:
           - refId: C
             datasourceUid: -100
             model:
-              expression: B > 0
+              expression: $B > 0
               type: math
         noDataState: OK
-        execErrState: ALERTING
+        execErrState: Alerting
         for: 5m
         annotations:
           summary: "Telemetry fallback events detected"
