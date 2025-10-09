@@ -55,7 +55,9 @@ notify_slack() {
 }
 JSON
 )
-  curl -s -X POST -H 'Content-Type: application/json' -d "${payload}" "${SLACK_WEBHOOK_URL}" >/dev/null 2>&1 || true
+  if ! curl -s -X POST -H 'Content-Type: application/json' -d "${payload}" "${SLACK_WEBHOOK_URL}" >/dev/null 2>&1; then
+    echo "[slack] warning: failed to send notification (status=${status})" >&2
+  fi
 }
 
 print_section "Service health"
