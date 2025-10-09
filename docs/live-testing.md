@@ -30,6 +30,7 @@ FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scr
 - Grafana の Loki データソース URL は `POC_LOKI_URL` で上書きできます。フォールバック時に DNS 解決を避けたい場合は `POC_LOKI_URL=http://localhost:3100` のように指定してください。
 - フォールバックで利用するホスト名を変更したい場合は `HOST_INTERNAL_ADDR` を上書きできます (既定: `host.containers.internal`)。
 - Telemetry シード件数は `scripts/poc_live_smoke.sh` 内で自動検証されます。閾値は `TELEMETRY_MIN_SEEDED` 変数で調整でき、結果はログおよび Slack 通知に反映されます。
+- Slack 通知は失敗時に `failure`、ホストフォールバック発動時に `warning`（`Host fallback enabled ...`）を送信します。成功通知には `fallback=used/unused` と `telemetry=<status>`（`verified`, `verified-after-reset`, `failed` など）が含まれるため、実行状況を即座に把握できます。
 
 ## 3. 個別の E2E テスト
 ```bash
