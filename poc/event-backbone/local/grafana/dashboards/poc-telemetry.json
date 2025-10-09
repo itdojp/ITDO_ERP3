@@ -84,6 +84,76 @@
         "type": "loki",
         "uid": "poc-loki"
       },
+      "description": "pm-service \u30ed\u30b0\u304b\u3089 seeded \u30a4\u30d9\u30f3\u30c8\u6570\u3092\u96c6\u8a08\u3057\u307e\u3059\u3002",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "options": {
+        "displayMode": "lcd",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      },
+      "pluginVersion": "10.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "poc-loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (component) (count_over_time({app=\"pm-service\"} |= \"\\\\\"seeded\\\\\": true\" [$__range]))",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Seeded events by component",
+      "transparent": false,
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "poc-loki"
+      },
+      "description": "pm-service \u304c telemetry seed \u30ea\u30c8\u30e9\u30a4\u3092\u884c\u3063\u305f\u56de\u6570\u3092\u96c6\u8a08\u3057\u307e\u3059\u3002",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -103,7 +173,7 @@
               },
               {
                 "color": "red",
-                "value": 5
+                "value": 3
               }
             ]
           },
@@ -113,12 +183,16 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
+        "w": 12,
+        "x": 12,
         "y": 12
       },
-      "id": 2,
+      "id": 3,
       "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -126,9 +200,7 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "value",
-        "wideLayout": true
+        "textMode": "value"
       },
       "pluginVersion": "10.4.4",
       "targets": [
@@ -138,12 +210,12 @@
             "uid": "poc-loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({job=\"poc-telemetry\", event=\"mock_fallback\"}[5m]))",
+          "expr": "count_over_time({app=\"pm-service\"} |= \"retrying seed\" [$__range])",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "Fallback Events (last 5m)",
+      "title": "pm-service telemetry retries",
       "transparent": false,
       "type": "stat"
     }
