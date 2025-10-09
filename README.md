@@ -104,7 +104,7 @@ Next.js ベースの UI PoC については、以下の手順でエンドツー�
    TIMEOUT_SECONDS=180 scripts/poc_live_smoke.sh --tests-only
    ```
    - Podman Compose で pm-service / RabbitMQ / Redis / MinIO / Grafana を起動し、ライブ API に対する Playwright シナリオとメトリクス監視を自動実行します。
-   - Slack Webhook を設定すると失敗通知も送信されます。詳細は `scripts/.env.poc_live_smoke.example` を参照してください。
+   - Slack Webhook を設定すると失敗通知も送信されます。詳細は `scripts/.env.poc_live_smoke.example` と [PoC Live Smoke Tests](docs/poc_live_smoke.md) を参照してください。
 
 3. **CI 監視**
    - GitHub Actions の **PoC Live Smoke** ワークフローでは MinIO 有効/無効の 2 パターンで上記スモークを毎日／手動で実行できます。

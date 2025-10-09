@@ -10,6 +10,7 @@ TELEMETRY_SEED_RESET_TIMEOUT="${TELEMETRY_SEED_RESET_TIMEOUT:-60}"
 TELEMETRY_SEED_MAX_ATTEMPTS="${TELEMETRY_SEED_MAX_ATTEMPTS:-2}"
 TELEMETRY_SEED_SETTLE_SECONDS="${TELEMETRY_SEED_SETTLE_SECONDS:-2}"
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
+PODMAN_STATUS_SLACK_NOTIFY_SUCCESS="${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS:-false}"
 
 print_section() {
   local title=$1
@@ -27,6 +28,9 @@ notify_slack() {
   local status="$1"
   local message="$2"
   if [[ -z "${SLACK_WEBHOOK_URL}" ]]; then
+    return
+  fi
+  if [[ "${status}" == "success" && ${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS,,} != "true" ]]; then
     return
   fi
   local color="#36a64f"

@@ -55,6 +55,8 @@ fallback_attempted=false
 fallback_used_overall=false
 TELEMETRY_SEED_STATUS="pending"
 TELEMETRY_SEEDED_COUNT="unknown"
+TELEMETRY_SEED_ATTEMPTS_USED=0
+TELEMETRY_SEED_RESET_COUNT=0
 TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
 TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
 
@@ -348,6 +350,8 @@ check_telemetry_seed() {
   local minimum="${TELEMETRY_MIN_SEEDED:-5}"
   local interpreter=""
   TELEMETRY_SEED_STATUS="verifying"
+  TELEMETRY_SEEDED_COUNT="unknown"
+  TELEMETRY_SEED_ATTEMPTS_USED=0
   for candidate in "${PYTHON_BIN:-}" python3 python; do
     if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
       interpreter="$candidate"
@@ -369,6 +373,7 @@ check_telemetry_seed() {
     notify_slack "failure" "telemetry seed endpoint unreachable"
     TELEMETRY_SEED_STATUS="failed-endpoint"
     TELEMETRY_SEEDED_COUNT="unreachable"
+    TELEMETRY_SEED_ATTEMPTS_USED=1
     return 1
   fi
   local output
@@ -418,10 +423,12 @@ PY2
     notify_slack "failure" "telemetry seed verification failed"
     TELEMETRY_SEED_STATUS="failed"
     TELEMETRY_SEEDED_COUNT="failed"
+    TELEMETRY_SEED_ATTEMPTS_USED=1
     return 1
   fi
   echo "[health] telemetry seed ok - $output"
   TELEMETRY_SEED_STATUS="verified"
+  TELEMETRY_SEED_ATTEMPTS_USED=1
   # Parser output example: "seeded events: 5 (expected >= 5)"
   local seeded_regex='seeded events: ([0-9]+)'
   if [[ "$output" =~ $seeded_regex ]]; then
@@ -776,8 +783,6 @@ if [[ "$STATUS" == "success" ]]; then
     fallback_note="fallback=used"
   fi
   local telemetry_note="telemetry=${TELEMETRY_SEED_STATUS}"
-  if [[ -n "${TELEMETRY_SEEDED_COUNT:-}" ]]; then
-    telemetry_note+=" (seeded=${TELEMETRY_SEEDED_COUNT})"
-  fi
+  telemetry_note+=" (seeded=${TELEMETRY_SEEDED_COUNT}, min=${TELEMETRY_MIN_SEEDED}, attempts=${TELEMETRY_SEED_ATTEMPTS_USED})"
   notify_slack "success" "Live smoke completed successfully (runs=${LOOP_COUNT}, ${fallback_note}, ${telemetry_note})"
 fi
