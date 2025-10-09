@@ -79,6 +79,16 @@ jobs:
           trap - EXIT
           wait "${RUN_PID}"
 
+      - name: Summarize Slack notifications
+        if: always()
+        run: |
+          if [[ -d logs/poc-smoke ]]; then
+            echo "[slack] collected logs:";
+            grep -h "Slack" -r logs/poc-smoke || echo "(no Slack markers in logs/poc-smoke)"
+          else
+            echo "[slack] logs/poc-smoke not found"
+          fi
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
