@@ -45,6 +45,8 @@ REDIS_TIMEOUT_SECONDS="${REDIS_TIMEOUT_SECONDS:-60}"
 LOKI_PORT="${LOKI_PORT:-3100}"
 LOKI_TIMEOUT_SECONDS="${LOKI_TIMEOUT_SECONDS:-60}"
 GRAFANA_TIMEOUT_SECONDS="${GRAFANA_TIMEOUT_SECONDS:-90}"
+TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
+TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
 
 usage() {
   cat <<USAGE
@@ -293,6 +295,80 @@ check_telemetry_endpoint() {
     return 1
   fi
   echo "[health] telemetry endpoint ok"
+  return 0
+}
+
+check_telemetry_seed() {
+  local url="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
+  local minimum="${TELEMETRY_MIN_SEEDED:-5}"
+  local interpreter=""
+  for candidate in "${PYTHON_BIN:-}" python3 python; do
+    if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
+      interpreter="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$interpreter" ]]; then
+    echo "[health] ERROR: python interpreter not available for telemetry seed verification" >&2
+    collect_logs "telemetry-seed"
+    notify_slack "failure" "telemetry seed verification skipped (no python)"
+    return 1
+  fi
+  local response
+  if ! response=$(curl -fsS "$url" 2>/dev/null); then
+    echo "[health] ERROR: telemetry seed endpoint unreachable (${url})" >&2
+    collect_logs "telemetry-seed"
+    notify_slack "failure" "telemetry seed endpoint unreachable"
+    return 1
+  fi
+  local output
+  local status
+  set +e
+output=$(printf '%s' "$response" | "$interpreter" - "$minimum" <<'PY2'
+import json
+import sys
+
+try:
+    expected = max(0, int(sys.argv[1]))
+except Exception:
+    expected = 0
+
+try:
+    payload = json.load(sys.stdin)
+except Exception as exc:
+    print(f"Telemetry response JSON decode error: {exc}")
+    sys.exit(2)
+
+items = payload.get("items")
+if not isinstance(items, list):
+    print("payload missing items list")
+    sys.exit(2)
+
+seeded = sum(
+    1
+    for item in items
+    if isinstance(item, dict)
+    and isinstance(item.get("detail"), dict)
+    and item["detail"].get("seeded") is True
+)
+
+print(f"seeded events: {seeded} (expected >= {expected})")
+sys.exit(0 if seeded >= expected else 1)
+PY2
+  )
+  status=$?
+  set -e
+  if (( status != 0 )); then
+    if [[ -n "$output" ]]; then
+      echo "[health] ERROR: telemetry seed verification failed - $output" >&2
+    else
+      echo "[health] ERROR: telemetry seed verification failed" >&2
+    fi
+    collect_logs "telemetry-seed"
+    notify_slack "failure" "telemetry seed verification failed"
+    return 1
+  fi
+  echo "[health] telemetry seed ok - $output"
   return 0
 }
 
@@ -575,6 +651,9 @@ while true; do
     elif ! check_telemetry_endpoint; then
       STATUS="failure"
       FAIL_REASON="telemetry"
+    elif ! check_telemetry_seed; then
+      STATUS="failure"
+      FAIL_REASON="telemetry_seed"
     elif ! check_grafana_manifest; then
       STATUS="failure"
       FAIL_REASON="grafana_manifest"
