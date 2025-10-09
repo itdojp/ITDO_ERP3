@@ -7,10 +7,10 @@
 `SLACK_WEBHOOK_URL` を設定すると進捗が Slack に投稿されます。通知レベルとメッセージの読み方は次の通りです。
 
 | レベル | 例 | 説明 |
-| ------ | --- | --- |
+| --- | --- | --- |
 | `failure` | `pm-service failed health check` | 致命的なエラーが発生した場合。対応後は `logs/poc-smoke` の収集ログを参照して原因を確認します。 |
 | `warning` | `Host fallback enabled (attempt=1, host=host.containers.internal)` | pm-service の起動に時間がかかり、`host.containers.internal` へのフォールバックを試みた際に送信されます。フォールバック後も問題が続くと `failure` へ移行します。 |
-| `success` | `Live smoke completed successfully (runs=1, fallback=used, telemetry=verified-after-reset)` | スクリプト完了時。`fallback=used/unused` でフォールバックの有無、`telemetry=<status>` で Telemetry seed 検証の結果を確認できます。 |
+| `success` | `Live smoke completed successfully (runs=1, fallback=used, telemetry=verified-after-reset)` | `fallback=used/unused` でフォールバックの有無、`telemetry=<status>` で Telemetry seed 検証の結果を確認できます。 |
 
 Slack 通知例:
 
@@ -39,12 +39,13 @@ Slack 通知例:
 成功通知の `telemetry` フィールドは以下を表します。
 
 | 表示値 | 意味 |
-| ------ | ---- |
+| --- | --- |
 | `verified` | 初回検証で閾値を満たした。 |
 | `verified-after-reset` | 自動リセット後に閾値を満たした。 |
-| `failed` / `failed-endpoint` / `skipped-no-python` | それぞれ閾値未達、エンドポイント未到達、Python 未検出などのエラー状態。Slack では `failure` 通知が送信されます。 |
+| `failed` | Telemetry API の閾値未達。 |
+| `failed-endpoint` | Telemetry API に到達できなかった。 |
+| `skipped-no-python` | Python が見つからず検証できなかった。 |
 
 ---
 
 より詳細な手順や GitHub Actions での実行方法は [`docs/live-testing.md`](live-testing.md) を参照してください。
-
