@@ -202,6 +202,7 @@ enable_host_internal_fallback() {
   export MINIO_ENDPOINT="${host}"
   export MINIO_PUBLIC_ENDPOINT="${host}"
   export MINIO_PUBLIC_PORT="${MINIO_HOST_PORT}"
+  export POC_LOKI_URL="http://localhost:${LOKI_PORT}"
   export PODMAN_HOST_FALLBACK_ACTIVE=true
 }
 
@@ -212,7 +213,7 @@ should_attempt_host_fallback() {
 start_stack() {
   echo "[stack] restarting PoC stack"
   if [[ "${PODMAN_HOST_FALLBACK_ACTIVE}" == "true" ]]; then
-    echo "[stack] host fallback active (AMQP_URL=${AMQP_URL:-unset}, REDIS_URL=${REDIS_URL:-unset}, MINIO_ENDPOINT=${MINIO_ENDPOINT:-unset})"
+    echo "[stack] host fallback active (AMQP_URL=${AMQP_URL:-unset}, REDIS_URL=${REDIS_URL:-unset}, MINIO_ENDPOINT=${MINIO_ENDPOINT:-unset}, POC_LOKI_URL=${POC_LOKI_URL:-unset})"
   fi
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" down >/dev/null 2>&1) || true
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" up -d --build)
