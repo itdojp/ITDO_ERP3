@@ -33,6 +33,11 @@ jobs:
       - name: Run podman live tests and verify telemetry seed
         env:
           TELEMETRY_MIN_SEEDED: 5
+          FORCE_PM_PORT: ${{ env.FORCE_PM_PORT }}
+          PM_PORT: ${{ env.PM_PORT }}
+          UI_PORT: ${{ env.UI_PORT }}
+          USE_MINIO: ${{ env.USE_MINIO }}
+          UI_HEADLESS: ${{ env.UI_HEADLESS }}
         run: |
           set -euo pipefail
           sudo apt-get update
