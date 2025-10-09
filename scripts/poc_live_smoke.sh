@@ -422,7 +422,9 @@ PY2
   fi
   echo "[health] telemetry seed ok - $output"
   TELEMETRY_SEED_STATUS="verified"
-  if [[ "$output" =~ seeded\ events:\ ([0-9]+) ]]; then
+  # Parser output example: "seeded events: 5 (expected >= 5)"
+  local seeded_regex='seeded events: ([0-9]+)'
+  if [[ "$output" =~ $seeded_regex ]]; then
     TELEMETRY_SEEDED_COUNT="${BASH_REMATCH[1]}"
   else
     TELEMETRY_SEEDED_COUNT="unknown"
