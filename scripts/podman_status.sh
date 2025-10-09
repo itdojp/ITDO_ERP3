@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/poc/event-backbone/local/podman-compose.yml"
 PROJECT_DIR="${ROOT_DIR}/poc/event-backbone/local"
+source "${ROOT_DIR}/scripts/lib/slack.sh"
 TELEMETRY_SEED_AUTO_RESET="${TELEMETRY_SEED_AUTO_RESET:-false}"
 TELEMETRY_SEED_RESET_WITH_MINIO="${TELEMETRY_SEED_RESET_WITH_MINIO:-false}"
 TELEMETRY_SEED_RESET_TIMEOUT="${TELEMETRY_SEED_RESET_TIMEOUT:-60}"
@@ -30,40 +31,12 @@ notify_slack() {
   if [[ -z "${SLACK_WEBHOOK_URL}" ]]; then
     return
   fi
-  if [[ "${status}" == "success" && ${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS,,} != "true" ]]; then
+  if [[ "$status" == "success" && ${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS,,} != "true" ]]; then
     return
   fi
-  local color="#36a64f"
-  local emoji=":white_check_mark:"
-  case "$status" in
-    warning)
-      color="#f59e0b"
-      emoji=":warning:"
-      ;;
-    failure)
-      color="#d73a4a"
-      emoji=":x:"
-      ;;
-  esac
-  local payload
-  payload=$(cat <<JSON
-{
-  "attachments": [
-    {
-      "color": "${color}",
-      "title": "PoC podman status (${status})",
-      "text": "${emoji} ${message}",
-      "mrkdwn_in": ["text"]
-    }
-  ]
-}
-JSON
-)
-  if ! curl -s -X POST -H 'Content-Type: application/json' -d "${payload}" "${SLACK_WEBHOOK_URL}" >/dev/null 2>&1; then
-    echo "[slack] warning: failed to send notification (status=${status})" >&2
-  fi
-}
 
+  slack_send "$status" "PoC podman status ($status)" "$message"
+}
 print_section "Service health"
 PM_HOST_PORT=${PM_PORT:-3001}
 for endpoint in \
