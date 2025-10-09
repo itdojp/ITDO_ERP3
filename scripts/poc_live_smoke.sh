@@ -51,6 +51,7 @@ MINIO_HOST_PORT="${MINIO_HOST_PORT:-${MINIO_PORT:-9000}}"
 PODMAN_AUTO_HOST_FALLBACK="${PODMAN_AUTO_HOST_FALLBACK:-true}"
 HOST_INTERNAL_ADDR="${HOST_INTERNAL_ADDR:-host.containers.internal}"
 PODMAN_HOST_FALLBACK_ACTIVE="${PODMAN_HOST_FALLBACK_ACTIVE:-false}"
+fallback_attempted=false
 
 usage() {
   cat <<USAGE
@@ -594,7 +595,7 @@ while true; do
       if should_attempt_host_fallback; then
         echo "[fallback] pm-service health check failed; retrying with host fallback (${HOST_INTERNAL_ADDR})"
         enable_host_internal_fallback
-        fallback_attempted=true
+        fallback_attempted=true  # guard against repeated fallback within the same attempt
         continue
       fi
       STATUS="failure"
