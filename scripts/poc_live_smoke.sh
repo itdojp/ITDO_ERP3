@@ -207,17 +207,17 @@ cleanup() {
 trap cleanup EXIT
 
 enable_host_internal_fallback() {
-  local host="${HOST_INTERNAL_ADDR}"
-  echo "[fallback] enabling host fallback via ${host}"
-  export AMQP_URL="amqp://guest:guest@${host}:${RABBITMQ_HOST_PORT}"
-  export REDIS_URL="redis://${host}:${REDIS_HOST_PORT}"
-  export MINIO_ENDPOINT="${host}"
-  export MINIO_PUBLIC_ENDPOINT="${host}"
+  local fallback_host="${HOST_INTERNAL_ADDR}"
+  echo "[fallback] enabling host fallback via ${fallback_host}"
+  export AMQP_URL="amqp://guest:guest@${fallback_host}:${RABBITMQ_HOST_PORT}"
+  export REDIS_URL="redis://${fallback_host}:${REDIS_HOST_PORT}"
+  export MINIO_ENDPOINT="${fallback_host}"
+  export MINIO_PUBLIC_ENDPOINT="${fallback_host}"
   export MINIO_PUBLIC_PORT="${MINIO_HOST_PORT}"
   export POC_LOKI_URL="http://localhost:${LOKI_PORT}"
   export PODMAN_HOST_FALLBACK_ACTIVE=true
   fallback_used_overall=true
-  notify_slack "warning" "Host fallback enabled (attempt=${ATTEMPT:-?}, host=${host})"
+  notify_slack "warning" "Host fallback enabled (attempt=${ATTEMPT:-?}, host=${fallback_host})"
 }
 
 should_attempt_host_fallback() {
@@ -264,10 +264,10 @@ wait_for_health() {
     if (( elapsed >= TIMEOUT )); then
       echo "[health] ERROR: pm-service did not become healthy within ${TIMEOUT}s" >&2
       collect_logs "health"
-      if [[ "${PODMAN_AUTO_HOST_FALLBACK,,}" != "true" || "${fallback_attempted}" == "true" ]]; then
-        notify_slack "failure" "pm-service failed health check"
-      else
+      if [[ "${PODMAN_AUTO_HOST_FALLBACK,,}" == "true" && "${fallback_attempted}" != "true" ]]; then
         echo "[health] host fallback will be attempted; suppressing Slack failure notification" >&2
+      else
+        notify_slack "failure" "pm-service failed health check"
       fi
       return 1
     fi
