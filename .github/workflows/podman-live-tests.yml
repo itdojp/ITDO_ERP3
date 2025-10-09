@@ -1,0 +1,30 @@
+name: Podman Live Playwright Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      with-minio:
+        description: "Enable MinIO when running the live tests"
+        required: false
+        default: "false"
+
+jobs:
+  live-tests:
+    runs-on:
+      - self-hosted
+      - linux
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/run_podman_ui_poc.sh scripts/podman_live_tests.sh
+      - name: Run Playwright live suite via Podman stack
+        env:
+          USE_MINIO: ${{ github.event.inputs.with-minio }}
+        run: |
+          if [[ "${USE_MINIO,,}" == "true" ]]; then
+            scripts/podman_live_tests.sh --with-minio
+          else
+            scripts/podman_live_tests.sh
+          fi
