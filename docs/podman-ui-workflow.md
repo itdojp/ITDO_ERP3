@@ -17,6 +17,8 @@
    - `--detach` を付けるとスクリプトが即時終了し、他のターミナルで作業を継続できます。
    - ログ: `ui-poc/.next/dev.log`
    - コンテナ確認: `cd poc/event-backbone/local && podman-compose -f podman-compose.yml ps`
+   - WSL2 などで毎回フォールバックが必要な場合は `--fallback-mode force` を付けると初回から `host.containers.internal` を利用します。
+   - 既存の `PODMAN_AUTO_HOST_FALLBACK=false` を設定している場合でも動作は維持されますが、新しい `PODMAN_HOST_FALLBACK_MODE`（`auto`/`force`/`never`）の利用を推奨します。
 
 2. 動作確認
    ```bash
@@ -74,7 +76,7 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 ## トラブルシューティング
 
 - **UI ポートが競合する**: `UI_PORT` を変更するか、既存の Next.js プロセスを停止します。
-- **pm-service が 60 秒以内に起動しない**: `scripts/run_podman_ui_poc.sh` 使用時は自動で `host.containers.internal` フォールバックを試行します。ログ (`podman-compose logs local_pm-service_1`) を確認し、それでも解決しない場合は `PODMAN_AUTO_HOST_FALLBACK=false` で明示的に無効化した上で手動で再起動してください。MinIO 有効時は初回に時間が掛かる場合があります。
+- **pm-service が 60 秒以内に起動しない**: `scripts/run_podman_ui_poc.sh` 使用時は標準で `host.containers.internal` へのフォールバックを自動試行します。WSL2 などで毎回フォールバックが必要な場合は `scripts/run_podman_ui_poc.sh --fallback-mode force ...` または `PODMAN_HOST_FALLBACK_MODE=force` を設定して初回からフォールバック構成で起動してください。逆にフォールバックを無効化する場合は `PODMAN_HOST_FALLBACK_MODE=never`（旧設定 `PODMAN_AUTO_HOST_FALLBACK=false` も利用可）を指定し、ログ (`podman-compose logs local_pm-service_1`) を確認して手動対応します。MinIO 有効時は初回に時間が掛かる場合があります。
 - **Grafana アラートが Loki に接続できない**: `POC_LOKI_URL` を `http://localhost:3100` などに上書きして再実行すると、DNS 解決を迂回できます。`scripts/run_podman_ui_poc.sh` のホストフォールバックでも自動でこの値に切り替わります。
 - **GraphQL エラーで REST フォールバックになる**: 現状の PoC 仕様上許容されます。フォールバック後も UI 操作に支障がないか確認してください。
 - **イベントが流れない**: `podman logs local_producer_1` / `local_consumer_1` を確認し、RabbitMQ の接続エラーが解消されているかチェックします。

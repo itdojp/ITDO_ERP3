@@ -22,6 +22,7 @@ RABBITMQ_HOST_PORT="${RABBITMQ_HOST_PORT:-5672}"
 REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"
 MINIO_HOST_PORT="${MINIO_HOST_PORT:-${MINIO_PORT:-9000}}"
 LOKI_HOST_PORT="${LOKI_HOST_PORT:-3100}"
+PODMAN_HOST_FALLBACK_MODE="${PODMAN_HOST_FALLBACK_MODE:-auto}"
 
 usage() {
   cat <<USAGE
@@ -34,12 +35,14 @@ Options:
   --no-build       Skip \`podman-compose --build\` and reuse existing images (or set PODMAN_BUILD=false).
   --build          Force \`podman-compose --build\` regardless of PODMAN_BUILD.
   --detach         Keep Podman/Next.js running in background (implies UI_HEADLESS=true).
+  --fallback-mode  Control host fallback behaviour (auto|force|never). Default: auto.
   -h, --help       Show this help message.
 
 Environment variables:
   PM_PORT, UI_PORT, PM_CONTAINER_PORT, UI_HEADLESS, USE_MINIO, PODMAN_BUILD,
   FORCE_PM_PORT (default 3001, Playwright live testsの強制ポート)
-  PODMAN_AUTO_HOST_FALLBACK (default true), HOST_INTERNAL_ADDR (default host.containers.internal)
+  PODMAN_AUTO_HOST_FALLBACK (default true), PODMAN_HOST_FALLBACK_MODE (auto|force|never),
+  HOST_INTERNAL_ADDR (default host.containers.internal)
 USAGE
 }
 
@@ -71,6 +74,18 @@ while [[ $# -gt 0 ]]; do
       UI_HEADLESS=true
       shift
       ;;
+    --fallback-mode)
+      if [[ -z "${2:-}" ]]; then
+        echo "--fallback-mode requires a value (auto|force|never)" >&2
+        exit 1
+      fi
+      PODMAN_HOST_FALLBACK_MODE="$2"
+      shift 2
+      ;;
+    --fallback-mode=*)
+      PODMAN_HOST_FALLBACK_MODE="${1#*=}"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -82,6 +97,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+PODMAN_HOST_FALLBACK_MODE="${PODMAN_HOST_FALLBACK_MODE,,}"
+case "${PODMAN_HOST_FALLBACK_MODE}" in
+  auto|force|never)
+    ;;
+  *)
+    echo "[fallback] WARNING: Unknown fallback mode '${PODMAN_HOST_FALLBACK_MODE}', defaulting to auto." >&2
+    PODMAN_HOST_FALLBACK_MODE="auto"
+    ;;
+esac
+if [[ "${PODMAN_AUTO_HOST_FALLBACK,,}" == "false" && "${PODMAN_HOST_FALLBACK_MODE}" == "auto" ]]; then
+  PODMAN_HOST_FALLBACK_MODE="never"
+fi
 
 NEXT_DEV_PID=""
 
@@ -172,7 +200,17 @@ enable_host_internal_fallback() {
 }
 
 should_attempt_host_fallback() {
-  [[ ${PODMAN_AUTO_HOST_FALLBACK,,} == "true" && ${fallback_attempted} == false ]]
+  case "${PODMAN_HOST_FALLBACK_MODE}" in
+    force|auto)
+      [[ "${fallback_attempted}" != "true" ]]
+      ;;
+    never)
+      return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 perform_host_fallback() {
@@ -217,6 +255,12 @@ cleanup() {
 trap cleanup EXIT
 
 fallback_attempted=false
+
+if [[ "${PODMAN_HOST_FALLBACK_MODE}" == "force" ]]; then
+  echo "[fallback] Host fallback forced by configuration"
+  enable_host_internal_fallback
+  fallback_attempted=true
+fi
 
 launch_stack
 
