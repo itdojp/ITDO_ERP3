@@ -38,7 +38,7 @@
 | 5 | Telemetry | `Telemetry` を選択し、フィルタを設定 → `適用` | 起動直後のサンプルイベント（5件）が表示され、フィルタ結果で絞り込みできる | 自動更新のカウントダウンが進んでいること |
 | 6 | Metrics / Events | 必要に応じて `scripts/show_telemetry.js` や `/metrics/summary` を確認 | 最新イベント・メトリクスの値が更新されている | RabbitMQ/Redis を使ったイベントフローを確認する場合は `local_consumer` ログを参照 |
 
-> 💡 テレメトリ PoC では、pm-service 起動時にサンプルイベントが自動投入されます。実検証用に空の状態で開始したい場合は `TELEMETRY_SEED_DISABLE=true` を環境変数として渡してください。
+> 💡 テレメトリ PoC では、pm-service 起動時にサンプルイベントが自動投入されます。実検証用に空の状態で開始したい場合は `TELEMETRY_SEED_DISABLE=true` を環境変数として渡してください。起動直後に 0 件のままでも自動的に最大 3 回まで再投入を試行します。
 
 `scripts/podman_status.sh` を実行すると `Telemetry seed verification` セクションでシードイベント件数が自動判定されます。閾値を変更する場合は `TELEMETRY_MIN_SEEDED` 環境変数で上書きしてください。
 
