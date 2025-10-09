@@ -9,7 +9,7 @@ PM_PORT="${PM_PORT:-3001}"
 MINIO_PORT="${MINIO_PORT:-9000}"
 MINIO_TIMEOUT="${MINIO_TIMEOUT_SECONDS:-60}"
 POLL_INTERVAL="${POLL_INTERVAL:-1}"
-TIMEOUT="${TIMEOUT_SECONDS:-90}"
+TIMEOUT="${TIMEOUT_SECONDS:-60}"
 LOG_DIR="${LOG_DIR:-${ROOT_DIR}/logs/poc-smoke}"
 USE_MINIO="${USE_MINIO:-true}"
 RETRY_LIMIT="${RETRY_LIMIT:-1}"
@@ -52,6 +52,8 @@ PODMAN_AUTO_HOST_FALLBACK="${PODMAN_AUTO_HOST_FALLBACK:-true}"
 HOST_INTERNAL_ADDR="${HOST_INTERNAL_ADDR:-host.containers.internal}"
 PODMAN_HOST_FALLBACK_ACTIVE="${PODMAN_HOST_FALLBACK_ACTIVE:-false}"
 fallback_attempted=false
+TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
+TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
 
 usage() {
   cat <<USAGE
@@ -66,13 +68,11 @@ Environment variables:
   PM_PORT            Host port for pm-service (default: 3001)
   MINIO_PORT         Host port for MinIO (default: 9000)
   MINIO_TIMEOUT_SECONDS  Maximum wait for MinIO readiness (default: 60)
-  TIMEOUT_SECONDS    Maximum wait for pm-service health (default: 90)
+  TIMEOUT_SECONDS    Maximum wait for pm-service health (default: 60)
   POLL_INTERVAL      Poll interval while waiting for health (default: 1)
   LOG_DIR            Directory to store collected logs (default: logs/poc-smoke)
   RETRY_LIMIT        Number of retries before giving up (default: 1)
   RETRY_DELAY_SECONDS  Sleep seconds before retrying on failure (default: 15)
-  PODMAN_AUTO_HOST_FALLBACK  Attempt host.containers.internal fallback on pm-service timeout (default: true)
-  HOST_INTERNAL_ADDR  Hostname to use when enabling fallback (default: host.containers.internal)
   SLACK_WEBHOOK_URL  Optional Slack incoming webhook URL for notifications
 USAGE
 }
@@ -320,6 +320,80 @@ check_telemetry_endpoint() {
     return 1
   fi
   echo "[health] telemetry endpoint ok"
+  return 0
+}
+
+check_telemetry_seed() {
+  local url="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
+  local minimum="${TELEMETRY_MIN_SEEDED:-5}"
+  local interpreter=""
+  for candidate in "${PYTHON_BIN:-}" python3 python; do
+    if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
+      interpreter="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$interpreter" ]]; then
+    echo "[health] ERROR: python interpreter not available for telemetry seed verification" >&2
+    collect_logs "telemetry-seed"
+    notify_slack "failure" "telemetry seed verification skipped (no python)"
+    return 1
+  fi
+  local response
+  if ! response=$(curl -fsS "$url" 2>/dev/null); then
+    echo "[health] ERROR: telemetry seed endpoint unreachable (${url})" >&2
+    collect_logs "telemetry-seed"
+    notify_slack "failure" "telemetry seed endpoint unreachable"
+    return 1
+  fi
+  local output
+  local status
+  set +e
+output=$(printf '%s' "$response" | "$interpreter" - "$minimum" <<'PY2'
+import json
+import sys
+
+try:
+    expected = max(0, int(sys.argv[1]))
+except Exception:
+    expected = 0
+
+try:
+    payload = json.load(sys.stdin)
+except Exception as exc:
+    print(f"Telemetry response JSON decode error: {exc}")
+    sys.exit(2)
+
+items = payload.get("items")
+if not isinstance(items, list):
+    print("payload missing items list")
+    sys.exit(2)
+
+seeded = sum(
+    1
+    for item in items
+    if isinstance(item, dict)
+    and isinstance(item.get("detail"), dict)
+    and item["detail"].get("seeded") is True
+)
+
+print(f"seeded events: {seeded} (expected >= {expected})")
+sys.exit(0 if seeded >= expected else 1)
+PY2
+  )
+  status=$?
+  set -e
+  if (( status != 0 )); then
+    if [[ -n "$output" ]]; then
+      echo "[health] ERROR: telemetry seed verification failed - $output" >&2
+    else
+      echo "[health] ERROR: telemetry seed verification failed" >&2
+    fi
+    collect_logs "telemetry-seed"
+    notify_slack "failure" "telemetry seed verification failed"
+    return 1
+  fi
+  echo "[health] telemetry seed ok - $output"
   return 0
 }
 
@@ -609,6 +683,9 @@ while true; do
     elif ! check_telemetry_endpoint; then
       STATUS="failure"
       FAIL_REASON="telemetry"
+    elif ! check_telemetry_seed; then
+      STATUS="failure"
+      FAIL_REASON="telemetry_seed"
     elif ! check_grafana_manifest; then
       STATUS="failure"
       FAIL_REASON="grafana_manifest"
