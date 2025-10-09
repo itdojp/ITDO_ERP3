@@ -352,7 +352,6 @@ check_telemetry_seed() {
   TELEMETRY_SEED_STATUS="verifying"
   TELEMETRY_SEEDED_COUNT="unknown"
   TELEMETRY_SEED_ATTEMPTS_USED=0
-  TELEMETRY_SEED_RESET_COUNT=0
   for candidate in "${PYTHON_BIN:-}" python3 python; do
     if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
       interpreter="$candidate"
@@ -784,6 +783,6 @@ if [[ "$STATUS" == "success" ]]; then
     fallback_note="fallback=used"
   fi
   local telemetry_note="telemetry=${TELEMETRY_SEED_STATUS}"
-  telemetry_note+=" (seeded=${TELEMETRY_SEEDED_COUNT}, min=${TELEMETRY_MIN_SEEDED}, attempts=${TELEMETRY_SEED_ATTEMPTS_USED}, resets=${TELEMETRY_SEED_RESET_COUNT})"
+  telemetry_note+=" (seeded=${TELEMETRY_SEEDED_COUNT}, min=${TELEMETRY_MIN_SEEDED}, attempts=${TELEMETRY_SEED_ATTEMPTS_USED})"
   notify_slack "success" "Live smoke completed successfully (runs=${LOOP_COUNT}, ${fallback_note}, ${telemetry_note})"
 fi
