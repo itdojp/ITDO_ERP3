@@ -16,6 +16,7 @@ Options are forwarded to run_podman_ui_poc.sh. Helpful overrides:
   UI_PORT=4107 PM_PORT=3107 ${0##*/}
   ${0##*/} --with-minio
   PODMAN_HOST_FALLBACK_MODE=never ${0##*/}
+  ${0##*/} --fallback-mode force
 
 Environment defaults:
   PM_PORT (default 3105)
@@ -24,10 +25,20 @@ Environment defaults:
 USAGE
 }
 
-if [[ ${1:-} == "--help" ]]; then
-  usage
-  exit 0
-fi
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${args[@]}"
 
 if [[ ! -x "${RUNNER}" ]]; then
   echo "[live-tests] ERROR: ${RUNNER} is missing or not executable" >&2
