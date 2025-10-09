@@ -150,6 +150,14 @@ test.describe('API Live Integration', () => {
   });
 
   test('telemetry page displays latest events', async ({ page, request }) => {
+    const seedResponse = await request.get(`${API_BASE}/api/v1/telemetry/ui`);
+    expect(seedResponse.ok()).toBeTruthy();
+    const seedPayload = await seedResponse.json();
+    expect(seedPayload.total).toBeGreaterThanOrEqual(5);
+    expect(Array.isArray(seedPayload.items)).toBeTruthy();
+    const hasSeededMarker = seedPayload.items?.some((item: { detail?: { seeded?: boolean } }) => item?.detail?.seeded === true);
+    expect(hasSeededMarker).toBeTruthy();
+
     const eventName = `e2e-telemetry-${Date.now()}`;
     const response = await request.post(`${API_BASE}/api/v1/telemetry/ui`, {
       headers: { 'Content-Type': 'application/json' },
