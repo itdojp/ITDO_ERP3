@@ -576,12 +576,14 @@ async function main() {
     return enriched;
   };
 
+  const telemetrySeedAvailable = () => Array.isArray(telemetrySeed) && telemetrySeed.length > 0;
+
   const seedTelemetryIfNeeded = () => {
     if (TELEMETRY_SEED_DISABLED) {
       console.info('[telemetry] seed skipped (TELEMETRY_SEED_DISABLE=true)');
       return;
     }
-    if (!Array.isArray(telemetrySeed) || telemetrySeed.length === 0) {
+    if (!telemetrySeedAvailable()) {
       return;
     }
     if (telemetryLog.length > 0) {
@@ -618,8 +620,7 @@ async function main() {
     if (
       TELEMETRY_SEED_DISABLED ||
       TELEMETRY_SEED_RETRY_ATTEMPTS <= 0 ||
-      !Array.isArray(telemetrySeed) ||
-      telemetrySeed.length === 0
+      !telemetrySeedAvailable()
     ) {
       return;
     }
@@ -633,11 +634,12 @@ async function main() {
         `[telemetry] log empty after startup, retrying seed (${attempts}/${TELEMETRY_SEED_RETRY_ATTEMPTS})`,
       );
       seedTelemetryIfNeeded();
-      if (telemetryLog.length === 0 && attempts < TELEMETRY_SEED_RETRY_ATTEMPTS) {
+      const stillEmpty = telemetryLog.length === 0;
+      if (stillEmpty && attempts < TELEMETRY_SEED_RETRY_ATTEMPTS) {
         setTimeout(attemptSeed, TELEMETRY_SEED_RETRY_DELAY_MS);
         return;
       }
-      if (telemetryLog.length === 0) {
+      if (stillEmpty) {
         console.error('[telemetry] failed to seed sample events after retries');
       }
     };
