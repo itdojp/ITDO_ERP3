@@ -8,10 +8,9 @@ usage() {
   cat <<USAGE
 Usage: ${0##*/} [options]
 
-Runs the Podman UI PoC stack just long enough to execute the Playwright live suite
-(
-  npm run test:e2e:live
-) and tears everything down afterwards.
+Runs the Podman UI PoC stack just long enough to execute the Playwright live suite via:
+  run_podman_ui_poc.sh --tests-only
+and tears everything down afterwards.
 
 Options are forwarded to run_podman_ui_poc.sh. Helpful overrides:
   UI_PORT=4107 PM_PORT=3107 ${0##*/}
