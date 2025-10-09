@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { createTestServer } from '../test-utils/createTestServer.js';
+import { telemetrySeed } from '../sample-data.js';
 
 describe('REST API idempotency', () => {
 const { app } = createTestServer({ enableRest: true });
@@ -62,6 +63,16 @@ const { app } = createTestServer({ enableRest: true });
 });
 
 describe('Telemetry API', () => {
+  test('automatically seeds telemetry entries when enabled', async () => {
+    const server = createTestServer({ enableRest: true, seedTelemetry: true });
+    const res = await request(server.app).get('/api/v1/telemetry/ui').expect(200);
+
+    expect(res.body.total).toBeGreaterThanOrEqual(telemetrySeed.length);
+    expect(res.body.items.length).toBeGreaterThanOrEqual(telemetrySeed.length);
+    expect(res.body.items[0].ip).toBe('seed::test');
+    expect(res.body.items.some((item) => item.detail?.seeded)).toBe(true);
+  });
+
   test('stores telemetry events and exposes them via GET', async () => {
     const server = createTestServer({ enableRest: true });
     const { app: telemetryApp } = server;

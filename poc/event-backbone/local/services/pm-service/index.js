@@ -7,7 +7,7 @@ import { readFile, writeFile, mkdir, appendFile, rename, stat, rm } from 'fs/pro
 import { existsSync } from 'fs';
 import path from 'path';
 import { graphqlHTTP } from 'express-graphql';
-import { projectSeed, timesheetSeed, invoiceSeed, filterInvoices } from './sample-data.js';
+import { projectSeed, timesheetSeed, invoiceSeed, telemetrySeed, filterInvoices } from './sample-data.js';
 import { createGraphQLSchema } from './graphql-schema.js';
 
 const AMQP_URL = process.env.AMQP_URL || 'amqp://guest:guest@rabbitmq:5672';
@@ -37,6 +37,7 @@ const TELEMETRY_DEFAULT_LIMIT = Math.max(1, parseInt(process.env.TELEMETRY_DEFAU
 const TELEMETRY_MAX_LIMIT = Math.max(1, parseInt(process.env.TELEMETRY_MAX_LIMIT || '200', 10));
 const TELEMETRY_DATE_FIELDS = ['since', 'from', 'start', 'after'];
 const TELEMETRY_END_DATE_FIELDS = ['until', 'to', 'end', 'before'];
+const TELEMETRY_SEED_DISABLED = (process.env.TELEMETRY_SEED_DISABLE || 'false').toLowerCase() === 'true';
 
 const METRICS_CACHE_MS = parseInt(process.env.METRICS_CACHE_MS || '5000', 10);
 const IDEMP_TTL_MS = Math.max(0, parseInt(process.env.IDEMP_TTL_MS || String(24 * 60 * 60 * 1000), 10));
@@ -546,6 +547,73 @@ async function main() {
   let invoices = cloneDeep(invoiceSeed);
   let eventLog = [];
   let telemetryLog = [];
+
+  const ingestTelemetryEvent = (payload, options = {}) => {
+    const base =
+      typeof payload === 'object' && payload !== null
+        ? payload
+        : { detail: { message: String(payload ?? 'invalid payload') } };
+    const {
+      source = 'ui:ingest',
+      ip = base.ip ?? '127.0.0.1',
+      timestamp,
+    } = options;
+    const resolvedTimestamp = timestamp ?? base.timestamp ?? new Date().toISOString();
+    const enriched = {
+      ...base,
+      timestamp: base.timestamp ?? resolvedTimestamp,
+      receivedAt: base.receivedAt ?? resolvedTimestamp,
+      ip,
+    };
+    telemetryLog.push(enriched);
+    if (telemetryLog.length > 200) {
+      telemetryLog = telemetryLog.slice(-200);
+    }
+    console.info(`[telemetry:${source}]`, JSON.stringify(enriched));
+    void appendTelemetryLogEntry(enriched);
+    return enriched;
+  };
+
+  const seedTelemetryIfNeeded = () => {
+    if (TELEMETRY_SEED_DISABLED) {
+      console.info('[telemetry] seed skipped (TELEMETRY_SEED_DISABLE=true)');
+      return;
+    }
+    if (!Array.isArray(telemetrySeed) || telemetrySeed.length === 0) {
+      return;
+    }
+    if (telemetryLog.length > 0) {
+      return;
+    }
+    const now = Date.now();
+    telemetrySeed.forEach((entry, index) => {
+      const baseDetail =
+        entry && typeof entry.detail === 'object' && entry.detail !== null
+          ? cloneDeep(entry.detail)
+          : entry?.detail !== undefined
+            ? { message: String(entry.detail) }
+            : {};
+      const timestamp = new Date(now - (telemetrySeed.length - index) * 1500).toISOString();
+      ingestTelemetryEvent(
+        {
+          ...entry,
+          detail: {
+            ...baseDetail,
+            seeded: true,
+          },
+        },
+        {
+          source: 'seed',
+          ip: 'seed::pm-service',
+          timestamp,
+        },
+      );
+    });
+    console.info(`[telemetry] seeded ${telemetrySeed.length} sample events`);
+  };
+
+  seedTelemetryIfNeeded();
+
   const projectIdempotencyFallback = new Map();
   const timesheetIdempotencyFallback = new Map();
 
@@ -1023,17 +1091,8 @@ async function main() {
   });
 
   app.post('/api/v1/telemetry/ui', (req, res) => {
-    const payload = {
-      ...(typeof req.body === 'object' && req.body ? req.body : {}),
-      receivedAt: new Date().toISOString(),
-      ip: req.ip,
-    };
-    telemetryLog.push(payload);
-    if (telemetryLog.length > 200) {
-      telemetryLog = telemetryLog.slice(-200);
-    }
-    console.info('[telemetry:ui:ingest]', JSON.stringify(payload));
-    void appendTelemetryLogEntry(payload);
+    const payload = (typeof req.body === 'object' && req.body) || {};
+    ingestTelemetryEvent(payload, { source: 'ui:ingest', ip: req.ip });
     res.status(204).end();
   });
 
