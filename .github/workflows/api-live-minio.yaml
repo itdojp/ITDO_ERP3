@@ -30,11 +30,49 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: ui-poc
 
-      - name: Run podman live tests
+      - name: Run podman live tests and verify telemetry seed
+        env:
+          TELEMETRY_MIN_SEEDED: 5
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y podman podman-compose
-          FORCE_PM_PORT=3001 PM_PORT=3101 UI_PORT=4100 USE_MINIO=true UI_HEADLESS=true scripts/run_podman_ui_poc.sh --tests-only
+
+          FORCE_PM_PORT="${FORCE_PM_PORT}" \
+          PM_PORT="${PM_PORT}" \
+          UI_PORT="${UI_PORT}" \
+          USE_MINIO="${USE_MINIO}" \
+          UI_HEADLESS="${UI_HEADLESS}" \
+          scripts/run_podman_ui_poc.sh --tests-only &
+          RUN_PID=$!
+
+          cleanup() {
+            set +e
+            if kill -0 "${RUN_PID}" 2>/dev/null; then
+              wait "${RUN_PID}"
+            fi
+          }
+          trap cleanup EXIT
+
+          echo "Waiting for pm-service to become healthy on port ${PM_PORT}"
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://localhost:${PM_PORT}/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          if ! curl -fsS "http://localhost:${PM_PORT}/health" >/dev/null 2>&1; then
+            echo "pm-service did not become healthy within expected time" >&2
+            wait "${RUN_PID}"
+            exit 1
+          fi
+
+          echo "Verifying telemetry seed baseline (min ${TELEMETRY_MIN_SEEDED})"
+          PM_PORT="${PM_PORT}" TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED}" scripts/podman_status.sh
+
+          trap - EXIT
+          wait "${RUN_PID}"
 
       - name: Upload Playwright report
         if: always()
