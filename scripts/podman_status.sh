@@ -11,6 +11,7 @@ TELEMETRY_SEED_RESET_TIMEOUT="${TELEMETRY_SEED_RESET_TIMEOUT:-60}"
 TELEMETRY_SEED_MAX_ATTEMPTS="${TELEMETRY_SEED_MAX_ATTEMPTS:-2}"
 TELEMETRY_SEED_SETTLE_SECONDS="${TELEMETRY_SEED_SETTLE_SECONDS:-2}"
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
+PODMAN_STATUS_SLACK_NOTIFY_SUCCESS="${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS:-false}"
 
 print_section() {
   local title=$1
@@ -34,10 +35,8 @@ notify_slack() {
     return
   fi
 
-  slack_send "$status" "PoC podman status (${status})" "$message"
+  slack_send "$status" "PoC podman status ($status)" "$message"
 }
-
-
 print_section "Service health"
 PM_HOST_PORT=${PM_PORT:-3001}
 for endpoint in \
