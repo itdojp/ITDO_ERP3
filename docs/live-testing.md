@@ -25,6 +25,9 @@ FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scr
 - `SKIP_GRAPHQL_PREFLIGHT=true` を指定すると、GraphQL ウォームアップをスキップして素早くテストに入れます（起動直後の 400 応答が気になる場合は `false` のままにしてください）。
 - `E2E_REQUIRE_MINIO=true` を併用すると、Playwright が MinIO 署名 URL の有無を検証します。
 
+- `PODMAN_AUTO_HOST_FALLBACK=true` (既定値) の状態では、pm-service のヘルスチェックに失敗した際に `host.containers.internal` を経由した再起動を自動的に試行します。環境に応じて無効化したい場合は `PODMAN_AUTO_HOST_FALLBACK=false` を指定してください。
+- フォールバックで利用するホスト名を変更したい場合は `HOST_INTERNAL_ADDR` を上書きできます (既定: `host.containers.internal`)。
+
 ## 3. 個別の E2E テスト
 ```bash
 cd ui-poc

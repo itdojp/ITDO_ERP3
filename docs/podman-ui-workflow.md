@@ -67,12 +67,12 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 | Projects 件数 | 4 | `curl http://localhost:3103/api/v1/projects` |
 | Timesheets submitted | 2 | `curl http://localhost:3103/api/v1/timesheets?status=submitted` |
 | Compliance (limit=5) | 3 | `curl http://localhost:3103/api/v1/compliance/invoices?limit=5` |
-| Telemetry | ≥5 | `TELEMETRY_BASE=http://localhost:3103 node scripts/show_telemetry.js`（既定でサンプルイベントが投入済み） |
+| Telemetry | >=5 | `TELEMETRY_BASE=http://localhost:3103 node scripts/show_telemetry.js`（既定でサンプルイベントが投入済み） |
 
 ## トラブルシューティング
 
 - **UI ポートが競合する**: `UI_PORT` を変更するか、既存の Next.js プロセスを停止します。
-- **pm-service が 60 秒以内に起動しない**: `podman-compose logs local_pm-service_1` でエラー内容を確認してください。MinIO 有効時は初回に少し時間が掛かります。
+- **pm-service が 60 秒以内に起動しない**: `scripts/run_podman_ui_poc.sh` 使用時は自動で `host.containers.internal` フォールバックを試行します。ログ (`podman-compose logs local_pm-service_1`) を確認し、それでも解決しない場合は `PODMAN_AUTO_HOST_FALLBACK=false` で明示的に無効化した上で手動で再起動してください。MinIO 有効時は初回に時間が掛かる場合があります。
 - **GraphQL エラーで REST フォールバックになる**: 現状の PoC 仕様上許容されます。フォールバック後も UI 操作に支障がないか確認してください。
 - **イベントが流れない**: `podman logs local_producer_1` / `local_consumer_1` を確認し、RabbitMQ の接続エラーが解消されているかチェックします。
 
