@@ -32,6 +32,11 @@ FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scr
 - Telemetry シード件数は `scripts/poc_live_smoke.sh` 内で自動検証されます。閾値は `TELEMETRY_MIN_SEEDED` 変数で調整でき、結果はログおよび Slack 通知に反映されます。
 - Slack 通知は失敗時に `failure`、ホストフォールバック発動時に `warning`（`Host fallback enabled ...`）を送信します。成功通知には `fallback=used/unused` と `telemetry=<status>`（`verified`, `verified-after-reset`, `failed` など）が含まれるため、実行状況を即座に把握できます。
 
+```
+[warning] Host fallback enabled (attempt=1, host=host.containers.internal)
+[success] Live smoke completed successfully (runs=1, fallback=used, telemetry=verified-after-reset)
+```
+
 ## 3. 個別の E2E テスト
 ```bash
 cd ui-poc
