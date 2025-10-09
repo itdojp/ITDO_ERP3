@@ -26,6 +26,7 @@ Slack 通知例:
 | 変数 | 既定値 | 役割 |
 | ---- | ------ | ---- |
 | `PODMAN_AUTO_HOST_FALLBACK` | `true` | pm-service が `TIMEOUT_SECONDS` 内に起動しない場合にフォールバックを試すかどうか。 |
+| `PODMAN_HOST_FALLBACK_MODE` | `auto` | フォールバック動作を制御する（`auto`/`force`/`never`）。`force` で常にホストフォールバックを使い、`never` で完全に無効化する。 |
 | `HOST_INTERNAL_ADDR` | `host.containers.internal` | フォールバック時に使用するホスト名。Podman Desktop など環境に応じて変更できます。 |
 | `POC_LOKI_URL` | `http://loki:3100` | Grafana の Loki データソース URL。フォールバックが発動した場合は自動的に `http://localhost:${LOKI_PORT}` へ切り替わります。 |
 
