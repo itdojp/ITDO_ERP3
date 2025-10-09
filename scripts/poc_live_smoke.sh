@@ -324,11 +324,10 @@ check_telemetry_seed() {
   local output
   local status
   set +e
-  output=$(printf '%s' "$response" | "$interpreter" - "$minimum" <<'PY2'
+output=$(printf '%s' "$response" | "$interpreter" - "$minimum" <<'PY2'
 import json
 import sys
 
-expected = 0
 try:
     expected = max(0, int(sys.argv[1]))
 except Exception:
@@ -337,7 +336,7 @@ except Exception:
 try:
     payload = json.load(sys.stdin)
 except Exception as exc:
-    print(f"JSON decode error: {exc}")
+    print(f"Telemetry response JSON decode error: {exc}")
     sys.exit(2)
 
 items = payload.get("items")
