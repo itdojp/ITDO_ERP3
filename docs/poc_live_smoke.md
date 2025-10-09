@@ -37,6 +37,8 @@ Slack 通知例:
 | `TELEMETRY_SEED_AUTO_RESET` | `false` | 検証失敗時に `scripts/reset_pm_state.sh` を実行し、pm-service をリセットした上で再検証するかどうか。 |
 | `TELEMETRY_SEED_MAX_ATTEMPTS` | `2` | 自動リセットが有効な場合の最大試行回数。 |
 | `TELEMETRY_SEED_SETTLE_SECONDS` | `2` | pm-service 再起動後に Telemetry API を再確認するまでの待機秒数。 |
+| `TELEMETRY_SEED_RETRY_ATTEMPTS` | `3` | pm-service 起動直後に seed が 0 件のままの場合に自動再投入を試みる回数。 |
+| `TELEMETRY_SEED_RETRY_DELAY_MS` | `3000` | 自動再投入のリトライ間隔（ミリ秒）。 |
 
 成功通知の `telemetry` フィールドは以下を表します。
 

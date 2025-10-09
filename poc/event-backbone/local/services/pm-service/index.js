@@ -38,6 +38,8 @@ const TELEMETRY_MAX_LIMIT = Math.max(1, parseInt(process.env.TELEMETRY_MAX_LIMIT
 const TELEMETRY_DATE_FIELDS = ['since', 'from', 'start', 'after'];
 const TELEMETRY_END_DATE_FIELDS = ['until', 'to', 'end', 'before'];
 const TELEMETRY_SEED_DISABLED = (process.env.TELEMETRY_SEED_DISABLE || 'false').toLowerCase() === 'true';
+const TELEMETRY_SEED_RETRY_ATTEMPTS = Math.max(0, parseInt(process.env.TELEMETRY_SEED_RETRY_ATTEMPTS || '3', 10));
+const TELEMETRY_SEED_RETRY_DELAY_MS = Math.max(0, parseInt(process.env.TELEMETRY_SEED_RETRY_DELAY_MS || '3000', 10));
 
 const METRICS_CACHE_MS = parseInt(process.env.METRICS_CACHE_MS || '5000', 10);
 const IDEMP_TTL_MS = Math.max(0, parseInt(process.env.IDEMP_TTL_MS || String(24 * 60 * 60 * 1000), 10));
@@ -612,7 +614,38 @@ async function main() {
     console.info(`[telemetry] seeded ${telemetrySeed.length} sample events`);
   };
 
+  const scheduleTelemetrySeedRetry = () => {
+    if (
+      TELEMETRY_SEED_DISABLED ||
+      TELEMETRY_SEED_RETRY_ATTEMPTS <= 0 ||
+      !Array.isArray(telemetrySeed) ||
+      telemetrySeed.length === 0
+    ) {
+      return;
+    }
+    let attempts = 0;
+    const attemptSeed = () => {
+      if (telemetryLog.length > 0) {
+        return;
+      }
+      attempts += 1;
+      console.warn(
+        `[telemetry] log empty after startup, retrying seed (${attempts}/${TELEMETRY_SEED_RETRY_ATTEMPTS})`,
+      );
+      seedTelemetryIfNeeded();
+      if (telemetryLog.length === 0 && attempts < TELEMETRY_SEED_RETRY_ATTEMPTS) {
+        setTimeout(attemptSeed, TELEMETRY_SEED_RETRY_DELAY_MS);
+        return;
+      }
+      if (telemetryLog.length === 0) {
+        console.error('[telemetry] failed to seed sample events after retries');
+      }
+    };
+    setTimeout(attemptSeed, TELEMETRY_SEED_RETRY_DELAY_MS);
+  };
+
   seedTelemetryIfNeeded();
+  scheduleTelemetrySeedRetry();
 
   const projectIdempotencyFallback = new Map();
   const timesheetIdempotencyFallback = new Map();
