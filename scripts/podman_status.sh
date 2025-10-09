@@ -10,6 +10,8 @@ TELEMETRY_SEED_RESET_WITH_MINIO="${TELEMETRY_SEED_RESET_WITH_MINIO:-false}"
 TELEMETRY_SEED_RESET_TIMEOUT="${TELEMETRY_SEED_RESET_TIMEOUT:-60}"
 TELEMETRY_SEED_MAX_ATTEMPTS="${TELEMETRY_SEED_MAX_ATTEMPTS:-2}"
 TELEMETRY_SEED_SETTLE_SECONDS="${TELEMETRY_SEED_SETTLE_SECONDS:-2}"
+PM_SERVICE_SEED_RETRY_ATTEMPTS="${TELEMETRY_SEED_RETRY_ATTEMPTS:-}"
+PM_SERVICE_SEED_RETRY_DELAY_MS="${TELEMETRY_SEED_RETRY_DELAY_MS:-}"
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
 PODMAN_STATUS_SLACK_NOTIFY_SUCCESS="${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS:-false}"
 
@@ -167,20 +169,27 @@ PY2
   done
 
   if [ "${telemetry_status}" -eq 0 ]; then
+    telemetry_context="attempt=${attempt}, reset=${fallback_used}"
+    if [[ -n "${PM_SERVICE_SEED_RETRY_ATTEMPTS}" ]]; then
+      telemetry_context+="; pm-service-retries=${PM_SERVICE_SEED_RETRY_ATTEMPTS}"
+    fi
+    if [[ -n "${PM_SERVICE_SEED_RETRY_DELAY_MS}" ]]; then
+      telemetry_context+="; pm-service-delay-ms=${PM_SERVICE_SEED_RETRY_DELAY_MS}"
+    fi
     if [[ "${fallback_used}" == "true" ]]; then
-      echo "ok - ${telemetry_message} (after auto reset)"
-      notify_slack "success" "podman_status telemetry seed verified after reset (${telemetry_message})"
+      echo "ok - ${telemetry_message} (after auto reset, ${telemetry_context})"
+      notify_slack "success" "podman_status telemetry seed verified after reset (${telemetry_message}; ${telemetry_context})"
     else
-      echo "ok - ${telemetry_message}"
-      notify_slack "success" "podman_status telemetry seed ok (${telemetry_message})"
+      echo "ok - ${telemetry_message} (${telemetry_context})"
+      notify_slack "success" "podman_status telemetry seed ok (${telemetry_message}; ${telemetry_context})"
     fi
   else
     if [ -n "${telemetry_message}" ]; then
-      echo "error - ${telemetry_message}"
-      notify_slack "failure" "podman_status telemetry seed failed: ${telemetry_message}"
+      echo "error - ${telemetry_message} (attempt=${attempt})"
+      notify_slack "failure" "podman_status telemetry seed failed after ${attempt} attempt(s): ${telemetry_message}"
     else
-      echo "error - telemetry seed verification failed"
-      notify_slack "failure" "podman_status telemetry seed verification failed"
+      echo "error - telemetry seed verification failed (attempt=${attempt})"
+      notify_slack "failure" "podman_status telemetry seed verification failed after ${attempt} attempt(s)"
     fi
   fi
 fi
