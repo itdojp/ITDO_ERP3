@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/poc/event-backbone/local/podman-compose.yml"
 PROJECT_DIR="${ROOT_DIR}/poc/event-backbone/local"
 UI_DIR="${ROOT_DIR}/ui-poc"
+source "${ROOT_DIR}/scripts/lib/slack.sh"
 PM_PORT="${PM_PORT:-3001}"
 MINIO_PORT="${MINIO_PORT:-9000}"
 MINIO_TIMEOUT="${MINIO_TIMEOUT_SECONDS:-60}"
@@ -129,77 +130,59 @@ collect_logs() {
 }
 
 notify_slack() {
+  local status="$1"
+  local message="$2"
   if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
     return
   fi
-  local status="$1"
-  local message="$2"
   if [[ "$status" != "success" && "$status" != "warning" && "${ALLOW_FAILURE_NOTIFY:-1}" != "1" ]]; then
     return
   fi
+
   local duration=$(( $(date +%s) - START_TIME ))
-  local color
-  local resultEmoji
+  local emoji=":x:"
   case "$status" in
-    success)
-      color="#36a64f"
-      resultEmoji=":white_check_mark:"
-      ;;
-    warning)
-      color="#f59e0b"
-      resultEmoji=":warning:"
-      ;;
-    *)
-      color="#d73a4a"
-      resultEmoji=":x:"
-      ;;
+    success) emoji=":white_check_mark:" ;;
+    warning) emoji=":warning:" ;;
   esac
-  local logLines=()
+
+  local log_lines=()
   if [[ -n "$LAST_LOG_FILE" ]]; then
-    logLines+=("Stack: $LAST_LOG_FILE")
+    log_lines+=("Stack: $LAST_LOG_FILE")
   fi
   if [[ -n "$LAST_LOG_FILE_MINIO" ]]; then
-    logLines+=("MinIO: $LAST_LOG_FILE_MINIO")
+    log_lines+=("MinIO: $LAST_LOG_FILE_MINIO")
   fi
   if [[ -n "$LAST_LOG_FILE_PM" ]]; then
-    logLines+=("pm-service: $LAST_LOG_FILE_PM")
+    log_lines+=("pm-service: $LAST_LOG_FILE_PM")
   fi
-  local logInfo=""
-  if (( ${#logLines[@]} > 0 )); then
-    logInfo="Logs:\n$(printf '%s\n' "${logLines[@]}")"
+  local log_info=""
+  if (( ${#log_lines[@]} > 0 )); then
+    log_info="Logs:"
+    for entry in "${log_lines[@]}"; do
+      log_info+=$'
+'"${entry}"
+    done
   fi
-  local context="Matrix: ${MATRIX_NAME:-unknown}\nWorkflow: ${GITHUB_WORKFLOW_NAME:-n/a}"
+
+  local context="Matrix: ${MATRIX_NAME:-unknown}
+Workflow: ${GITHUB_WORKFLOW_NAME:-n/a}"
   if [[ -n "${GITHUB_RUN_URL:-}" ]]; then
-    context+="\nRun: ${GITHUB_RUN_URL}"
+    context+="
+Run: ${GITHUB_RUN_URL}"
   fi
-  local payload=$(cat <<JSON
-{
-  "attachments": [
-    {
-      "color": "${color}",
-      "title": "PoC Live Smoke (${status})",
-      "text": "${resultEmoji} ${message}\nDuration: ${duration}s\n${context}\n${logInfo}",
-      "mrkdwn_in": ["text"]
-    }
-  ]
-}
 
-resolve_python_bin() {
-  if command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
-    echo "${PYTHON_BIN}"
-  elif command -v python3 >/dev/null 2>&1; then
-    echo python3
-  elif command -v python >/dev/null 2>&1; then
-    echo python
-  else
-    echo ""
+  local body
+  body=$(printf "%s %s
+Duration: %ss
+%s" "${emoji}" "${message}" "${duration}" "${context}")
+  if [[ -n "$log_info" ]]; then
+    body+=$'
+'"${log_info}"
   fi
-}
-JSON
-)
-  curl -s -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL" >/dev/null 2>&1 || true
-}
 
+  slack_send "$status" "PoC Live Smoke (${status})" "$body"
+}
 cleanup() {
   echo "[cleanup] stopping PoC stack"
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" down >/dev/null 2>&1) || true
