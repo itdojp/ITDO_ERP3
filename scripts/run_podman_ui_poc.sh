@@ -204,6 +204,9 @@ should_attempt_host_fallback() {
     force|auto)
       [[ "${fallback_attempted}" != "true" ]]
       ;;
+    never)
+      return 1
+      ;;
     *)
       return 1
       ;;

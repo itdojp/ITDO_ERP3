@@ -18,6 +18,7 @@
    - ログ: `ui-poc/.next/dev.log`
    - コンテナ確認: `cd poc/event-backbone/local && podman-compose -f podman-compose.yml ps`
    - WSL2 などで毎回フォールバックが必要な場合は `--fallback-mode force` を付けると初回から `host.containers.internal` を利用します。
+   - 既存の `PODMAN_AUTO_HOST_FALLBACK=false` を設定している場合でも動作は維持されますが、新しい `PODMAN_HOST_FALLBACK_MODE`（`auto`/`force`/`never`）の利用を推奨します。
 
 2. 動作確認
    ```bash

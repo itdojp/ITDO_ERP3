@@ -30,6 +30,8 @@ Slack 通知例:
 | `HOST_INTERNAL_ADDR` | `host.containers.internal` | フォールバック時に使用するホスト名。Podman Desktop など環境に応じて変更できます。 |
 | `POC_LOKI_URL` | `http://loki:3100` | Grafana の Loki データソース URL。フォールバックが発動した場合は自動的に `http://localhost:${LOKI_PORT}` へ切り替わります。 |
 
+> 互換性のため `PODMAN_AUTO_HOST_FALLBACK=false` を指定するとフォールバックが完全に無効化され、`PODMAN_HOST_FALLBACK_MODE` が `auto` の場合でも `never` に強制されます。新しいモード指定を優先的に使用してください。
+
 ## Telemetry seed 検証
 
 | 変数 | 既定値 | 役割 |
