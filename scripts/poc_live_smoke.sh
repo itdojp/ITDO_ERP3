@@ -40,11 +40,18 @@ RABBITMQ_MANAGEMENT_PORT="${RABBITMQ_MANAGEMENT_PORT:-15672}"
 RABBITMQ_USER="${RABBITMQ_USER:-${RABBITMQ_DEFAULT_USER:-guest}}"
 RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-${RABBITMQ_DEFAULT_PASS:-guest}}"
 RABBITMQ_TIMEOUT_SECONDS="${RABBITMQ_TIMEOUT_SECONDS:-90}"
+RABBITMQ_HOST_PORT="${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 REDIS_TIMEOUT_SECONDS="${REDIS_TIMEOUT_SECONDS:-60}"
+REDIS_HOST_PORT="${REDIS_HOST_PORT:-${REDIS_PORT:-6379}}"
 LOKI_PORT="${LOKI_PORT:-3100}"
 LOKI_TIMEOUT_SECONDS="${LOKI_TIMEOUT_SECONDS:-60}"
 GRAFANA_TIMEOUT_SECONDS="${GRAFANA_TIMEOUT_SECONDS:-90}"
+MINIO_HOST_PORT="${MINIO_HOST_PORT:-${MINIO_PORT:-9000}}"
+PODMAN_AUTO_HOST_FALLBACK="${PODMAN_AUTO_HOST_FALLBACK:-true}"
+HOST_INTERNAL_ADDR="${HOST_INTERNAL_ADDR:-host.containers.internal}"
+PODMAN_HOST_FALLBACK_ACTIVE="${PODMAN_HOST_FALLBACK_ACTIVE:-false}"
+fallback_attempted=false
 TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
 TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
 
@@ -187,8 +194,26 @@ cleanup() {
 
 trap cleanup EXIT
 
+enable_host_internal_fallback() {
+  local host="${HOST_INTERNAL_ADDR}"
+  echo "[fallback] enabling host fallback via ${host}"
+  export AMQP_URL="amqp://guest:guest@${host}:${RABBITMQ_HOST_PORT}"
+  export REDIS_URL="redis://${host}:${REDIS_HOST_PORT}"
+  export MINIO_ENDPOINT="${host}"
+  export MINIO_PUBLIC_ENDPOINT="${host}"
+  export MINIO_PUBLIC_PORT="${MINIO_HOST_PORT}"
+  export PODMAN_HOST_FALLBACK_ACTIVE=true
+}
+
+should_attempt_host_fallback() {
+  [[ "${PODMAN_AUTO_HOST_FALLBACK,,}" == "true" && "${fallback_attempted}" != "true" ]]
+}
+
 start_stack() {
   echo "[stack] restarting PoC stack"
+  if [[ "${PODMAN_HOST_FALLBACK_ACTIVE}" == "true" ]]; then
+    echo "[stack] host fallback active (AMQP_URL=${AMQP_URL:-unset}, REDIS_URL=${REDIS_URL:-unset}, MINIO_ENDPOINT=${MINIO_ENDPOINT:-unset})"
+  fi
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" down >/dev/null 2>&1) || true
   (cd "${PROJECT_DIR}" && podman-compose -f "${COMPOSE_FILE}" up -d --build)
 }
@@ -611,6 +636,7 @@ LOOP_COUNT=0
 while true; do
   LOOP_COUNT=$((LOOP_COUNT + 1))
   ATTEMPT=0
+  fallback_attempted=false
   while true; do
     ATTEMPT=$((ATTEMPT + 1))
     echo "[run] cycle ${LOOP_COUNT} attempt ${ATTEMPT}/${RETRY_LIMIT}"
@@ -640,6 +666,12 @@ while true; do
       STATUS="failure"
       FAIL_REASON="grafana"
     elif ! wait_for_health; then
+      if should_attempt_host_fallback; then
+        echo "[fallback] pm-service health check failed; retrying with host fallback (${HOST_INTERNAL_ADDR})"
+        enable_host_internal_fallback
+        fallback_attempted=true  # guard against repeated fallback within the same attempt
+        continue
+      fi
       STATUS="failure"
       FAIL_REASON="pm_health"
     elif ! check_metrics_summary; then
