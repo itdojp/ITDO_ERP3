@@ -19,6 +19,8 @@ Slack 通知例:
 [success] Live smoke completed successfully (runs=1, fallback=used, telemetry=verified-after-reset)
 ```
 
+補助スクリプトの `scripts/podman_status.sh` でも `SLACK_WEBHOOK_URL` を指定すると同様の通知が送信されます。成功時の通知が不要な場合は `PODMAN_STATUS_SLACK_NOTIFY_SUCCESS=false` のまま抑制できます。
+
 ## フォールバック関連の環境変数
 
 | 変数 | 既定値 | 役割 |
