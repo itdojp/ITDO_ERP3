@@ -735,5 +735,5 @@ while true; do
 done
 
 if [[ "$STATUS" == "success" ]]; then
-  notify_slack "success" "Live smoke completed successfully (${LOOP_COUNT} run(s))"
+  notify_slack "success" "Live smoke completed successfully (telemetry seed verified, runs=${LOOP_COUNT})"
 fi
