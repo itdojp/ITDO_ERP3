@@ -3,7 +3,7 @@ datasources:
   - name: Loki
     type: loki
     access: proxy
-    url: http://loki:3100
+    url: "$__env{POC_LOKI_URL}"
     isDefault: true
     editable: false
     uid: poc-loki
