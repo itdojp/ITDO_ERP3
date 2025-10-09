@@ -26,6 +26,7 @@ FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scr
 - `E2E_REQUIRE_MINIO=true` を併用すると、Playwright が MinIO 署名 URL の有無を検証します。
 
 - `PODMAN_AUTO_HOST_FALLBACK=true` (既定値) の状態では、pm-service のヘルスチェックに失敗した際に `host.containers.internal` を経由した再起動を自動的に試行します。環境に応じて無効化したい場合は `PODMAN_AUTO_HOST_FALLBACK=false` を指定してください。
+- Telemetry seed 検証が失敗した場合は `TELEMETRY_SEED_AUTO_RESET=true` を指定すると `scripts/reset_pm_state.sh` を実行し、pm-service を再起動してシードを再投入します。MinIO も初期化したい場合は `TELEMETRY_SEED_RESET_WITH_MINIO=true` を併用してください。再試行回数は `TELEMETRY_SEED_MAX_ATTEMPTS`（既定 2）、ヘルス回復後の待機秒数は `TELEMETRY_SEED_SETTLE_SECONDS`（既定 2）で調整できます。
 - Grafana の Loki データソース URL は `POC_LOKI_URL` で上書きできます。フォールバック時に DNS 解決を避けたい場合は `POC_LOKI_URL=http://localhost:3100` のように指定してください。
 - フォールバックで利用するホスト名を変更したい場合は `HOST_INTERNAL_ADDR` を上書きできます (既定: `host.containers.internal`)。
 - Telemetry シード件数は `scripts/poc_live_smoke.sh` 内で自動検証されます。閾値は `TELEMETRY_MIN_SEEDED` 変数で調整でき、結果はログおよび Slack 通知に反映されます。

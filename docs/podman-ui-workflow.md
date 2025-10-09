@@ -78,5 +78,6 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 - **Grafana アラートが Loki に接続できない**: `POC_LOKI_URL` を `http://localhost:3100` などに上書きして再実行すると、DNS 解決を迂回できます。`scripts/run_podman_ui_poc.sh` のホストフォールバックでも自動でこの値に切り替わります。
 - **GraphQL エラーで REST フォールバックになる**: 現状の PoC 仕様上許容されます。フォールバック後も UI 操作に支障がないか確認してください。
 - **イベントが流れない**: `podman logs local_producer_1` / `local_consumer_1` を確認し、RabbitMQ の接続エラーが解消されているかチェックします。
+- **Telemetry seed が不足している**: `TELEMETRY_SEED_AUTO_RESET=true` を付与して `scripts/podman_status.sh` を実行すると、失敗時に `scripts/reset_pm_state.sh` で状態を初期化し、pm-service を再起動したうえで自動再検証します。MinIO も削除したい場合は `TELEMETRY_SEED_RESET_WITH_MINIO=true` を併用してください。リトライ回数は `TELEMETRY_SEED_MAX_ATTEMPTS`、再起動後の待機時間は `TELEMETRY_SEED_SETTLE_SECONDS` で調整できます。
 
 以上の手順をベースに、人手によるワークフロー検証とフィードバック収集を継続してください。
