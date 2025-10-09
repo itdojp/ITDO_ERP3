@@ -17,8 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Ensure scripts are executable
-        run: chmod +x scripts/run_podman_ui_poc.sh scripts/podman_live_tests.sh
+      - name: Ensure script is executable
+        run: chmod +x scripts/podman_live_tests.sh
       - name: Run Playwright live suite via Podman stack
         env:
           USE_MINIO: ${{ github.event.inputs.with-minio }}
