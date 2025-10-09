@@ -27,6 +27,7 @@ FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scr
 
 - `PODMAN_AUTO_HOST_FALLBACK=true` (既定値) の状態では、pm-service のヘルスチェックに失敗した際に `host.containers.internal` を経由した再起動を自動的に試行します。環境に応じて無効化したい場合は `PODMAN_AUTO_HOST_FALLBACK=false` を指定してください。
 - フォールバックで利用するホスト名を変更したい場合は `HOST_INTERNAL_ADDR` を上書きできます (既定: `host.containers.internal`)。
+- Telemetry シード件数は `scripts/poc_live_smoke.sh` 内で自動検証されます。閾値は `TELEMETRY_MIN_SEEDED` 変数で調整でき、結果はログおよび Slack 通知に反映されます。
 
 ## 3. 個別の E2E テスト
 ```bash
