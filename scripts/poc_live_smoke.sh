@@ -52,6 +52,8 @@ PODMAN_AUTO_HOST_FALLBACK="${PODMAN_AUTO_HOST_FALLBACK:-true}"
 HOST_INTERNAL_ADDR="${HOST_INTERNAL_ADDR:-host.containers.internal}"
 PODMAN_HOST_FALLBACK_ACTIVE="${PODMAN_HOST_FALLBACK_ACTIVE:-false}"
 fallback_attempted=false
+fallback_used_overall=false
+TELEMETRY_SEED_STATUS="pending"
 TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
 TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
 
@@ -131,16 +133,26 @@ notify_slack() {
   fi
   local status="$1"
   local message="$2"
-  if [[ "$status" != "success" && "${ALLOW_FAILURE_NOTIFY:-1}" != "1" ]]; then
+  if [[ "$status" != "success" && "$status" != "warning" && "${ALLOW_FAILURE_NOTIFY:-1}" != "1" ]]; then
     return
   fi
   local duration=$(( $(date +%s) - START_TIME ))
-  local color="#36a64f"
-  local resultEmoji=":white_check_mark:"
-  if [[ "$status" != "success" ]]; then
-    color="#d73a4a"
-    resultEmoji=":x:"
-  fi
+  local color
+  local resultEmoji
+  case "$status" in
+    success)
+      color="#36a64f"
+      resultEmoji=":white_check_mark:"
+      ;;
+    warning)
+      color="#f59e0b"
+      resultEmoji=":warning:"
+      ;;
+    *)
+      color="#d73a4a"
+      resultEmoji=":x:"
+      ;;
+  esac
   local logLines=()
   if [[ -n "$LAST_LOG_FILE" ]]; then
     logLines+=("Stack: $LAST_LOG_FILE")
@@ -204,6 +216,8 @@ enable_host_internal_fallback() {
   export MINIO_PUBLIC_PORT="${MINIO_HOST_PORT}"
   export POC_LOKI_URL="http://localhost:${LOKI_PORT}"
   export PODMAN_HOST_FALLBACK_ACTIVE=true
+  fallback_used_overall=true
+  notify_slack "warning" "Host fallback enabled (attempt=${ATTEMPT:-?}, host=${host})"
 }
 
 should_attempt_host_fallback() {
@@ -250,7 +264,11 @@ wait_for_health() {
     if (( elapsed >= TIMEOUT )); then
       echo "[health] ERROR: pm-service did not become healthy within ${TIMEOUT}s" >&2
       collect_logs "health"
-      notify_slack "failure" "pm-service failed health check"
+      if [[ "${PODMAN_AUTO_HOST_FALLBACK,,}" != "true" || "${fallback_attempted}" == "true" ]]; then
+        notify_slack "failure" "pm-service failed health check"
+      else
+        echo "[health] host fallback will be attempted; suppressing Slack failure notification" >&2
+      fi
       return 1
     fi
   done
@@ -328,6 +346,7 @@ check_telemetry_seed() {
   local url="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
   local minimum="${TELEMETRY_MIN_SEEDED:-5}"
   local interpreter=""
+  TELEMETRY_SEED_STATUS="verifying"
   for candidate in "${PYTHON_BIN:-}" python3 python; do
     if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
       interpreter="$candidate"
@@ -338,6 +357,7 @@ check_telemetry_seed() {
     echo "[health] ERROR: python interpreter not available for telemetry seed verification" >&2
     collect_logs "telemetry-seed"
     notify_slack "failure" "telemetry seed verification skipped (no python)"
+    TELEMETRY_SEED_STATUS="skipped-no-python"
     return 1
   fi
   local response
@@ -345,6 +365,7 @@ check_telemetry_seed() {
     echo "[health] ERROR: telemetry seed endpoint unreachable (${url})" >&2
     collect_logs "telemetry-seed"
     notify_slack "failure" "telemetry seed endpoint unreachable"
+    TELEMETRY_SEED_STATUS="failed-endpoint"
     return 1
   fi
   local output
@@ -392,9 +413,11 @@ PY2
     fi
     collect_logs "telemetry-seed"
     notify_slack "failure" "telemetry seed verification failed"
+    TELEMETRY_SEED_STATUS="failed"
     return 1
   fi
   echo "[health] telemetry seed ok - $output"
+  TELEMETRY_SEED_STATUS="verified"
   return 0
 }
 
@@ -638,6 +661,7 @@ while true; do
   LOOP_COUNT=$((LOOP_COUNT + 1))
   ATTEMPT=0
   fallback_attempted=false
+  fallback_used_overall=false
   while true; do
     ATTEMPT=$((ATTEMPT + 1))
     echo "[run] cycle ${LOOP_COUNT} attempt ${ATTEMPT}/${RETRY_LIMIT}"
@@ -736,5 +760,10 @@ while true; do
 done
 
 if [[ "$STATUS" == "success" ]]; then
-  notify_slack "success" "Live smoke completed successfully (telemetry seed verified, runs=${LOOP_COUNT})"
+  local fallback_note="fallback=unused"
+  if [[ "${fallback_used_overall}" == "true" ]]; then
+    fallback_note="fallback=used"
+  fi
+  local telemetry_note="telemetry=${TELEMETRY_SEED_STATUS}"
+  notify_slack "success" "Live smoke completed successfully (runs=${LOOP_COUNT}, ${fallback_note}, ${telemetry_note})"
 fi
