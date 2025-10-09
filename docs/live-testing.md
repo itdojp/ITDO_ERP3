@@ -26,6 +26,7 @@ FORCE_PM_PORT=3001 USE_MINIO=true PM_PORT=3101 UI_PORT=4100 UI_HEADLESS=true scr
 - `E2E_REQUIRE_MINIO=true` を併用すると、Playwright が MinIO 署名 URL の有無を検証します。
 
 - `PODMAN_AUTO_HOST_FALLBACK=true` (既定値) の状態では、pm-service のヘルスチェックに失敗した際に `host.containers.internal` を経由した再起動を自動的に試行します。環境に応じて無効化したい場合は `PODMAN_AUTO_HOST_FALLBACK=false` を指定してください。
+- Grafana の Loki データソース URL は `POC_LOKI_URL` で上書きできます。フォールバック時に DNS 解決を避けたい場合は `POC_LOKI_URL=http://localhost:3100` のように指定してください。
 - フォールバックで利用するホスト名を変更したい場合は `HOST_INTERNAL_ADDR` を上書きできます (既定: `host.containers.internal`)。
 
 ## 3. 個別の E2E テスト

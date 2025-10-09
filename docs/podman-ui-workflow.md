@@ -75,6 +75,7 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 
 - **UI ポートが競合する**: `UI_PORT` を変更するか、既存の Next.js プロセスを停止します。
 - **pm-service が 60 秒以内に起動しない**: `scripts/run_podman_ui_poc.sh` 使用時は自動で `host.containers.internal` フォールバックを試行します。ログ (`podman-compose logs local_pm-service_1`) を確認し、それでも解決しない場合は `PODMAN_AUTO_HOST_FALLBACK=false` で明示的に無効化した上で手動で再起動してください。MinIO 有効時は初回に時間が掛かる場合があります。
+- **Grafana アラートが Loki に接続できない**: `POC_LOKI_URL` を `http://localhost:3100` などに上書きして再実行すると、DNS 解決を迂回できます。`scripts/run_podman_ui_poc.sh` のホストフォールバックでも自動でこの値に切り替わります。
 - **GraphQL エラーで REST フォールバックになる**: 現状の PoC 仕様上許容されます。フォールバック後も UI 操作に支障がないか確認してください。
 - **イベントが流れない**: `podman logs local_producer_1` / `local_consumer_1` を確認し、RabbitMQ の接続エラーが解消されているかチェックします。
 
