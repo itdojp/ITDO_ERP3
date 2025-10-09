@@ -83,3 +83,14 @@ pkill -f "next dev --hostname 0.0.0.0 --port"
 - **Telemetry seed が不足している**: `TELEMETRY_SEED_AUTO_RESET=true` を付与して `scripts/podman_status.sh` を実行すると、失敗時に `scripts/reset_pm_state.sh` で状態を初期化し、pm-service を再起動したうえで自動再検証します。MinIO も削除したい場合は `TELEMETRY_SEED_RESET_WITH_MINIO=true` を併用してください。リトライ回数は `TELEMETRY_SEED_MAX_ATTEMPTS`、再起動後の待機時間は `TELEMETRY_SEED_SETTLE_SECONDS` で調整できます。Slack 通知は失敗時に `failure`、再検証時に `warning`、成功時に `success (seeded=..., min=..., attempts=..., resets=...)` のように詳細が表示されます。成功通知を抑制したい場合は `PODMAN_STATUS_SLACK_NOTIFY_SUCCESS=false` のままにしておくと便利です。
 
 以上の手順をベースに、人手によるワークフロー検証とフィードバック収集を継続してください。
+
+## Playwright ライブテストの自動実行
+
+PoC スタックに対して Playwright ライブスイートを実行したい場合は `scripts/podman_live_tests.sh` を利用してください。既定で `PM_PORT=3105` / `UI_PORT=4105` を使用し、WSL2 などでホストフォールバックが必要なケースに合わせて `PODMAN_HOST_FALLBACK_MODE=force` を自動設定します。
+
+```bash
+# 例: MinIO 有効でライブテストを走らせる
+PM_PORT=3105 UI_PORT=4105 scripts/podman_live_tests.sh --with-minio
+```
+
+任意のポートやフォールバック設定は環境変数で上書き可能です（例: `PODMAN_HOST_FALLBACK_MODE=never scripts/podman_live_tests.sh`）。実行が完了するとスタックは自動的に停止します。

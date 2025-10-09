@@ -25,6 +25,10 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+ui-poc/.next/
+ui-poc/node_modules/
+ui-poc/playwright-report/
+ui-poc/test-results/
 
 # Environment files
 .env
