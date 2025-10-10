@@ -19,6 +19,34 @@ Slack 通知例:
 [success] Live smoke completed successfully (runs=1, fallback=used, telemetry=verified-after-reset)
 ```
 
+## サマリファイル (`logs/poc-smoke/last_summary.json`)
+
+テスト終了時には JSON サマリが更新されます。`telemetry` ブロックに加えて、`telemetry_health` で `/health/telemetry` の結果が参照できます。
+
+```json
+{
+  "status": "success",
+  "telemetry": {
+    "status": "verified",
+    "seeded_count": 5,
+    "attempts": 1
+  },
+  "telemetry_health": {
+    "status": "ok",
+    "message": "telemetry events available",
+    "events": {
+      "total": 42,
+      "seeded": 5,
+      "last_event_at": "2025-10-10T03:12:48.550Z",
+      "last_seeded_at": "2025-10-10T03:12:45.120Z"
+    },
+    "fallback_active": false
+  }
+}
+```
+
+CI などからサマリを流用する場合は `PODMAN_STATUS_SUMMARY_FILE` を指定して同じ JSON を生成できます。
+
 補助スクリプトの `scripts/podman_status.sh` でも `SLACK_WEBHOOK_URL` を指定すると同様の通知が送信されます。成功時の通知が不要な場合は `PODMAN_STATUS_SLACK_NOTIFY_SUCCESS=false` のまま抑制できます。
 
 ## フォールバック関連の環境変数
