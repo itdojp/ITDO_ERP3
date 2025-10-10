@@ -42,15 +42,23 @@ jobs:
           if [[ -n "$RUN_DURATION" ]]; then
             duration_minutes=$(python3 - <<'PY'
 import os
-value = os.environ.get("RUN_DURATION")
+import sys
+
+value = os.environ.get("RUN_DURATION", "")
+if not value:
+    sys.exit(0)
+
 try:
-    ms = int(value)
-except Exception:
-    ms = 0
-minutes = ms / 60000
-print(f"{minutes:.1f}")
+    minutes = int(value) / 60000
+except ValueError:
+    sys.exit(0)
+else:
+    print(f"{minutes:.1f}")
 PY
             )
+            if [[ -z "$duration_minutes" ]]; then
+              duration_minutes=0
+            fi
           fi
           message="$title | duration=${duration_minutes}m"
           message+=" | details: $RUN_URL"
