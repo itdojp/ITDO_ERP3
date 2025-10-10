@@ -110,6 +110,17 @@ Next.js ベースの UI PoC については、以下の手順でエンドツー�
    - GitHub Actions の **PoC Live Smoke** ワークフローでは MinIO 有効/無効の 2 パターンで上記スモークを毎日／手動で実行できます。
    - 実行結果と生成アーティファクト（`logs/poc-smoke/`）を確認し、ダッシュボードやアラート定義に差異がないかチェックしてください。
 
+## 🧰 Slack 共有テンプレート
+
+Projects 一覧の共有メッセージは以下の CLI で生成できます。
+
+- `make share-projects ARGS="--url https://example.com/projects?status=active"`
+- `cd ui-poc && PROJECTS_TITLE="Weekly Projects" npm run share:projects -- --url https://example.com/projects?status=active --notes "17 件をレビュー"`
+
+`PROJECTS_URL` / `PROJECTS_TITLE` / `PROJECTS_NOTES` の各環境変数を上書きすることでサンプルスクリプトの出力を変更できます。
+
+GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
+
 ## 📝 ライセンス
 
 本仕様書は社内利用を前提としています。外部公開の際は事前承認が必要です。

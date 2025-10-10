@@ -12,6 +12,8 @@ help:
 	@echo "  make live-tests-minio        # Run live tests with MinIO enabled (USE_MINIO/E2E_REQUIRE_MINIO)"
 	@echo "  make lint                    # Run UI lint"
 	@echo "  make test-e2e                # Run UI Playwright E2E tests"
+	@echo "  make share-projects          # Generate Projects Slack share template (ARGS="..." to pass options)"
+	@echo "  make share-projects-sample   # Output sample Projects Slack share template"
 
 .PHONY: live-tests
 live-tests:
@@ -28,3 +30,11 @@ lint:
 .PHONY: test-e2e
 test-e2e:
 	cd ui-poc && npm run test:e2e
+
+.PHONY: share-projects
+share-projects:
+	cd ui-poc && npm run share:projects -- $(ARGS)
+
+.PHONY: share-projects-sample
+share-projects-sample:
+	cd ui-poc && npm run --silent share:projects:sample

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "share:projects": "node ../scripts/project-share-slack.js",
+    "share:projects:sample": "npm run --silent share:projects -- --url ${PROJECTS_URL:-https://example.com/projects?status=active} --title \"${PROJECTS_TITLE:-CI Slack Share}\" --notes \"${PROJECTS_NOTES:-sample verification}\"",
     "test:unit": "vitest run src/features/telemetry/__tests__/link-utilities.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:live": "E2E_EXPECT_API=true playwright test"
