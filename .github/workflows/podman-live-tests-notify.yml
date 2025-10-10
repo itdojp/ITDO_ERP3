@@ -20,6 +20,7 @@ jobs:
           RUN_DURATION: ${{ github.event.workflow_run.run_duration_ms }}
           RUN_JOBS_URL: ${{ github.event.workflow_run.jobs_url }}
           RUN_ID: ${{ github.event.workflow_run.id }}
+          ARTIFACTS_URL: ${{ github.event.workflow_run.artifacts_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           source scripts/lib/slack.sh
@@ -92,5 +93,46 @@ PY
 
           if [[ -n "$jobs_summary" ]]; then
             message+=$'\n'"${jobs_summary}"
+          fi
+
+          if [[ -n "$ARTIFACTS_URL" ]] && command -v gh >/dev/null 2>&1; then
+            artifacts_payload=$(gh api "$ARTIFACTS_URL" 2>/dev/null || echo "")
+            if [[ -n "$artifacts_payload" ]]; then
+              artifact_lines=$(ARTIFACTS_PAYLOAD="$artifacts_payload" RUN_URL="$RUN_URL" python3 <<'PY'
+import json, os
+
+payload = os.environ.get("ARTIFACTS_PAYLOAD", "")
+run_url = os.environ.get("RUN_URL", "")
+if not payload:
+    print("")
+    raise SystemExit(0)
+
+try:
+    data = json.loads(payload)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+artifacts = data.get("artifacts", [])
+if not artifacts:
+    print("")
+    raise SystemExit(0)
+
+lines = []
+for artifact in artifacts:
+    name = artifact.get("name", "artifact")
+    url = artifact.get("archive_download_url")
+    if url:
+        lines.append(f"- {name}: {url}")
+    else:
+        lines.append(f"- {name}: download unavailable")
+
+print("\n".join(lines))
+PY
+              )
+              if [[ -n "$artifact_lines" ]]; then
+                message+=$'\nArtifacts:\n'"${artifact_lines}"
+              fi
+            fi
           fi
           slack_send "$status" "Podman Live Tests" "$message"
