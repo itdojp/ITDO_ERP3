@@ -37,7 +37,7 @@ for (const line of fileContent.split(/\r?\n/)) {
     currentSection = line.replace(/^##\s+/, '').trim();
     continue;
   }
-  const match = line.match(/^- \[( |x)\]\s+(.+)$/i);
+  const match = line.match(/^- \[( |x)\]\s+(.+)$/);
   if (!match) continue;
   if (match[1].toLowerCase() === 'x') continue;
   const rawText = match[2].trim();
