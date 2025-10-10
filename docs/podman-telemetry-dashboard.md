@@ -81,6 +81,12 @@ Unit=telemetry-health.service
 WantedBy=timers.target
 ```
 
+### 単発実行
+
+```bash
+PM_PORT=3103 OUTPUT_DIR=/var/log/poc scripts/collect_telemetry_health.sh
+```
+
 ### Promtail 設定例
 
 NDJSON ファイルを Promtail に取り込む場合は scrape_config に以下を追加します。`__path__` は collector が出力するディレクトリに合わせて調整してください。
