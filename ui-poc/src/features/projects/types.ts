@@ -19,8 +19,13 @@ export type ProjectListResponse = {
     total: number;
     fetchedAt: string;
     fallback: boolean;
+    returned?: number;
   };
   next_cursor?: string;
+  pageInfo?: {
+    endCursor: string | null;
+    hasNextPage: boolean;
+  };
 };
 
 export type ProjectAction = "activate" | "hold" | "resume" | "close";

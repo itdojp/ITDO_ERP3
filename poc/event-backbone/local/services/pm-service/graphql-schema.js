@@ -88,6 +88,15 @@ export function createGraphQLSchema({
       total: { type: GraphQLInt },
       fetchedAt: { type: GraphQLString },
       fallback: { type: GraphQLBoolean },
+      returned: { type: GraphQLInt },
+    }),
+  });
+
+  const ProjectPageInfoType = new GraphQLObjectType({
+    name: 'ProjectPageInfo',
+    fields: () => ({
+      endCursor: { type: GraphQLString },
+      hasNextPage: { type: new GraphQLNonNull(GraphQLBoolean) },
     }),
   });
 
@@ -192,6 +201,7 @@ export function createGraphQLSchema({
     fields: () => ({
       items: { type: new GraphQLList(ProjectType) },
       meta: { type: ProjectListMetaType },
+      pageInfo: { type: ProjectPageInfoType },
     }),
   });
 
@@ -315,12 +325,18 @@ export function createGraphQLSchema({
           health: { type: GraphQLString },
           tag: { type: GraphQLString },
           tags: { type: new GraphQLList(GraphQLString) },
+          first: { type: GraphQLInt },
+          after: { type: GraphQLString },
         },
         resolve: (_root, args) => {
           const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : '';
           const status = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
           const manager = typeof args?.manager === 'string' ? args.manager.trim().toLowerCase() : '';
           const health = typeof args?.health === 'string' ? args.health.trim().toLowerCase() : '';
+          const limitRaw = Number.isFinite(args?.first) ? Number(args.first) : NaN;
+          const DEFAULT_LIMIT = 24;
+          const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : DEFAULT_LIMIT;
+          const cursorValue = typeof args?.after === 'string' ? args.after.trim() : '';
           const { manual: manualTag, optional: secondaryTagFilters } = prepareTagFilters(args?.tag, args?.tags);
           const filteredProjects = projects.filter((project) => {
             const statusMatch = !status || status === 'all' || project.status === status;
@@ -351,13 +367,25 @@ export function createGraphQLSchema({
             const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
             return haystack.includes(keyword);
           });
+          const cursorIndex = cursorValue
+            ? filteredProjects.findIndex((project) => project.id === cursorValue || project.code === cursorValue)
+            : -1;
+          const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+          const slice = filteredProjects.slice(startIndex, startIndex + limit);
+          const hasNextPage = startIndex + slice.length < filteredProjects.length;
+          const endCursor = slice.length > 0 ? slice[slice.length - 1].id : cursorValue || null;
           const fetchedAt = new Date().toISOString();
           return {
-            items: cloneDeep(filteredProjects),
+            items: cloneDeep(slice),
             meta: {
               total: filteredProjects.length,
+              returned: slice.length,
               fetchedAt,
               fallback: false,
+            },
+            pageInfo: {
+              endCursor,
+              hasNextPage,
             },
           };
         },

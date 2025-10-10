@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { usePathname, useRouter } from "next/navigation";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
+import { PROJECTS_PAGE_SIZE } from "./constants";
 import { STATUS_LABEL, type ProjectAction, type ProjectListResponse, type ProjectStatus } from "./types";
 import { mockProjects } from "./mock-data";
 import { CREATE_PROJECT_MUTATION, PROJECTS_PAGE_QUERY, PROJECT_TRANSITION_MUTATION } from "./queries";
@@ -56,20 +57,27 @@ type UpdateState = {
 type QuerySource = "api" | "mock";
 
 export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
-  const initialMeta: NonNullable<ProjectListResponse['meta']> =
-    initialProjects.meta ?? {
-      total: initialProjects.items.length,
-      fetchedAt: new Date().toISOString(),
-      fallback: true,
-    };
+  const initialMeta: NonNullable<ProjectListResponse["meta"]> = {
+    total: initialProjects.meta?.total ?? initialProjects.items.length,
+    fetchedAt: initialProjects.meta?.fetchedAt ?? new Date().toISOString(),
+    fallback: initialProjects.meta?.fallback ?? !initialProjects.meta,
+    returned: initialProjects.meta?.returned ?? initialProjects.items.length,
+  };
   const [projects, setProjects] = useState(initialProjects.items);
   const [filter, setFilter] = useState<(typeof statusFilters)[number]["value"]>("all");
   const [updateState, setUpdateState] = useState<UpdateState>({ id: null, message: null, variant: null });
   const [pending, setPending] = useState<string | null>(null);
   const [meta, setMeta] = useState(initialMeta);
+  const initialPageInfo = initialProjects.pageInfo ?? {
+    endCursor: initialProjects.next_cursor ?? null,
+    hasNextPage: Boolean(initialProjects.next_cursor),
+  };
+  const [nextCursor, setNextCursor] = useState<string | null>(initialPageInfo.hasNextPage ? initialPageInfo.endCursor ?? null : null);
+  const [hasMore, setHasMore] = useState<boolean>(Boolean(initialPageInfo.hasNextPage));
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [listLoading, setListLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const fetchTokenRef = useRef(0);
   const [createForm, setCreateForm] = useState({
@@ -85,6 +93,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [creating, setCreating] = useState(false);
 
   const source: QuerySource = meta.fallback ? "mock" : "api";
+  const apiReturned = meta.returned ?? projects.length;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -231,44 +240,113 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     async (
       statusValue: ProjectStatus | "all",
       keywordValue: string,
-      options: { manager?: string; health?: string; tag?: string; tags?: string[] } = {},
+      options: {
+        manager?: string;
+        health?: string;
+        tag?: string;
+        tags?: string[];
+        cursor?: string | null;
+        mode?: "replace" | "append";
+      } = {},
     ) => {
       const trimmedKeyword = keywordValue.trim();
-      const managerValue = options.manager?.trim() ?? '';
-      const healthValue = options.health?.trim() ?? '';
-      const manualTagRaw = options.tag?.trim() ?? '';
+      const managerValue = options.manager?.trim() ?? "";
+      const healthValue = options.health?.trim() ?? "";
+      const manualTagRaw = options.tag?.trim() ?? "";
       const manualTag = manualTagRaw.toLowerCase();
       const selectedTagsRaw = Array.isArray(options.tags)
         ? options.tags.map((value) => value.trim()).filter(Boolean)
         : [];
       const selectedTagsLower = selectedTagsRaw.map((value) => value.toLowerCase());
-      const primaryTag = manualTagRaw || selectedTagsRaw[0] || '';
+      const primaryTag = manualTagRaw || selectedTagsRaw[0] || "";
+      const append = options.mode === "append";
+      const cursorValue = options.cursor ?? null;
+
       fetchTokenRef.current += 1;
       const token = fetchTokenRef.current;
-      setListLoading(true);
+
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setListLoading(true);
+        setHasMore(false);
+        setNextCursor(null);
+      }
       setListError(null);
 
-      const assignProjects = (items: ProjectItem[], fallback: boolean, totalOverride?: number, fetchedAtOverride?: string) => {
+      const applyResult = (payload: {
+        items: ProjectItem[];
+        fallback: boolean;
+        total?: number;
+        returned?: number;
+        fetchedAt?: string;
+        endCursor?: string | null;
+        hasNextPage?: boolean;
+        append?: boolean;
+      }) => {
         if (token !== fetchTokenRef.current) {
           return;
         }
-        setProjects(items);
-        setMeta({
-          total: totalOverride ?? items.length,
-          fetchedAt: fetchedAtOverride ?? new Date().toISOString(),
-          fallback,
+        const appendMode = payload.append ?? false;
+        setProjects((prev) => {
+          if (appendMode) {
+            const merged = [...prev];
+            const existing = new Map(prev.map((item) => [item.id, item]));
+            payload.items.forEach((item) => {
+              const existingItem = existing.get(item.id);
+              if (existingItem) {
+                const index = merged.findIndex((entry) => entry.id === item.id);
+                if (index !== -1) {
+                  merged[index] = { ...existingItem, ...item };
+                }
+              } else {
+                merged.push(item);
+                existing.set(item.id, item);
+              }
+            });
+            return merged;
+          }
+          return payload.items;
         });
+        setMeta((prev) => {
+          const total =
+            typeof payload.total === "number"
+              ? payload.total
+              : appendMode
+                ? prev.total
+                : payload.items.length;
+          const returned =
+            typeof payload.returned === "number" ? payload.returned : payload.items.length;
+          return {
+            total,
+            fetchedAt: payload.fetchedAt ?? new Date().toISOString(),
+            fallback: payload.fallback ?? prev.fallback,
+            returned,
+          };
+        });
+        const hasNext = Boolean(payload.hasNextPage);
+        setHasMore(hasNext);
+        setNextCursor(hasNext ? payload.endCursor ?? null : null);
       };
 
       const finishLoading = () => {
-        if (token === fetchTokenRef.current) {
+        if (token !== fetchTokenRef.current) {
+          return;
+        }
+        if (append) {
+          setLoadingMore(false);
+        } else {
           setListLoading(false);
         }
       };
 
       try {
         const gql = await graphqlRequest<{
-          projects?: Partial<ProjectItem>[];
+          projects?: {
+            items?: Partial<ProjectItem>[];
+            meta?: ProjectListResponse["meta"];
+            pageInfo?: ProjectListResponse["pageInfo"];
+          };
         }>({
           query: PROJECTS_PAGE_QUERY,
           variables: {
@@ -278,6 +356,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             health: healthValue.length > 0 ? healthValue : undefined,
             tag: primaryTag.length > 0 ? primaryTag : undefined,
             tags: selectedTagsRaw.length > 0 ? Array.from(new Set(selectedTagsRaw)) : undefined,
+            first: PROJECTS_PAGE_SIZE,
+            after: append ? cursorValue ?? undefined : undefined,
           },
         });
 
@@ -285,11 +365,20 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         const normalized = items
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
-        const filtered = normalized.filter((project) => matchesProjectTags(project, manualTag, selectedTagsLower));
-        const total = gql.projects?.meta?.total ?? filtered.length;
-        const fetchedAt = gql.projects?.meta?.fetchedAt;
-        const fallbackFlag = gql.projects?.meta?.fallback ?? false;
-        assignProjects(filtered, fallbackFlag, total, fetchedAt);
+        const filtered = normalized.filter((project) =>
+          matchesProjectTags(project, manualTag, selectedTagsLower),
+        );
+        const fallbackCursor = filtered.length > 0 ? filtered[filtered.length - 1].id : cursorValue ?? null;
+        applyResult({
+          items: filtered,
+          fallback: gql.projects?.meta?.fallback ?? false,
+          total: gql.projects?.meta?.total ?? filtered.length,
+          returned: gql.projects?.meta?.returned ?? filtered.length,
+          fetchedAt: gql.projects?.meta?.fetchedAt,
+          endCursor: gql.projects?.pageInfo?.endCursor ?? fallbackCursor,
+          hasNextPage: gql.projects?.pageInfo?.hasNextPage ?? (filtered.length === PROJECTS_PAGE_SIZE),
+          append,
+        });
         finishLoading();
         return;
       } catch (error) {
@@ -303,9 +392,18 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             keyword: trimmedKeyword,
             tag: manualTagRaw,
             tags: selectedTagsRaw,
+            cursor: cursorValue,
+            append,
             error: error instanceof Error ? error.message : String(error),
           },
         });
+        if (append) {
+          setListError("GraphQL 追加取得に失敗したため読み込みを終了しました");
+          setHasMore(false);
+          setNextCursor(null);
+          finishLoading();
+          return;
+        }
       }
 
       try {
@@ -324,7 +422,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             return false;
           }
           if (managerValue) {
-            const managerName = (project.manager ?? '').toLowerCase();
+            const managerName = (project.manager ?? "").toLowerCase();
             if (!managerName.includes(managerValue.toLowerCase())) {
               return false;
             }
@@ -333,14 +431,25 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             return false;
           }
           if (trimmedKeyword.length > 0) {
-            const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
+            const haystack = `${project.name} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
             if (!haystack.includes(trimmedKeyword.toLowerCase())) {
               return false;
             }
           }
           return true;
         });
-        assignProjects(filtered, rest.meta?.fallback ?? false, rest.meta?.total ?? filtered.length, rest.meta?.fetchedAt);
+        const sliced = filtered.slice(0, PROJECTS_PAGE_SIZE);
+        const endCursor = sliced.length > 0 ? sliced[sliced.length - 1].id : null;
+        applyResult({
+          items: sliced,
+          fallback: rest.meta?.fallback ?? false,
+          total: rest.meta?.total ?? filtered.length,
+          returned: sliced.length,
+          fetchedAt: rest.meta?.fetchedAt,
+          endCursor,
+          hasNextPage: sliced.length < filtered.length,
+          append: false,
+        });
         reportClientTelemetry({
           component: "projects/client",
           event: "rest_list_fallback",
@@ -365,6 +474,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             keyword: trimmedKeyword,
             tag: manualTagRaw,
             tags: selectedTagsRaw,
+            cursor: cursorValue,
+            append,
             error: restError instanceof Error ? restError.message : String(restError),
           },
         });
@@ -377,7 +488,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             return false;
           }
           if (managerValue) {
-            const managerName = (project.manager ?? '').toLowerCase();
+            const managerName = (project.manager ?? "").toLowerCase();
             if (!managerName.includes(managerValue.toLowerCase())) {
               return false;
             }
@@ -386,17 +497,57 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             return false;
           }
           if (trimmedKeyword.length > 0) {
-            const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
+            const haystack = `${project.name} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
             return haystack.includes(trimmedKeyword.toLowerCase());
           }
           return true;
         });
-        assignProjects(filteredFallback, true, filteredFallback.length, new Date().toISOString());
+        const slicedFallback = filteredFallback.slice(0, PROJECTS_PAGE_SIZE);
+        const endCursor = slicedFallback.length > 0 ? slicedFallback[slicedFallback.length - 1].id : null;
+        applyResult({
+          items: slicedFallback,
+          fallback: true,
+          total: filteredFallback.length,
+          returned: slicedFallback.length,
+          fetchedAt: new Date().toISOString(),
+          endCursor,
+          hasNextPage: slicedFallback.length < filteredFallback.length,
+          append: false,
+        });
         finishLoading();
       }
     },
     [normalizeProject, matchesProjectTags],
   );
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore || loadingMore || listLoading) {
+      return;
+    }
+    const fallbackCursor =
+      nextCursor ?? (projects.length > 0 ? projects[projects.length - 1]?.id ?? null : null);
+    void fetchProjects(filter, appliedKeyword, {
+      manager: appliedManager,
+      health: appliedHealth || undefined,
+      tag: appliedTag,
+      tags: appliedSelectedTags,
+      cursor: fallbackCursor,
+      mode: "append",
+    });
+  }, [
+    hasMore,
+    loadingMore,
+    listLoading,
+    nextCursor,
+    projects,
+    fetchProjects,
+    filter,
+    appliedKeyword,
+    appliedManager,
+    appliedHealth,
+    appliedTag,
+    appliedSelectedTags,
+  ]);
 
   useEffect(() => {
     setCopyState('idle');
@@ -628,6 +779,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       health: appliedHealth || undefined,
       tag: appliedTag,
       tags: appliedSelectedTags,
+      cursor: null,
+      mode: "replace",
     });
   }, [fetchProjects, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags]);
 
@@ -675,6 +828,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         manager: appliedManager,
         health: appliedHealth || undefined,
         tag: appliedTag,
+        tags: appliedSelectedTags,
+        cursor: null,
+        mode: "replace",
       });
       return;
     } catch (error) {
@@ -730,6 +886,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           manager: appliedManager,
           health: appliedHealth || undefined,
           tag: appliedTag,
+          tags: appliedSelectedTags,
+          cursor: null,
+          mode: "replace",
         });
       } catch (restError) {
         setCreateError((restError as Error).message ?? "プロジェクト追加に失敗しました");
@@ -1043,6 +1202,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         <span>
           表示件数: {filteredProjects.length.toLocaleString()} / {meta.total.toLocaleString()} 件
         </span>
+        <span>今回取得: {apiReturned.toLocaleString()} 件</span>
         <span>取得時刻: {formatDateTime(meta.fetchedAt)}</span>
         <span
           className={`rounded-full px-2 py-1 font-medium ${
@@ -1059,6 +1219,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           {copyState === 'copied' ? 'リンクをコピーしました' : copyState === 'error' ? 'コピーできませんでした' : 'リンクをコピー'}
         </button>
         {listLoading ? <span className="text-sky-300">読み込み中...</span> : null}
+        {loadingMore ? <span className="text-sky-300">追加読み込み中...</span> : null}
         {listError ? <span className="text-amber-300">{listError}</span> : null}
       </div>
 
@@ -1142,6 +1303,19 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           </article>
         ))}
       </div>
+
+      {hasMore ? (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors hover:border-sky-400 hover:text-sky-100 disabled:cursor-not-allowed disabled:text-slate-500"
+            disabled={loadingMore || listLoading}
+          >
+            {loadingMore ? "追加読み込み中..." : "さらに読み込む"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
