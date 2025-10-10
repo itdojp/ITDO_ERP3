@@ -9,6 +9,7 @@ import type { TelemetryItem, TelemetryResponse, TelemetryFilters } from './types
 import { DEFAULT_TELEMETRY_FILTERS } from './types';
 
 const MAX_ROWS = 100;
+const PROJECTS_PAGE_PATH = '/projects';
 
 function formatTimestamp(value?: string) {
   if (!value) return 'n/a';
@@ -175,7 +176,7 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
       const identifierEntry = entries.find(({ path }) => /project(id|code)$/i.test(path));
       const identifier = identifierEntry?.value.trim();
       if (identifier) {
-        registerProjectLink(`/projects?keyword=${encodeURIComponent(identifier)}`, `Projects: ${identifier}`);
+        registerProjectLink(`${PROJECTS_PAGE_PATH}?keyword=${encodeURIComponent(identifier)}`, `Projects: ${identifier}`);
       }
     }
     return { projectLinks, slackLinks };
@@ -521,7 +522,11 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
                           }
                         }
                       } catch (error) {
-                        console.warn('[telemetry] failed to parse Slack URL', href, error);
+                        console.warn(
+                          '[telemetry] failed to parse Slack URL. Expected format: https://slack.com/app_redirect?channel=CHANNEL や https://slack.com/archives/CHANNEL_ID',
+                          'received:', href,
+                          'error:', error,
+                        );
                       }
                       return 'Slack';
                     })();
@@ -559,7 +564,11 @@ function extractStringEntries(root: unknown): StringEntry[] {
   const stack: Array<{ value: unknown; path: string }> = [{ value: root, path: '' }];
   const visited = new Set<unknown>();
   while (stack.length > 0) {
-    const { value, path } = stack.pop()!;
+    const popped = stack.pop();
+    if (!popped) {
+      continue;
+    }
+    const { value, path } = popped;
     if (value === null || value === undefined) {
       continue;
     }
