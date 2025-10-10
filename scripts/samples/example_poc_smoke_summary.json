@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "failure_reason": "",
+  "runs": 1,
+  "attempt": 1,
+  "fallback_used": false,
+  "telemetry": {
+    "status": "verified",
+    "seeded_count": 5,
+    "attempts": 1
+  },
+  "telemetry_health": {
+    "status": "ok",
+    "message": "telemetry events available",
+    "events": {
+      "total": 42,
+      "seeded": 5,
+      "last_event_at": "2025-10-10T03:12:48.550Z",
+      "last_seeded_at": "2025-10-10T03:12:45.120Z"
+    },
+    "fallback_active": false
+  }
+}
