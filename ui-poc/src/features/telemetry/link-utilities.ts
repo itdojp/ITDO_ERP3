@@ -52,11 +52,13 @@ type CollectedLinks = {
 
 type LinkOptions = {
   projectsPagePath?: string;
+  slackWorkspaceBaseUrl?: string;
 };
 
 const PROJECTS_REGEX = /\/projects\b/i;
 const SLACK_HTTP_REGEX = /^https?:\/\//i;
 const SLACK_SCHEME_REGEX = /^slack:\/\//i;
+const SLACK_HOST_REGEX = /slack\.com/i;
 
 export function collectRelatedLinks(detail: unknown, options: LinkOptions = {}): CollectedLinks {
   if (!detail || typeof detail !== 'object') {
@@ -64,18 +66,19 @@ export function collectRelatedLinks(detail: unknown, options: LinkOptions = {}):
   }
 
   const projectsPagePath = options.projectsPagePath ?? '/projects';
+  const slackWorkspaceBaseUrl = sanitizeSlackBase(options.slackWorkspaceBaseUrl);
   const entries = extractStringEntries(detail);
   const slackSet = new Set<string>();
 
   entries.forEach(({ value }) => {
     const trimmed = value.trim();
     if (!trimmed) return;
-    if (SLACK_HTTP_REGEX.test(trimmed) && /slack\.com/i.test(trimmed)) {
-      slackSet.add(trimmed);
+    if (SLACK_HTTP_REGEX.test(trimmed) && SLACK_HOST_REGEX.test(trimmed)) {
+      slackSet.add(normalizeSlackLink(trimmed, slackWorkspaceBaseUrl));
       return;
     }
     if (SLACK_SCHEME_REGEX.test(trimmed)) {
-      slackSet.add(trimmed);
+      slackSet.add(normalizeSlackLink(trimmed, slackWorkspaceBaseUrl));
     }
   });
 
@@ -113,4 +116,44 @@ export function collectRelatedLinks(detail: unknown, options: LinkOptions = {}):
   }
 
   return { projectLinks, slackLinks };
+}
+
+function sanitizeSlackBase(input?: string): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (!SLACK_HTTP_REGEX.test(trimmed)) {
+    return null;
+  }
+  return trimmed.replace(/\/$/, '');
+}
+
+function normalizeSlackLink(url: string, workspaceBase: string | null): string {
+  if (!workspaceBase) {
+    return url;
+  }
+  if (url.startsWith('slack://channel')) {
+    const match = /slack:\/\/channel\?id=([^&]+)/i.exec(url);
+    if (match?.[1]) {
+      return `${workspaceBase}/archives/${match[1]}`;
+    }
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    if (SLACK_HOST_REGEX.test(parsed.hostname)) {
+      if (parsed.pathname.startsWith('/app_redirect')) {
+        const channel = parsed.searchParams.get('channel');
+        if (channel) {
+          return `${workspaceBase}/archives/${channel}`;
+        }
+      }
+      if (parsed.pathname.startsWith('/archives/')) {
+        return `${workspaceBase}${parsed.pathname}`;
+      }
+    }
+  } catch (error) {
+    return url;
+  }
+  return url;
 }

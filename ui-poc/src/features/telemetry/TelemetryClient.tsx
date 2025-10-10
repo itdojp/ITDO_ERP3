@@ -134,9 +134,13 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
   );
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selectedItem = useMemo(() => (selectedIndex !== null ? renderedItems[selectedIndex] ?? null : null), [renderedItems, selectedIndex]);
+  const slackWorkspaceBaseUrl = process.env.NEXT_PUBLIC_SLACK_WORKSPACE_URL ?? null;
   const { projectLinks, slackLinks } = useMemo(() => {
-    return collectRelatedLinks(selectedItem?.detail ?? null, { projectsPagePath: PROJECTS_PAGE_PATH });
-  }, [selectedItem]);
+    return collectRelatedLinks(selectedItem?.detail ?? null, {
+      projectsPagePath: PROJECTS_PAGE_PATH,
+      slackWorkspaceBaseUrl,
+    });
+  }, [selectedItem, slackWorkspaceBaseUrl]);
 
   const highlightMatches = useMemo(() => {
     if (!highlightKey) return new Set<number>();

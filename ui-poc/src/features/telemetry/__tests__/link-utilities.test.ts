@@ -67,4 +67,17 @@ describe('collectRelatedLinks', () => {
     expect(projectLinks[0].href).toBe('/projects?keyword=DX-2025');
     expect(projectLinks[0].label).toBe('Projects: DX-2025');
   });
+
+  it('rewrites Slack links when workspace base URL is provided', () => {
+    const detail = {
+      audit: {
+        urls: ['https://slack.com/archives/ABC123/p1680000000000'],
+      },
+    };
+
+    const { slackLinks } = collectRelatedLinks(detail, {
+      slackWorkspaceBaseUrl: 'https://itdo-workspace.slack.com/',
+    });
+    expect(slackLinks).toEqual(['https://itdo-workspace.slack.com/archives/ABC123/p1680000000000']);
+  });
 });
