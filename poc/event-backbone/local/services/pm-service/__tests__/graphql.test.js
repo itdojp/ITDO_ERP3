@@ -16,9 +16,16 @@ describe('GraphQL schema', () => {
       `
         query Projects($status: String) {
           projects(status: $status) {
-            id
-            name
-            status
+            items {
+              id
+              name
+              status
+            }
+            meta {
+              total
+              fetchedAt
+              fallback
+            }
           }
         }
       `,
@@ -26,8 +33,12 @@ describe('GraphQL schema', () => {
     ).expect(200);
 
     expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.projects).toHaveLength(projects.length);
-    const ids = response.body.data.projects.map((p) => p.id);
+    const { items, meta } = response.body.data.projects;
+    expect(items).toHaveLength(projects.length);
+    expect(meta.total).toBe(projects.length);
+    expect(meta.fallback).toBe(false);
+    expect(typeof meta.fetchedAt).toBe('string');
+    const ids = items.map((p) => p.id);
     expect(new Set(ids)).toEqual(new Set(projects.map((p) => p.id)));
   });
 
@@ -41,8 +52,13 @@ describe('GraphQL schema', () => {
       `
         query Projects($keyword: String) {
           projects(keyword: $keyword) {
-            id
-            clientName
+            items {
+              id
+              clientName
+            }
+            meta {
+              total
+            }
           }
         }
       `,
@@ -50,11 +66,13 @@ describe('GraphQL schema', () => {
     ).expect(200);
 
     expect(response.body.errors).toBeUndefined();
-    const returned = response.body.data.projects;
+    const { items, meta } = response.body.data.projects;
+    const returned = items;
     expect(returned.length).toBeGreaterThan(0);
     returned.forEach((project) => {
       expect((project.clientName || '').toLowerCase()).toContain(keyword.toLowerCase());
     });
+    expect(meta.total).toBe(returned.length);
   });
 
   test('filters projects by manager and tag', async () => {
@@ -62,9 +80,14 @@ describe('GraphQL schema', () => {
       `
         query Projects($manager: String, $tag: String) {
           projects(manager: $manager, tag: $tag) {
-            id
-            manager
-            tags
+            items {
+              id
+              manager
+              tags
+            }
+            meta {
+              total
+            }
           }
         }
       `,
@@ -72,12 +95,14 @@ describe('GraphQL schema', () => {
     ).expect(200);
 
     expect(response.body.errors).toBeUndefined();
-    const returned = response.body.data.projects;
+    const { items, meta } = response.body.data.projects;
+    const returned = items;
     expect(returned.length).toBeGreaterThan(0);
     returned.forEach((project) => {
       expect((project.manager || '').includes('山田')).toBeTruthy();
       expect(project.tags).toContain('DX');
     });
+    expect(meta.total).toBe(returned.length);
   });
 
   test('creates and transitions project via GraphQL', async () => {
