@@ -105,6 +105,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [appliedSelectedTags, setAppliedSelectedTags] = useState<string[]>([]);
   const [healthFilter, setHealthFilter] = useState<"" | ProjectItem["health"]>("");
   const [appliedHealth, setAppliedHealth] = useState<"" | ProjectItem["health"]>("");
+  const [shareUrl, setShareUrl] = useState("");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const toggleTagSelection = useCallback((tag: string) => {
     setSelectedTags((prev) => {
@@ -113,6 +115,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       }
       return [...prev, tag];
     });
+    setCopyState("idle");
   }, []);
 
   const normalizeTagLabel = useCallback((value: string) => {
@@ -121,6 +124,22 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     const popularMatch = popularTagLookup.get(trimmed.toLowerCase());
     return popularMatch ?? trimmed;
   }, []);
+
+  const handleCopyShareUrl = useCallback(async () => {
+    if (!shareUrl || typeof navigator === 'undefined' || !navigator.clipboard) {
+      setCopyState('error');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 2000);
+    } catch (error) {
+      console.warn('[projects] failed to copy share url', error);
+      setCopyState('error');
+      setTimeout(() => setCopyState('idle'), 2000);
+    }
+  }, [shareUrl]);
 
   const matchesProjectTags = useCallback(
     (project: ProjectItem, manualTagValue: string, selectedTagValues: readonly string[]) => {
@@ -380,6 +399,10 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   );
 
   useEffect(() => {
+    setCopyState('idle');
+  }, [shareUrl]);
+
+  useEffect(() => {
     filterRef.current = filter;
   }, [filter]);
 
@@ -465,6 +488,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     }
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", target);
+      const absolute = new URL(target, window.location.origin);
+      setShareUrl(absolute.toString());
     }
   }, [filter, appliedKeyword, appliedManager, appliedTag, appliedHealth, appliedSelectedTags, pathname, router]);
 
@@ -582,6 +607,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       }
 
       lastSyncedQueryRef.current = params.toString();
+      setShareUrl(window.location.href);
     };
 
     parseFiltersFromLocation();
@@ -1025,6 +1051,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         >
           {source === "api" ? "API live" : "Mock data"}
         </span>
+        <button
+          type="button"
+          onClick={handleCopyShareUrl}
+          className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-sky-400 hover:text-sky-100"
+        >
+          {copyState === 'copied' ? 'リンクをコピーしました' : copyState === 'error' ? 'コピーできませんでした' : 'リンクをコピー'}
+        </button>
         {listLoading ? <span className="text-sky-300">読み込み中...</span> : null}
         {listError ? <span className="text-amber-300">{listError}</span> : null}
       </div>
