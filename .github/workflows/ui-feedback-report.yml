@@ -10,9 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
       - name: Generate backlog report
         run: |
-          scripts/ui_feedback_issue_cli.js > ui-feedback-report.txt
+          node scripts/ui_feedback_issue_cli.js > ui-feedback-report.txt
       - name: Upload backlog report
         uses: actions/upload-artifact@v4
         with:
