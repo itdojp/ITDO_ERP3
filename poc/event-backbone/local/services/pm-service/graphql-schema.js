@@ -285,13 +285,21 @@ export function createGraphQLSchema({
           manager: { type: GraphQLString },
           health: { type: GraphQLString },
           tag: { type: GraphQLString },
+          tags: { type: new GraphQLList(GraphQLString) },
         },
         resolve: (_root, args) => {
           const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : '';
           const status = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
           const manager = typeof args?.manager === 'string' ? args.manager.trim().toLowerCase() : '';
           const health = typeof args?.health === 'string' ? args.health.trim().toLowerCase() : '';
-          const tag = typeof args?.tag === 'string' ? args.tag.trim().toLowerCase() : '';
+          const manualTag = typeof args?.tag === 'string' ? args.tag.trim().toLowerCase() : '';
+          const tagListArg = Array.isArray(args?.tags)
+            ? args.tags
+                .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+                .filter(Boolean)
+            : [];
+          const uniqueTagFilters = [...new Set(manualTag ? [manualTag, ...tagListArg] : tagListArg)];
+          const secondaryTagFilters = uniqueTagFilters.filter((value) => value !== manualTag);
           const filteredProjects = projects.filter((project) => {
             const statusMatch = !status || status === 'all' || project.status === status;
             if (!statusMatch) return false;
@@ -302,12 +310,18 @@ export function createGraphQLSchema({
                 return false;
               }
             }
-            if (tag) {
+            if (manualTag || secondaryTagFilters.length > 0) {
               const tagList = Array.isArray(project.tags)
                 ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
                 : [];
-              if (!tagList.includes(tag)) {
+              if (manualTag && !tagList.includes(manualTag)) {
                 return false;
+              }
+              if (secondaryTagFilters.length > 0) {
+                const hasMatch = secondaryTagFilters.some((value) => tagList.includes(value));
+                if (!hasMatch) {
+                  return false;
+                }
               }
             }
             if (!keyword) return true;
