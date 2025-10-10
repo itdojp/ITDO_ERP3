@@ -40,6 +40,8 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
   const router = useRouter();
   const pathname = usePathname();
   const baseSearchParams = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
+  const linkButtonClass =
+    'inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-sky-400 hover:text-sky-100';
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
@@ -130,6 +132,54 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
   );
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selectedItem = useMemo(() => (selectedIndex !== null ? renderedItems[selectedIndex] ?? null : null), [renderedItems, selectedIndex]);
+  const { projectLinks, slackLinks } = useMemo(() => {
+    if (!selectedItem?.detail || typeof selectedItem.detail !== 'object') {
+      return { projectLinks: [] as Array<{ href: string; label: string }>, slackLinks: [] as string[] };
+    }
+    const entries = extractStringEntries(selectedItem.detail);
+    const slackSet = new Set<string>();
+    entries.forEach(({ value }) => {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      if (/^https?:\/\//i.test(trimmed) && /slack\.com/i.test(trimmed)) {
+        slackSet.add(trimmed);
+      } else if (/^slack:\/\//i.test(trimmed)) {
+        slackSet.add(trimmed);
+      }
+    });
+    const slackLinks = Array.from(slackSet);
+    const projectLinkSet = new Set<string>();
+    const projectLinks: Array<{ href: string; label: string }> = [];
+    const direct = selectedItem.detail as Record<string, unknown>;
+    const shareUrlField = typeof direct.shareUrl === 'string' ? direct.shareUrl.trim() : '';
+    const entriesByPriority = [...entries];
+    const shareEntry = entriesByPriority.find(({ value, path }) => {
+      const trimmed = value.trim();
+      if (!trimmed) return false;
+      if (/^https?:\/\//i.test(trimmed) && /\/projects\b/i.test(trimmed)) return true;
+      return /shareurl|projecturl/i.test(path) && /^https?:\/\//i.test(trimmed);
+    });
+    const registerProjectLink = (href: string, label: string) => {
+      const trimmed = href.trim();
+      if (!trimmed || projectLinkSet.has(trimmed)) return;
+      projectLinkSet.add(trimmed);
+      projectLinks.push({ href: trimmed, label });
+    };
+    if (shareEntry) {
+      registerProjectLink(shareEntry.value, 'Projects 画面で開く');
+    }
+    if (shareUrlField) {
+      registerProjectLink(shareUrlField, 'Projects 共有リンク');
+    }
+    if (projectLinks.length === 0) {
+      const identifierEntry = entries.find(({ path }) => /project(id|code)$/i.test(path));
+      const identifier = identifierEntry?.value.trim();
+      if (identifier) {
+        registerProjectLink(`/projects?keyword=${encodeURIComponent(identifier)}`, `Projects: ${identifier}`);
+      }
+    }
+    return { projectLinks, slackLinks };
+  }, [selectedItem]);
 
   const highlightMatches = useMemo(() => {
     if (!highlightKey) return new Set<number>();
@@ -449,6 +499,48 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
             <div><dt className="text-slate-500">Origin</dt><dd>{selectedItem.origin ?? 'n/a'}</dd></div>
           </dl>
           <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            {projectLinks.length > 0 || slackLinks.length > 0 ? (
+              <div className="mb-3 space-y-2">
+                <p className="text-xs uppercase tracking-wide text-slate-400">関連リンク</p>
+                <div className="flex flex-wrap gap-2">
+                  {projectLinks.map((link) => (
+                    <a key={`project-link-${link.href}`} href={link.href} className={linkButtonClass}>
+                      {link.label}
+                    </a>
+                  ))}
+                  {slackLinks.map((href) => {
+                    const slackLabel = (() => {
+                      try {
+                        if (href.startsWith('http')) {
+                          const url = new URL(href);
+                          const channel = url.searchParams.get('channel');
+                          if (channel) return `Slack #${channel}`;
+                          const segments = url.pathname.split('/').filter(Boolean);
+                          if (segments.length > 0) {
+                            return `Slack ${segments[segments.length - 1]}`;
+                          }
+                        }
+                      } catch (error) {
+                        console.warn('[telemetry] failed to parse Slack URL', href, error);
+                      }
+                      return 'Slack';
+                    })();
+                    return (
+                      <a
+                        key={`slack-link-${href}`}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={linkButtonClass}
+                      >
+                        {slackLabel}
+                        <span aria-hidden="true">↗</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[11px]">
               {selectedItem.detail ? JSON.stringify(selectedItem.detail, null, 2) : '詳細情報はありません'}
             </pre>
@@ -458,4 +550,45 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
 
     </div>
   );
+}
+
+type StringEntry = { path: string; value: string };
+
+function extractStringEntries(root: unknown): StringEntry[] {
+  const result: StringEntry[] = [];
+  const stack: Array<{ value: unknown; path: string }> = [{ value: root, path: '' }];
+  const visited = new Set<unknown>();
+  while (stack.length > 0) {
+    const { value, path } = stack.pop()!;
+    if (value === null || value === undefined) {
+      continue;
+    }
+    if (typeof value === 'string') {
+      result.push({ path, value });
+      continue;
+    }
+    if (typeof value !== 'object') {
+      continue;
+    }
+    if (visited.has(value)) {
+      continue;
+    }
+    visited.add(value);
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        stack.push({
+          value: item,
+          path: path ? `${path}[${index}]` : `[${index}]`,
+        });
+      });
+    } else {
+      Object.entries(value).forEach(([key, child]) => {
+        stack.push({
+          value: child,
+          path: path ? `${path}.${key}` : key,
+        });
+      });
+    }
+  }
+  return result;
 }
