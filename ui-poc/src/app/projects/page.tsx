@@ -30,7 +30,7 @@ async function fetchProjects({ status, keyword, manager, tag, health }: ProjectF
   const normalizedHealth = typeof health === "string" && ["green", "yellow", "red"].includes(health.trim()) ? health.trim() : undefined;
   try {
     const gql = await graphqlRequest<{
-      projects?: ProjectListResponse["items"];
+      projects?: { items?: ProjectListResponse['items']; meta?: ProjectListResponse['meta']; };
     }>({
       query: PROJECTS_PAGE_QUERY,
       variables: {
@@ -42,15 +42,9 @@ async function fetchProjects({ status, keyword, manager, tag, health }: ProjectF
       },
       baseUrl: base,
     });
-    const items = Array.isArray(gql.projects) ? gql.projects : [];
-    return {
-      items,
-      meta: {
-        total: items.length,
-        fetchedAt: new Date().toISOString(),
-        fallback: false,
-      },
-    } satisfies ProjectListResponse;
+    const items = Array.isArray(gql.projects?.items) ? gql.projects.items : [];
+    const meta = gql.projects?.meta ?? { total: items.length, fetchedAt: new Date().toISOString(), fallback: false };
+    return { items, meta } satisfies ProjectListResponse;
   } catch (error) {
     console.warn("[projects] GraphQL fetch failed, fallback to REST", error);
     await reportServerTelemetry({

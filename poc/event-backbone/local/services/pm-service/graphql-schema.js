@@ -81,6 +81,16 @@ export function createGraphQLSchema({
     }),
   });
 
+
+  const ProjectListMetaType = new GraphQLObjectType({
+    name: 'ProjectListMeta',
+    fields: () => ({
+      total: { type: GraphQLInt },
+      fetchedAt: { type: GraphQLString },
+      fallback: { type: GraphQLBoolean },
+    }),
+  });
+
   const ProjectType = new GraphQLObjectType({
     name: 'Project',
     fields: () => ({
@@ -174,6 +184,14 @@ export function createGraphQLSchema({
     fields: () => ({
       items: { type: new GraphQLList(InvoiceType) },
       meta: { type: ComplianceInvoiceMetaType },
+    }),
+  });
+
+  const ProjectListConnectionType = new GraphQLObjectType({
+    name: 'ProjectListConnection',
+    fields: () => ({
+      items: { type: new GraphQLList(ProjectType) },
+      meta: { type: ProjectListMetaType },
     }),
   });
 
@@ -289,7 +307,7 @@ export function createGraphQLSchema({
         },
       },
       projects: {
-        type: new GraphQLList(ProjectType),
+        type: ProjectListConnectionType,
         args: {
           status: { type: GraphQLString },
           keyword: { type: GraphQLString },
@@ -333,7 +351,15 @@ export function createGraphQLSchema({
             const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
             return haystack.includes(keyword);
           });
-          return cloneDeep(filteredProjects);
+          const fetchedAt = new Date().toISOString();
+          return {
+            items: cloneDeep(filteredProjects),
+            meta: {
+              total: filteredProjects.length,
+              fetchedAt,
+              fallback: false,
+            },
+          };
         },
       },
       timesheets: {

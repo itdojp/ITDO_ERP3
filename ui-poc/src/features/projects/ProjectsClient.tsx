@@ -56,9 +56,9 @@ type UpdateState = {
 type QuerySource = "api" | "mock";
 
 export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
-  const initialMeta: NonNullable<ProjectListResponse["meta"]> =
+  const initialMeta: NonNullable<ProjectListResponse['meta']> =
     initialProjects.meta ?? {
-      total: initialProjects.items.length,
+      total: 0,
       fetchedAt: new Date().toISOString(),
       fallback: true,
     };
@@ -229,14 +229,14 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       setListLoading(true);
       setListError(null);
 
-      const assignProjects = (items: ProjectItem[], fallback: boolean) => {
+      const assignProjects = (items: ProjectItem[], fallback: boolean, totalOverride?: number, fetchedAtOverride?: string) => {
         if (token !== fetchTokenRef.current) {
           return;
         }
         setProjects(items);
         setMeta({
-          total: items.length,
-          fetchedAt: new Date().toISOString(),
+          total: totalOverride ?? items.length,
+          fetchedAt: fetchedAtOverride ?? new Date().toISOString(),
           fallback,
         });
       };
@@ -262,12 +262,15 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           },
         });
 
-        const items = Array.isArray(gql.projects) ? gql.projects : [];
+        const items = Array.isArray(gql.projects?.items) ? gql.projects.items : [];
         const normalized = items
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
         const filtered = normalized.filter((project) => matchesProjectTags(project, manualTag, selectedTagsLower));
-        assignProjects(filtered, false);
+        const total = gql.projects?.meta?.total ?? filtered.length;
+        const fetchedAt = gql.projects?.meta?.fetchedAt;
+        const fallbackFlag = gql.projects?.meta?.fallback ?? false;
+        assignProjects(filtered, fallbackFlag, total, fetchedAt);
         finishLoading();
         return;
       } catch (error) {
@@ -318,7 +321,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           }
           return true;
         });
-        assignProjects(filtered, rest.meta?.fallback ?? false);
+        assignProjects(filtered, rest.meta?.fallback ?? false, rest.meta?.total ?? filtered.length, rest.meta?.fetchedAt);
         reportClientTelemetry({
           component: "projects/client",
           event: "rest_list_fallback",
@@ -369,7 +372,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           }
           return true;
         });
-        assignProjects(filteredFallback, true);
+        assignProjects(filteredFallback, true, filteredFallback.length, new Date().toISOString());
         finishLoading();
       }
     },
