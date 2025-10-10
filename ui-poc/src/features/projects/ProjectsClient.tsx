@@ -399,14 +399,6 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const url = new URL(window.location.href);
-    setShareUrl(url.toString());
-  }, []);
-
-  useEffect(() => {
     setCopyState('idle');
   }, [shareUrl]);
 
@@ -619,9 +611,6 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     };
 
     parseFiltersFromLocation();
-    if (typeof window !== "undefined") {
-      setShareUrl(window.location.href);
-    }
 
     const handlePopState = () => {
       parseFiltersFromLocation();
