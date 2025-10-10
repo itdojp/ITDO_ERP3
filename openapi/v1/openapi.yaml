@@ -67,7 +67,12 @@ paths:
           description: 手入力タグ（AND 条件）
         - name: tags
           in: query
-          schema: { type: string }
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
           description: 代表タグ（カンマ区切り）。いずれか一致で OR フィルタ
         - name: first
           in: query
@@ -856,7 +861,7 @@ components:
           $ref: '#/components/schemas/ProjectListMeta'
         next_cursor:
           type: string
-          description: 次ページ取得時に指定するカーソル（末尾ID）。存在しない場合は最終ページ
+          description: 次ページ取得時に指定するカーソル（末尾ID）。次ページがない場合はレスポンスに含まれません
       required: [items, meta]
     ProjectListMeta:
       type: object
