@@ -428,7 +428,7 @@ export function createTestServer(options = {}) {
           lastEventAt: lastEvent?.timestamp ?? null,
           lastSeededAt: lastSeeded?.timestamp ?? null,
         },
-        fallbackActive: false,
+        fallbackActive: Boolean(options.fallbackActive),
       });
     });
 

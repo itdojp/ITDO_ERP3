@@ -1213,6 +1213,7 @@ async function main() {
     const lastEvent = total > 0 ? telemetryLog[telemetryLog.length - 1] : null;
     const lastSeeded = seededEvents.length > 0 ? seededEvents[seededEvents.length - 1] : null;
     const status = seededEvents.length > 0 ? 'ok' : 'empty';
+    const fallbackActive = String(process.env.PODMAN_HOST_FALLBACK_ACTIVE || 'false').toLowerCase() === 'true';
     res.json({
       status,
       message:
@@ -1225,8 +1226,7 @@ async function main() {
         lastEventAt: lastEvent?.timestamp ?? null,
         lastSeededAt: lastSeeded?.timestamp ?? null,
       },
-      fallbackActive:
-        String(process.env.PODMAN_HOST_FALLBACK_ACTIVE || 'false').toLowerCase() === 'true',
+      fallbackActive,
     });
   });
 
