@@ -128,6 +128,9 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
     () => renderedItems.map((item) => (item?.detail ? JSON.stringify(item.detail).toLowerCase() : '')),
     [renderedItems],
   );
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const selectedItem = useMemo(() => (selectedIndex !== null ? renderedItems[selectedIndex] ?? null : null), [renderedItems, selectedIndex]);
+
   const highlightMatches = useMemo(() => {
     if (!highlightKey) return new Set<number>();
     const matches = new Set<number>();
@@ -156,6 +159,16 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
       highlightRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [firstHighlightIndex, renderedItems]);
+
+  useEffect(() => {
+    if (firstHighlightIndex !== undefined) {
+      setSelectedIndex(firstHighlightIndex);
+    } else if (selectedIndex === null && renderedItems.length > 0) {
+      setSelectedIndex(0);
+    } else if (selectedIndex !== null && selectedIndex >= renderedItems.length) {
+      setSelectedIndex(renderedItems.length - 1);
+    }
+  }, [firstHighlightIndex, renderedItems, selectedIndex]);
 
   const syncQuery = useCallback(
     (nextFilters: TelemetryFilters) => {
@@ -370,40 +383,42 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
             ) : (
               renderedItems.map((item, index) => {
                 const isHighlighted = highlightMatches.has(index);
+                const isSelected = selectedIndex === index;
                 return (
                   <tr
                     key={`${item.timestamp || item.receivedAt || index}-${index}`}
                     ref={index === firstHighlightIndex ? highlightRowRef : undefined}
                     className={`hover:bg-slate-800/40 ${
-                      isHighlighted ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
+                      isSelected ? 'bg-sky-600/20 ring-1 ring-sky-500/80' : isHighlighted ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
                     }`}
+                    onClick={() => setSelectedIndex(index)}
                   >
                     <td className="px-4 py-3 align-top">
                       <div className="flex flex-col">
                         <span>{formatTimestamp(item.receivedAt || item.timestamp)}</span>
                       </div>
                     </td>
-                  <td className="px-4 py-3 align-top text-slate-200">{item.component ?? 'n/a'}</td>
-                  <td className="px-4 py-3 align-top text-slate-200">{item.event ?? 'n/a'}</td>
-                  <td className="px-4 py-3 align-top">
-                    <span
-                      className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                        item.level === 'error'
-                          ? 'bg-rose-500/20 text-rose-200'
-                          : item.level === 'warn'
-                            ? 'bg-amber-500/20 text-amber-200'
-                            : 'bg-emerald-500/20 text-emerald-200'
-                      }`}
-                    >
-                      {item.level ?? 'info'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 align-top text-slate-300">{item.origin ?? 'n/a'}</td>
-                  <td className="px-4 py-3 align-top text-xs text-slate-300">
-                    <pre className="whitespace-pre-wrap break-words text-xs">
-                      {item.detail ? JSON.stringify(item.detail, null, 2) : '—'}
-                    </pre>
-                  </td>
+                    <td className="px-4 py-3 align-top text-slate-200">{item.component ?? 'n/a'}</td>
+                    <td className="px-4 py-3 align-top text-slate-200">{item.event ?? 'n/a'}</td>
+                    <td className="px-4 py-3 align-top">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                          item.level === 'error'
+                            ? 'bg-rose-500/20 text-rose-200'
+                            : item.level === 'warn'
+                              ? 'bg-amber-500/20 text-amber-200'
+                              : 'bg-emerald-500/20 text-emerald-200'
+                        }`}
+                      >
+                        {item.level ?? 'info'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 align-top text-slate-300">{item.origin ?? 'n/a'}</td>
+                    <td className="px-4 py-3 align-top text-xs text-slate-300">
+                      <pre className="whitespace-pre-wrap break-words text-xs">
+                        {item.detail ? JSON.stringify(item.detail, null, 2) : '—'}
+                      </pre>
+                    </td>
                   </tr>
                 );
               })
@@ -411,6 +426,36 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
           </tbody>
         </table>
       </div>
+
+      {selectedItem ? (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-white">選択したイベント</p>
+              <p className="text-slate-400">{formatTimestamp(selectedItem.receivedAt || selectedItem.timestamp)}</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+              onClick={() => setSelectedIndex(null)}
+            >
+              クリア
+            </button>
+          </div>
+          <dl className="mt-3 grid gap-2 text-slate-300 md:grid-cols-2">
+            <div><dt className="text-slate-500">Component</dt><dd>{selectedItem.component ?? 'n/a'}</dd></div>
+            <div><dt className="text-slate-500">Event</dt><dd>{selectedItem.event ?? 'n/a'}</dd></div>
+            <div><dt className="text-slate-500">Level</dt><dd>{selectedItem.level ?? 'info'}</dd></div>
+            <div><dt className="text-slate-500">Origin</dt><dd>{selectedItem.origin ?? 'n/a'}</dd></div>
+          </dl>
+          <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[11px]">
+              {selectedItem.detail ? JSON.stringify(selectedItem.detail, null, 2) : '詳細情報はありません'}
+            </pre>
+          </div>
+        </div>
+      ) : null}
+
     </div>
   );
 }
