@@ -74,7 +74,10 @@ jobs:
           fi
 
           echo "Verifying telemetry seed baseline (min ${TELEMETRY_MIN_SEEDED})"
-          PM_PORT="${PM_PORT}" TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED}" scripts/podman_status.sh
+          PM_PORT="${PM_PORT}" \
+          TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED}" \
+          PODMAN_STATUS_SUMMARY_FILE="logs/poc-smoke/podman_status_summary.json" \
+          scripts/podman_status.sh
 
           trap - EXIT
           wait "${RUN_PID}"
@@ -88,6 +91,60 @@ jobs:
           else
             echo "[slack] logs/poc-smoke not found"
           fi
+
+      - name: Publish podman status summary
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          summary_file="logs/poc-smoke/podman_status_summary.json"
+          if [[ ! -f "${summary_file}" ]]; then
+            echo "[summary] ${summary_file} not found"
+            exit 0
+          fi
+
+          cat "${summary_file}"
+
+          eval "$(python3 <<'PY'
+import json, os
+path = os.environ.get('summary_file')
+with open(path, 'r', encoding='utf-8') as fh:
+    data = json.load(fh)
+
+def esc(value):
+    return value.replace('"', '\\"').replace('\n', ' ')
+
+service = esc(str(data.get('service_health', 'unknown')))
+telemetry = esc(str(data.get('telemetry_status', 'unknown')))
+message = esc(str(data.get('telemetry_message', '')))
+attempts = data.get('telemetry_attempts', 0)
+reset = data.get('telemetry_reset_used', False)
+print(f'SUMMARY_SERVICE="{service}"')
+print(f'SUMMARY_TELEMETRY="{telemetry}"')
+print(f'SUMMARY_MESSAGE="{message}"')
+print(f'SUMMARY_ATTEMPTS={attempts}')
+print(f'SUMMARY_RESET={reset}')
+PY
+          )"
+
+          source scripts/lib/slack.sh
+          slack_status="success"
+          case "${SUMMARY_TELEMETRY}" in
+            ok)
+              slack_status="success"
+              ;;
+            empty|skipped)
+              slack_status="warning"
+              ;;
+            error)
+              slack_status="failure"
+              ;;
+          esac
+          formatted="service=${SUMMARY_SERVICE}, telemetry=${SUMMARY_TELEMETRY} (attempts=${SUMMARY_ATTEMPTS}, reset=${SUMMARY_RESET})"
+          if [[ -n "${SUMMARY_MESSAGE}" ]]; then
+            formatted+=" - ${SUMMARY_MESSAGE}"
+          fi
+          slack_send "${slack_status}" "Podman status summary" "${formatted}" || true
 
       - name: Upload Playwright report
         if: always()
