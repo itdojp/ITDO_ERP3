@@ -16,6 +16,8 @@ const statusFilters: Array<{ value: "all" | ProjectStatus; label: string }> = [
   { value: "closed", label: STATUS_LABEL.closed },
 ];
 
+const popularTags = ["DX", "Compliance", "Risk", "Priority", "SAP", "AMS"] as const;
+
 const transitions: Record<ProjectStatus, ProjectAction[]> = {
   planned: ["activate", "close"],
   active: ["hold", "close"],
@@ -91,19 +93,37 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const keywordRef = useRef(appliedKeyword);
   const managerRef = useRef("");
   const tagRef = useRef("");
+  const selectedTagsRef = useRef<string[]>([]);
   const healthRef = useRef<"" | ProjectItem["health"]>("" as "" | ProjectItem["health"]);
 
   const [managerTerm, setManagerTerm] = useState("");
   const [appliedManager, setAppliedManager] = useState("");
   const [tagTerm, setTagTerm] = useState("");
   const [appliedTag, setAppliedTag] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [appliedSelectedTags, setAppliedSelectedTags] = useState<string[]>([]);
   const [healthFilter, setHealthFilter] = useState<"" | ProjectItem["health"]>("");
   const [appliedHealth, setAppliedHealth] = useState<"" | ProjectItem["health"]>("");
+
+  const toggleTagSelection = useCallback((tag: string) => {
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) {
+        return prev.filter((value) => value !== tag);
+      }
+      return [...prev, tag];
+    });
+  }, []);
+
+  const tagFiltersLower = useMemo(() => {
+    const manual = appliedTag.trim().toLowerCase();
+    const selected = appliedSelectedTags.map((value) => value.toLowerCase());
+    const combined = manual ? [manual, ...selected] : selected;
+    return combined.filter((value, index, array) => value && array.indexOf(value) === index);
+  }, [appliedTag, appliedSelectedTags]);
 
   const filteredProjects = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
     const manager = appliedManager.trim().toLowerCase();
-    const tag = appliedTag.trim().toLowerCase();
     const health = appliedHealth;
     return projects.filter((project) => {
       const statusMatch = filter === "all" || project.status === filter;
@@ -117,11 +137,12 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           return false;
         }
       }
-      if (tag) {
+      if (tagFiltersLower.length > 0) {
         const tagList = Array.isArray(project.tags)
           ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
           : [];
-        if (!tagList.includes(tag)) {
+        const hasMatch = tagFiltersLower.some((value) => tagList.includes(value));
+        if (!hasMatch) {
           return false;
         }
       }
@@ -129,7 +150,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       const haystack = `${project.name} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [projects, filter, appliedKeyword, appliedManager, appliedTag, appliedHealth]);
+  }, [projects, filter, appliedKeyword, appliedManager, appliedHealth, tagFiltersLower]);
 
   const normalizeProject = useCallback((project: Partial<ProjectItem> | undefined | null): ProjectItem | null => {
     if (!project?.id) return null;
@@ -169,12 +190,18 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     async (
       statusValue: ProjectStatus | "all",
       keywordValue: string,
-      options: { manager?: string; health?: string; tag?: string } = {},
+      options: { manager?: string; health?: string; tag?: string; tags?: string[] } = {},
     ) => {
       const trimmedKeyword = keywordValue.trim();
       const managerValue = options.manager?.trim() ?? '';
       const healthValue = options.health?.trim() ?? '';
-      const tagValue = options.tag?.trim() ?? '';
+      const manualTagRaw = options.tag?.trim() ?? '';
+      const manualTag = manualTagRaw.toLowerCase();
+      const selectedTagsRaw = Array.isArray(options.tags)
+        ? options.tags.map((value) => value.trim()).filter(Boolean)
+        : [];
+      const selectedTagsLower = selectedTagsRaw.map((value) => value.toLowerCase());
+      const primaryTag = manualTagRaw || selectedTagsRaw[0] || '';
       fetchTokenRef.current += 1;
       const token = fetchTokenRef.current;
       setListLoading(true);
@@ -198,6 +225,22 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         }
       };
 
+      const matchesTagFilters = (project: ProjectItem) => {
+        const tagList = Array.isArray(project.tags)
+          ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
+          : [];
+        if (manualTag && !tagList.includes(manualTag)) {
+          return false;
+        }
+        if (selectedTagsLower.length > 0) {
+          const hasMatch = selectedTagsLower.some((value) => tagList.includes(value));
+          if (!hasMatch) {
+            return false;
+          }
+        }
+        return true;
+      };
+
       try {
         const gql = await graphqlRequest<{
           projects?: Partial<ProjectItem>[];
@@ -208,7 +251,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             keyword: trimmedKeyword.length > 0 ? trimmedKeyword : undefined,
             manager: managerValue.length > 0 ? managerValue : undefined,
             health: healthValue.length > 0 ? healthValue : undefined,
-            tag: tagValue.length > 0 ? tagValue : undefined,
+            tag: primaryTag.length > 0 ? primaryTag : undefined,
           },
         });
 
@@ -216,7 +259,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         const normalized = items
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
-        assignProjects(normalized, false);
+        const filtered = normalized.filter(matchesTagFilters);
+        assignProjects(filtered, false);
         finishLoading();
         return;
       } catch (error) {
@@ -228,6 +272,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           detail: {
             status: statusValue,
             keyword: trimmedKeyword,
+            tag: manualTagRaw,
+            tags: selectedTagsRaw,
             error: error instanceof Error ? error.message : String(error),
           },
         });
@@ -254,13 +300,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               return false;
             }
           }
-          if (tagValue) {
-            const tagList = Array.isArray(project.tags)
-              ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
-              : [];
-            if (!tagList.includes(tagValue.toLowerCase())) {
-              return false;
-            }
+          if (!matchesTagFilters(project)) {
+            return false;
           }
           if (trimmedKeyword.length > 0) {
             const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
@@ -278,6 +319,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           detail: {
             status: statusValue,
             keyword: trimmedKeyword,
+            tag: manualTagRaw,
+            tags: selectedTagsRaw,
           },
         });
         finishLoading();
@@ -291,6 +334,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           detail: {
             status: statusValue,
             keyword: trimmedKeyword,
+            tag: manualTagRaw,
+            tags: selectedTagsRaw,
             error: restError instanceof Error ? restError.message : String(restError),
           },
         });
@@ -308,13 +353,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               return false;
             }
           }
-          if (tagValue) {
-            const tagList = Array.isArray(project.tags)
-              ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
-              : [];
-            if (!tagList.includes(tagValue.toLowerCase())) {
-              return false;
-            }
+          if (!matchesTagFilters(project)) {
+            return false;
           }
           if (trimmedKeyword.length > 0) {
             const haystack = `${project.name} ${project.code ?? ''} ${project.clientName ?? ''}`.toLowerCase();
@@ -346,6 +386,10 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   }, [appliedTag]);
 
   useEffect(() => {
+    selectedTagsRef.current = appliedSelectedTags;
+  }, [appliedSelectedTags]);
+
+  useEffect(() => {
     healthRef.current = appliedHealth;
   }, [appliedHealth]);
 
@@ -362,6 +406,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             keyword: appliedKeyword,
             manager: appliedManager,
             tag: appliedTag,
+            tags: appliedSelectedTags,
             health: appliedHealth ?? "",
           }),
         );
@@ -382,11 +427,15 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     const desiredManagerParam = appliedManager.trim();
     const desiredTagParam = appliedTag.trim();
     const desiredHealthParam = appliedHealth?.trim?.() ?? "";
+    const desiredTagsParam = appliedSelectedTags.filter((value) => value.trim().length > 0);
     if (desiredManagerParam.length > 0) {
       nextParams.set("manager", desiredManagerParam);
     }
     if (desiredTagParam.length > 0) {
       nextParams.set("tag", desiredTagParam);
+    }
+    if (desiredTagsParam.length > 0) {
+      nextParams.set("tags", desiredTagsParam.join(","));
     }
     if (desiredHealthParam.length > 0) {
       nextParams.set("health", desiredHealthParam);
@@ -407,15 +456,25 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", target);
     }
-  }, [filter, appliedKeyword, appliedManager, appliedTag, appliedHealth, pathname, router]);
+  }, [filter, appliedKeyword, appliedManager, appliedTag, appliedHealth, appliedSelectedTags, pathname, router]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
+    const normalizeTagLabel = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return "";
+      const popularMatch = popularTags.find((item) => item.toLowerCase() === trimmed.toLowerCase());
+      return popularMatch ?? trimmed;
+    };
+
+    const isSameSelection = (next: string[], prev: string[]) =>
+      next.length === prev.length && next.every((value, index) => value === prev[index]);
+
     const parseFiltersFromLocation = () => {
-      let stored: { status?: string; keyword?: string; manager?: string; tag?: string; health?: string } | null = null;
+      let stored: { status?: string; keyword?: string; manager?: string; tag?: string; tags?: string[]; health?: string } | null = null;
       try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw) {
@@ -431,6 +490,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       const managerFromQuery = params.get("manager");
       const tagFromQuery = params.get("tag");
       const healthFromQuery = params.get("health");
+      const tagsFromQuery = params.get("tags");
 
       let normalizedStatus: (typeof statusFilters)[number]["value"] = "all";
       if (statusFromQuery && statusFilters.some((item) => item.value === statusFromQuery)) {
@@ -455,10 +515,23 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
 
       let normalizedTag = "";
       if (typeof tagFromQuery === "string" && tagFromQuery.trim().length > 0) {
-        normalizedTag = tagFromQuery.trim();
+        normalizedTag = normalizeTagLabel(tagFromQuery);
       } else if (typeof stored?.tag === "string") {
-        normalizedTag = stored.tag;
+        normalizedTag = normalizeTagLabel(stored.tag);
       }
+
+      let normalizedSelectedTags: string[] = [];
+      if (typeof tagsFromQuery === "string" && tagsFromQuery.trim().length > 0) {
+        normalizedSelectedTags = tagsFromQuery
+          .split(",")
+          .map((value) => normalizeTagLabel(value))
+          .filter(Boolean);
+      } else if (Array.isArray(stored?.tags)) {
+        normalizedSelectedTags = stored.tags
+          .map((value) => normalizeTagLabel(String(value)))
+          .filter(Boolean);
+      }
+      normalizedSelectedTags = normalizedSelectedTags.filter((value, index, array) => array.indexOf(value) === index);
 
       let normalizedHealth: "" | ProjectItem["health"] = "";
       const healthCandidate = (healthFromQuery ?? stored?.health ?? "").trim();
@@ -474,6 +547,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         setManagerTerm(normalizedManager);
         setAppliedTag(normalizedTag);
         setTagTerm(normalizedTag);
+        setAppliedSelectedTags(normalizedSelectedTags);
+        setSelectedTags(normalizedSelectedTags);
         setAppliedHealth(normalizedHealth);
         setHealthFilter(normalizedHealth);
         hydratedRef.current = true;
@@ -492,6 +567,10 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         if (normalizedTag !== tagRef.current) {
           setAppliedTag(normalizedTag);
           setTagTerm(normalizedTag);
+        }
+        if (!isSameSelection(normalizedSelectedTags, selectedTagsRef.current)) {
+          setAppliedSelectedTags(normalizedSelectedTags);
+          setSelectedTags(normalizedSelectedTags);
         }
         if (normalizedHealth !== healthRef.current) {
           setAppliedHealth(normalizedHealth);
@@ -519,8 +598,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       manager: appliedManager,
       health: appliedHealth || undefined,
       tag: appliedTag,
+      tags: appliedSelectedTags,
     });
-  }, [fetchProjects, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag]);
+  }, [fetchProjects, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags]);
 
   const handleCreateProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -822,6 +902,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           setAppliedKeyword(searchTerm.trim());
           setAppliedManager(managerTerm.trim());
           setAppliedTag(tagTerm.trim());
+          setAppliedSelectedTags(selectedTags.map((value) => value.trim()).filter((value) => value.length > 0));
           setAppliedHealth(healthFilter);
         }}
       >
@@ -872,6 +953,33 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             <option value="red">red</option>
           </select>
         </label>
+        <div className="md:col-span-4">
+          <span className="mb-1 block text-xs text-slate-400">主要タグ</span>
+          <div className="flex flex-wrap gap-2">
+            {popularTags.map((tag) => {
+              const checked = selectedTags.includes(tag);
+              return (
+                <label
+                  key={tag}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
+                    checked
+                      ? "border-sky-400 bg-sky-500/20 text-sky-100"
+                      : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600 hover:text-white"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3 w-3 accent-sky-500"
+                    checked={checked}
+                    onChange={() => toggleTagSelection(tag)}
+                    data-testid={`projects-filter-tag-${tag.toLowerCase()}`}
+                  />
+                  <span>{tag}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2 md:col-span-4">
           <button
             type="submit"
@@ -887,9 +995,11 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               setManagerTerm("");
               setTagTerm("");
               setHealthFilter("");
+              setSelectedTags([]);
               setAppliedKeyword("");
               setAppliedManager("");
               setAppliedTag("");
+              setAppliedSelectedTags([]);
               setAppliedHealth("");
             }}
             className="rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
