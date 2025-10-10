@@ -1,0 +1,21 @@
+name: UI Feedback Report
+
+on:
+  schedule:
+    - cron: '0 1 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate backlog report
+        run: |
+          scripts/ui_feedback_issue_cli.js > ui-feedback-report.txt
+      - name: Upload backlog report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-feedback-report
+          path: ui-feedback-report.txt
+          if-no-files-found: error
