@@ -81,6 +81,8 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
   const [meta, setMeta] = useState(initialMeta);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [managerTerm, setManagerTerm] = useState("");
@@ -129,6 +131,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
 
   const filtered = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
+
     const manager = appliedManager.trim().toLowerCase();
     const projectCode = appliedProjectCode.trim().toLowerCase();
     return timesheets.filter((entry) => {
@@ -145,6 +148,39 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       return haystack.includes(keyword);
     });
   }, [timesheets, filter, appliedKeyword, appliedManager, appliedProjectCode]);
+
+  const selectedEntries = useMemo(() => timesheets.filter((entry) => selectedIds.includes(entry.id)), [timesheets, selectedIds]);
+
+  const toggleSelection = useCallback((timesheetId: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(timesheetId)) {
+        return prev.filter((id) => id !== timesheetId);
+      }
+      return [...prev, timesheetId];
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (filtered.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map((entry) => entry.id));
+    }
+  }, [filtered, selectedIds]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => timesheets.some((entry) => entry.id === id)));
+  }, [timesheets]);
+
+  useEffect(() => {
+    if (!selectAllRef.current) return;
+    const isIndeterminate = selectedIds.length > 0 && selectedIds.length < filtered.length;
+    selectAllRef.current.indeterminate = isIndeterminate;
+  }, [selectedIds, filtered.length]);
 
   const closeDialog = () => setDialog(initialDialog);
 
@@ -168,7 +204,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     [],
   );
 
-  const updateTimesheetItem = (next: TimesheetEntry) => {
+  const updateTimesheetItem = useCallback((next: TimesheetEntry) => {
     setTimesheets((prev) =>
       prev.map((item) =>
         item.id === next.id
@@ -184,7 +220,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
       fallback: false,
       fetchedAt: new Date().toISOString(),
     }));
-  };
+  }, []);
 
   const fetchTimesheets = useCallback(
     async (
@@ -553,10 +589,18 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     });
   }, [fetchTimesheets, filter, appliedKeyword, appliedManager, appliedProjectCode]);
 
-  const performAction = async (entry: TimesheetEntry, action: TimesheetAction, payload?: ActionPayload) => {
-    setPendingId(entry.id);
-    setMessage(null);
-    try {
+  const performAction = useCallback(
+    async (
+      entry: TimesheetEntry,
+      action: TimesheetAction,
+      payload?: ActionPayload,
+      options?: { suppressPending?: boolean },
+    ) => {
+      if (!options?.suppressPending) {
+        setPendingId(entry.id);
+        setMessage(null);
+      }
+      try {
       const gql = await graphqlRequest<{
         timesheetAction: {
           ok: boolean;
@@ -588,9 +632,11 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           note: payload?.comment ?? entry.note,
         });
       }
-      setMessage(gql.timesheetAction.message ?? `${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了`);
-      return;
-    } catch (error) {
+        if (!options?.suppressPending) {
+          setMessage(gql.timesheetAction.message ?? `${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了`);
+        }
+        return;
+      } catch (error) {
       console.warn("[timesheets] graphql action failed, fallback to REST", error);
       reportClientTelemetry({
         component: "timesheets/client",
@@ -614,7 +660,9 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           approvalStatus: inferNextStatus(entry.approvalStatus, action),
           note: payload?.comment ?? entry.note,
         });
-        setMessage(`${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了 (REST fallback)`);
+        if (!options?.suppressPending) {
+          setMessage(`${entry.userName} / ${entry.projectCode}: ${ACTION_LABEL[action]} 完了 (REST fallback)`);
+        }
         reportClientTelemetry({
           component: "timesheets/client",
           event: "rest_action_succeeded",
@@ -627,7 +675,9 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         });
       } catch (restError) {
         console.error("timesheet action failed", restError);
-        setMessage(`${ACTION_LABEL[action]} に失敗しました`);
+        if (!options?.suppressPending) {
+          setMessage(`${ACTION_LABEL[action]} に失敗しました`);
+        }
         reportClientTelemetry({
           component: "timesheets/client",
           event: "rest_action_failed",
@@ -640,10 +690,46 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           },
         });
       }
-    } finally {
-      setPendingId(null);
-    }
-  };
+      } finally {
+        if (!options?.suppressPending) {
+          setPendingId(null);
+        }
+      }
+    },
+    [normalizeTimesheet, updateTimesheetItem],
+  );
+
+  const BULK_ACTIONS: TimesheetAction[] = ["submit", "approve"];
+  const BULK_PENDING_KEY = "__bulk__";
+
+  const handleBulkAction = useCallback(
+    async (action: TimesheetAction) => {
+      const targets = selectedEntries.filter((entry) => availableActions(entry.approvalStatus).includes(action));
+      if (targets.length === 0) {
+        return;
+      }
+      setPendingId(BULK_PENDING_KEY);
+      try {
+        const results = await Promise.allSettled(
+          targets.map((entry) => performAction(entry, action, undefined, { suppressPending: true })),
+        );
+        const succeededIds = targets
+          .map((entry, index) => (results[index]?.status === "fulfilled" ? entry.id : null))
+          .filter((id): id is string => Boolean(id));
+        if (succeededIds.length > 0) {
+          setSelectedIds((prev) => prev.filter((id) => !succeededIds.includes(id)));
+          setMessage(`${succeededIds.length} 件の ${ACTION_LABEL[action]} を実行しました`);
+        }
+        const failed = results.filter((result) => result.status === "rejected");
+        if (failed.length > 0) {
+          console.warn("[timesheets] bulk action failures", failed);
+        }
+      } finally {
+        setPendingId(null);
+      }
+    },
+    [selectedEntries, performAction],
+  );
 
   const handleCreateTimesheet = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1002,10 +1088,47 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
 
       {message ? <p className="text-xs text-sky-300">{message}</p> : null}
 
+      {selectedIds.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-200">
+          <span>選択中: {selectedIds.length} 件</span>
+          {BULK_ACTIONS.map((action) => {
+            const targets = selectedEntries.filter((entry) => availableActions(entry.approvalStatus).includes(action));
+            if (targets.length === 0) return null;
+            return (
+              <button
+                key={action}
+                type="button"
+                onClick={() => void handleBulkAction(action)}
+                className="rounded-md border border-sky-500 bg-sky-500/20 px-3 py-1 text-xs font-semibold text-sky-100 transition-colors hover:border-sky-400 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:text-slate-500"
+                disabled={pendingId !== null}
+              >
+                {ACTION_LABEL[action]} ({targets.length})
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+          >
+            選択解除
+          </button>
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50">
         <table className="min-w-full divide-y divide-slate-800 text-sm">
           <thead className="bg-slate-900/70 text-slate-300">
             <tr>
+              <th className="px-3 py-3 text-left">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-sky-500"
+                  checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                  ref={selectAllRef}
+                  onChange={toggleSelectAll}
+                />
+              </th>
               <th className="px-4 py-3 text-left font-medium">日付</th>
               <th className="px-4 py-3 text-left font-medium">メンバー</th>
               <th className="px-4 py-3 text-left font-medium">プロジェクト</th>
@@ -1025,6 +1148,15 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
               const telemetryHref = `/telemetry?${telemetryParams.toString()}`;
               return (
                 <tr key={entry.id} className="hover:bg-slate-800/40">
+                  <td className="px-3 py-3 align-top">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-sky-500"
+                      checked={selectedIds.includes(entry.id)}
+                      onChange={() => toggleSelection(entry.id)}
+                      aria-label={`select timesheet ${entry.id}`}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-slate-200">{entry.workDate}</td>
                   <td className="px-4 py-3 text-slate-200">
                     <div className="flex flex-col">
@@ -1056,7 +1188,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
                         <button
                           key={action}
                           type="button"
-                          disabled={pendingId === entry.id}
+                          disabled={pendingId !== null && (pendingId === BULK_PENDING_KEY || pendingId === entry.id)}
                           onClick={() => handleAction(entry, action)}
                           className={`rounded-md border px-3 py-1 transition-colors ${
                             pendingId === entry.id
