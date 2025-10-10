@@ -7,14 +7,10 @@
 ## Podman Smoke
 - [PoC Smoke Tests](poc_live_smoke.md) - Slack通知やフォールバック設定の詳細ガイド
 - [Slack Notification Runbook](slack-runbook.md)
+- [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
 
 ## UI Feedback
 - [UI PoC フィードバック・バックログ](ui-poc-feedback-backlog.md)
-- [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-- [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
->>>>>>> db8f102 (Add guide for Grafana telemetry dashboard)
->>>>>>> origin/main
+
+## API Examples
+- [Projects 一覧のページネーション例](api-projects-pagination.md)
