@@ -69,6 +69,14 @@ const SHARE_PRESETS: Array<{ key: string; label: string; title: string; notes: s
 
 const STORAGE_KEY = "projects-filters-v1";
 
+type ShareFormat = "text" | "markdown" | "json";
+
+const SHARE_FORMATS: Array<{ value: ShareFormat; label: string; hint: string }> = [
+  { value: "text", label: "Slack テキスト", hint: "従来の Slack 投稿形式" },
+  { value: "markdown", label: "Markdown", hint: "Wiki / Docs 用の Markdown 形式" },
+  { value: "json", label: "JSON", hint: "自動連携・API 用の JSON 形式" },
+];
+
 type ProjectsClientProps = {
   initialProjects: ProjectListResponse;
 };
@@ -82,6 +90,14 @@ type UpdateState = {
 };
 
 type QuerySource = "api" | "mock";
+
+type ShareDialogState = {
+  open: boolean;
+  title: string;
+  notes: string;
+  preset: string;
+  format: ShareFormat;
+};
 
 export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const initialMeta: NonNullable<ProjectListResponse["meta"]> = {
@@ -145,7 +161,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [shareUrl, setShareUrl] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [slackCopyState, setSlackCopyState] = useState<"idle" | "copied" | "error">("idle");
-  const [shareDialog, setShareDialog] = useState({ open: false, title: "Projects 共有リンク", notes: "", preset: "custom" });
+  const [shareDialog, setShareDialog] = useState<ShareDialogState>({
+    open: false,
+    title: "Projects 共有リンク",
+    notes: "",
+    preset: "custom",
+    format: "text",
+  });
   const [shareDialogCopyState, setShareDialogCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const toggleTagSelection = useCallback((tag: string) => {
@@ -181,7 +203,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     }
   }, [shareUrl]);
 
-  const composeSlackTemplate = useCallback(
+  const composeShareTemplate = useCallback(
     (title: string, notes?: string | null) => {
       if (typeof window === "undefined") {
         return null;
@@ -190,13 +212,16 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       if (!baseUrl) {
         return null;
       }
-      const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
-      const timestamp = new Date().toLocaleString("ja-JP", { hour12: false });
-      const bulletLines: string[] = [];
+      const timestamp = new Date();
+      const formattedTimestamp = timestamp.toLocaleString("ja-JP", { hour12: false });
       const trimmedKeyword = appliedKeyword.trim();
       const trimmedManager = appliedManager.trim();
       const trimmedHealth = appliedHealth.trim();
+      const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
+      const trimmedNotes = (notes ?? "").trim();
+      const bulletLines: string[] = [];
       if (filter !== "all") {
+        const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
         bulletLines.push(`• ステータス: *${statusLabel}*`);
       }
       if (trimmedKeyword.length > 0) {
@@ -208,11 +233,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       if (trimmedHealth.length > 0) {
         bulletLines.push(`• ヘルス: ${trimmedHealth}`);
       }
-      const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
       if (tagValues.length > 0) {
         bulletLines.push(`• タグ: ${tagValues.join(", ")}`);
       }
-      const trimmedNotes = notes?.trim();
       if (trimmedNotes) {
         bulletLines.push(`• メモ: ${trimmedNotes}`);
       }
@@ -220,12 +243,39 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         bulletLines.push("• フィルタ: 指定なし");
       }
       const effectiveTitle = title.trim().length > 0 ? title.trim() : "Projects 共有リンク";
-      return [
-        `:clipboard: *${effectiveTitle}* _(${timestamp})_`,
+      const message = [
+        `:clipboard: *${effectiveTitle}* _(${formattedTimestamp})_`,
         baseUrl,
         "",
         ...bulletLines,
       ].join("\n");
+      const markdown = [
+        `**${effectiveTitle}** (_${formattedTimestamp}_)`,
+        baseUrl,
+        "",
+        ...bulletLines.map((line) => line.replace(/^• /, "- ")),
+      ].join("\n");
+      const filtersPayload = {
+        status: filter,
+        keyword: trimmedKeyword,
+        manager: trimmedManager,
+        health: trimmedHealth,
+        tags: tagValues,
+      };
+      const payload = {
+        title: effectiveTitle,
+        url: baseUrl,
+        generatedAt: timestamp.toISOString(),
+        filters: filtersPayload,
+        notes: trimmedNotes,
+        message,
+      };
+      return {
+        text: message,
+        markdown,
+        json: JSON.stringify(payload, null, 2),
+        payload,
+      };
     },
     [shareUrl, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags],
   );
@@ -253,13 +303,19 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   );
 
   const handleCopySlackTemplate = useCallback(async () => {
-    const message = composeSlackTemplate("Projects 共有リンク", "");
-    void copySlackTemplate(message, setSlackCopyState);
-  }, [composeSlackTemplate, copySlackTemplate]);
+    const template = composeShareTemplate("Projects 共有リンク", "");
+    void copySlackTemplate(template?.text ?? null, setSlackCopyState);
+  }, [composeShareTemplate, copySlackTemplate]);
 
   const openShareDialog = useCallback(() => {
     const defaultPreset = SHARE_PRESETS[0];
-    setShareDialog({ open: true, title: defaultPreset.title, notes: defaultPreset.notes, preset: defaultPreset.key });
+    setShareDialog((prev) => ({
+      open: true,
+      title: defaultPreset.title,
+      notes: defaultPreset.notes,
+      preset: defaultPreset.key,
+      format: prev.format ?? "text",
+    }));
     setShareDialogCopyState("idle");
   }, []);
 
@@ -280,12 +336,51 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     });
   };
 
-  const sharePreview = useMemo(() => composeSlackTemplate(shareDialog.title, shareDialog.notes) ?? "", [composeSlackTemplate, shareDialog]);
+  const sharePreview = useMemo(() => {
+    const template = composeShareTemplate(shareDialog.title, shareDialog.notes);
+    if (!template) {
+      return "";
+    }
+    if (shareDialog.format === "markdown") {
+      return template.markdown;
+    }
+    if (shareDialog.format === "json") {
+      return template.json;
+    }
+    return template.text;
+  }, [composeShareTemplate, shareDialog]);
+
+  const sharePreviewLabel = useMemo(() => {
+    const activeFormat = SHARE_FORMATS.find((item) => item.value === shareDialog.format);
+    return activeFormat ? `プレビュー（${activeFormat.label}）` : "プレビュー";
+  }, [shareDialog.format]);
+
+  const shareFormatHint = useMemo(() => {
+    const activeFormat = SHARE_FORMATS.find((item) => item.value === shareDialog.format);
+    return activeFormat?.hint ?? "";
+  }, [shareDialog.format]);
 
   const handleShareDialogCopy = useCallback(() => {
-    const message = composeSlackTemplate(shareDialog.title, shareDialog.notes);
-    void copySlackTemplate(message, setShareDialogCopyState);
-  }, [composeSlackTemplate, copySlackTemplate, shareDialog.title, shareDialog.notes]);
+    const template = composeShareTemplate(shareDialog.title, shareDialog.notes);
+    if (!template) {
+      void copySlackTemplate(null, setShareDialogCopyState);
+      return;
+    }
+    const content =
+      shareDialog.format === "markdown"
+        ? template.markdown
+        : shareDialog.format === "json"
+          ? template.json
+          : template.text;
+    void copySlackTemplate(content, setShareDialogCopyState);
+  }, [composeShareTemplate, copySlackTemplate, shareDialog.format, shareDialog.notes, shareDialog.title]);
+
+  useEffect(() => {
+    if (!shareDialog.open) {
+      return;
+    }
+    setShareDialogCopyState("idle");
+  }, [shareDialog.open, shareDialog.title, shareDialog.notes, shareDialog.format, shareDialog.preset]);
 
   const matchesProjectTags = useCallback(
     (project: ProjectItem, manualTagValue: string, selectedTagValues: readonly string[]) => {
@@ -1517,8 +1612,26 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                 />
               </label>
 
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                出力形式
+                <select
+                  value={shareDialog.format}
+                  onChange={(event) =>
+                    setShareDialog((prev) => ({ ...prev, format: event.target.value as ShareFormat }))
+                  }
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                >
+                  {SHARE_FORMATS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-slate-500">{shareFormatHint}</span>
+              </label>
+
               <div className="space-y-2">
-                <p className="text-xs text-slate-400">プレビュー</p>
+                <p className="text-xs text-slate-400">{sharePreviewLabel}</p>
                 <pre className="max-h-64 overflow-auto rounded-md border border-slate-800 bg-slate-950/70 p-3 text-[11px] text-slate-200 whitespace-pre-wrap break-words">
                   {sharePreview || 'リンクがまだ生成されていません'}
                 </pre>
