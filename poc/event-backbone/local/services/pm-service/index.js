@@ -896,18 +896,36 @@ async function main() {
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   app.get('/api/v1/projects', (req, res) => {
-    const { status } = req.query || {};
-    let items = projects;
+    const { status, first, after } = req.query || {};
+    let filtered = projects;
     if (status && status !== 'all') {
-      items = items.filter((project) => project.status === status);
+      filtered = filtered.filter((project) => project.status === status);
     }
+    const limitRaw = Number.parseInt(first, 10);
+    const hasExplicitLimit = Number.isFinite(limitRaw) && limitRaw > 0;
+    const DEFAULT_LIMIT = 24;
+    const limit = hasExplicitLimit
+      ? Math.min(limitRaw, 100)
+      : filtered.length > 0
+        ? filtered.length
+        : DEFAULT_LIMIT;
+    const cursorValue = typeof after === 'string' ? after.trim() : '';
+    const cursorIndex = cursorValue
+      ? filtered.findIndex((project) => project.id === cursorValue)
+      : -1;
+    const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    const slice = hasExplicitLimit ? filtered.slice(startIndex, startIndex + limit) : filtered;
+    const hasNextPage = hasExplicitLimit ? startIndex + slice.length < filtered.length : false;
+    const nextCursor = hasNextPage && slice.length > 0 ? slice[slice.length - 1].id : null;
     res.json({
-      items,
+      items: slice,
       meta: {
-        total: items.length,
+        total: filtered.length,
+        returned: slice.length,
         fetchedAt: new Date().toISOString(),
         fallback: false,
       },
+      next_cursor: hasNextPage ? nextCursor : undefined,
     });
   });
 
