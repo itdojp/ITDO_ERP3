@@ -10,6 +10,7 @@
  *   --url <value>     Required. Projects 共有リンク (absolute URL)。
  *   --title <value>   Optional. 見出しに使うタイトル。デフォルトは "Projects 共有リンク"。
  *   --notes <value>   Optional. 箇条書きの末尾に補足を追加。
+ *   --format <value>  Optional. 出力形式 text|markdown|json（既定: text）。
  *   --help            このヘルプを表示します。
  */
 
@@ -19,6 +20,7 @@ const optionAliases = new Map([
   ['-u', 'url'],
   ['-t', 'title'],
   ['-n', 'notes'],
+  ['-f', 'format'],
   ['-h', 'help'],
 ]);
 
@@ -70,6 +72,7 @@ Options:
   --url <value>     Required. Projects の共有リンク (絶対 URL)。
   --title <value>   Optional. Slack メッセージのタイトル。デフォルト "Projects 共有リンク"。
   --notes <value>   Optional. 箇条書きに追加するメモ。
+  --format <value>  Optional. text | markdown | json。
   --help            このヘルプを表示します。
 `);
   process.exit(options.help ? 0 : 1);
@@ -99,10 +102,8 @@ const tag = params.get('tag');
 const tags = params.get('tags');
 const health = params.get('health');
 
-const tagList = [
-  tag?.trim(),
-  ...(tags ? tags.split(',').map((value) => value.trim()) : []),
-].filter(Boolean);
+const trimmedNotes = options.notes?.trim() ?? '';
+const tagList = [tag?.trim(), ...(tags ? tags.split(',').map((value) => value.trim()) : [])].filter(Boolean);
 
 const bulletLines = [];
 
@@ -122,15 +123,16 @@ if (health) {
 if (tagList.length > 0) {
   bulletLines.push(`• タグ: ${tagList.join(', ')}`);
 }
-if (options.notes) {
-  bulletLines.push(`• メモ: ${options.notes}`);
+if (trimmedNotes) {
+  bulletLines.push(`• メモ: ${trimmedNotes}`);
 }
 if (bulletLines.length === 0) {
   bulletLines.push('• フィルタ: 指定なし');
 }
 
 const title = options.title ?? 'Projects 共有リンク';
-const timestamp = new Date().toLocaleString('ja-JP', { hour12: false, timeZone: 'Asia/Tokyo' });
+const generatedAt = new Date();
+const timestamp = generatedAt.toLocaleString('ja-JP', { hour12: false, timeZone: 'Asia/Tokyo' });
 
 const message = [
   `:clipboard: *${title}* _(${timestamp})_`,
@@ -139,4 +141,36 @@ const message = [
   ...bulletLines,
 ].join('\n');
 
-console.log(message);
+const format = (options.format ?? 'text').toLowerCase();
+const filters = {
+  status: params.has('status') ? status : 'all',
+  keyword: keyword ?? '',
+  manager: manager ?? '',
+  health: health ?? '',
+  tags: tagList,
+};
+
+if (format === 'markdown') {
+  const markdown = [
+    `**${title}** (_${timestamp}_)`,
+    parsedUrl.toString(),
+    '',
+    ...bulletLines.map((line) => line.replace(/^• /, '- ')),
+  ].join('\n');
+  console.log(markdown);
+} else if (format === 'json') {
+  const payload = {
+    title,
+    url: parsedUrl.toString(),
+    generatedAt: generatedAt.toISOString(),
+    filters,
+    notes: trimmedNotes,
+    message,
+  };
+  console.log(JSON.stringify(payload, null, 2));
+} else if (format === 'text') {
+  console.log(message);
+} else {
+  console.error(`Unknown format: ${format}. Use text | markdown | json.`);
+  process.exit(1);
+}
