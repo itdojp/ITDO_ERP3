@@ -13,5 +13,8 @@
 - [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
 <<<<<<< HEAD
 =======
+<<<<<<< HEAD
+=======
 - [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
 >>>>>>> db8f102 (Add guide for Grafana telemetry dashboard)
+>>>>>>> origin/main
