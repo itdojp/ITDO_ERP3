@@ -123,6 +123,39 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
   }, [filters, loadTelemetry]);
 
   const renderedItems = useMemo(() => items.slice(0, MAX_ROWS), [items]);
+  const highlightKey = useMemo(() => filters.detail.trim().toLowerCase(), [filters.detail]);
+  const serializedDetails = useMemo(
+    () => renderedItems.map((item) => (item?.detail ? JSON.stringify(item.detail).toLowerCase() : '')),
+    [renderedItems],
+  );
+  const highlightMatches = useMemo(() => {
+    if (!highlightKey) return new Set<number>();
+    const matches = new Set<number>();
+    serializedDetails.forEach((serialized, index) => {
+      if (serialized.includes(highlightKey)) {
+        matches.add(index);
+      }
+    });
+    return matches;
+  }, [serializedDetails, highlightKey]);
+  const firstHighlightIndex = useMemo(() => {
+    if (highlightMatches.size === 0) return undefined;
+    return Math.min(...Array.from(highlightMatches.values()));
+  }, [highlightMatches]);
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+
+  useEffect(() => {
+    highlightRowRef.current = null;
+  }, [firstHighlightIndex]);
+
+  useEffect(() => {
+    if (firstHighlightIndex === undefined) {
+      return;
+    }
+    if (highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [firstHighlightIndex, renderedItems]);
 
   const syncQuery = useCallback(
     (nextFilters: TelemetryFilters) => {
@@ -335,13 +368,21 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
                 </td>
               </tr>
             ) : (
-              renderedItems.map((item, index) => (
-                <tr key={`${item.timestamp || item.receivedAt || index}-${index}`} className="hover:bg-slate-800/40">
-                  <td className="px-4 py-3 align-top">
-                    <div className="flex flex-col">
-                      <span>{formatTimestamp(item.receivedAt || item.timestamp)}</span>
-                    </div>
-                  </td>
+              renderedItems.map((item, index) => {
+                const isHighlighted = highlightMatches.has(index);
+                return (
+                  <tr
+                    key={`${item.timestamp || item.receivedAt || index}-${index}`}
+                    ref={index === firstHighlightIndex ? highlightRowRef : undefined}
+                    className={`hover:bg-slate-800/40 ${
+                      isHighlighted ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex flex-col">
+                        <span>{formatTimestamp(item.receivedAt || item.timestamp)}</span>
+                      </div>
+                    </td>
                   <td className="px-4 py-3 align-top text-slate-200">{item.component ?? 'n/a'}</td>
                   <td className="px-4 py-3 align-top text-slate-200">{item.event ?? 'n/a'}</td>
                   <td className="px-4 py-3 align-top">
@@ -363,8 +404,9 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
                       {item.detail ? JSON.stringify(item.detail, null, 2) : '—'}
                     </pre>
                   </td>
-                </tr>
-              ))
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
