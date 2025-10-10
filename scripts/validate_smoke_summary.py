@@ -14,6 +14,10 @@ REQUIRED_TOP_LEVEL = {
     "telemetry": dict,
 }
 
+OPTIONAL_TOP_LEVEL = {
+    "telemetry_health": dict,
+}
+
 TELEMETRY_REQUIRED = {
     "status": str,
     "seeded_count": (int, float, str),
@@ -50,6 +54,32 @@ def validate_mapping(mapping, required):
             )
 
 
+def validate_optional(mapping, optional):
+    present = {}
+    for key, expected_type in optional.items():
+        if key not in mapping:
+            continue
+        value = mapping[key]
+        if not isinstance(value, expected_type):
+            raise ValidationError(
+                f"Key '{key}' expected {expected_type} but got {type(value)}"
+            )
+        present[key] = value
+    return present
+
+
+def ensure_numeric_like(mapping, keys, context):
+    for key in keys:
+        value = mapping[key]
+        if isinstance(value, str):
+            try:
+                float(value)
+            except ValueError as exc:
+                raise ValidationError(
+                    f"{context}: key '{key}' must be numeric-like"
+                ) from exc
+
+
 def validate_summary(path: Path) -> None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -57,26 +87,22 @@ def validate_summary(path: Path) -> None:
         raise ValidationError(f"Invalid JSON: {exc}") from exc
 
     validate_mapping(data, REQUIRED_TOP_LEVEL)
+    optional_values = validate_optional(data, OPTIONAL_TOP_LEVEL)
 
     telemetry = data["telemetry"]
     validate_mapping(telemetry, TELEMETRY_REQUIRED)
 
-    tele_health = data.get("telemetry_health")
+    tele_health = optional_values.get("telemetry_health")
     if tele_health:
         validate_mapping(tele_health, TELEMETRY_HEALTH_REQUIRED)
         validate_mapping(tele_health["events"], EVENTS_REQUIRED)
 
     # ensure numeric-like strings are convertible if provided as string
-    for key in ("seeded_count", "attempts"):
-        value = telemetry[key]
-        if isinstance(value, str):
-            float(value)  # raises ValueError if not numeric
-
+    ensure_numeric_like(telemetry, ("seeded_count", "attempts"), "telemetry")
     if tele_health:
-        for key in ("total", "seeded"):
-            value = tele_health["events"][key]
-            if isinstance(value, str):
-                float(value)
+        ensure_numeric_like(
+            tele_health["events"], ("total", "seeded"), "telemetry_health.events"
+        )
 
 
 def main(argv: list[str]) -> int:
