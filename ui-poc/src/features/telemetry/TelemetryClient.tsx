@@ -124,18 +124,20 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
 
   const renderedItems = useMemo(() => items.slice(0, MAX_ROWS), [items]);
   const highlightKey = useMemo(() => filters.detail.trim().toLowerCase(), [filters.detail]);
+  const serializedDetails = useMemo(
+    () => renderedItems.map((item) => (item?.detail ? JSON.stringify(item.detail).toLowerCase() : '')),
+    [renderedItems],
+  );
   const highlightMatches = useMemo(() => {
     if (!highlightKey) return new Set<number>();
     const matches = new Set<number>();
-    renderedItems.forEach((item, index) => {
-      if (!item) return;
-      const serialized = item.detail ? JSON.stringify(item.detail).toLowerCase() : '';
+    serializedDetails.forEach((serialized, index) => {
       if (serialized.includes(highlightKey)) {
         matches.add(index);
       }
     });
     return matches;
-  }, [renderedItems, highlightKey]);
+  }, [serializedDetails, highlightKey]);
   const firstHighlightIndex = useMemo(() => {
     if (highlightMatches.size === 0) return undefined;
     return Math.min(...Array.from(highlightMatches.values()));
