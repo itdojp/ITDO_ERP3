@@ -91,6 +91,9 @@ PoC スタックに対して Playwright ライブスイートを実行したい�
 ```bash
 # 例: MinIO 有効でライブテストを走らせる
 PM_PORT=3105 UI_PORT=4105 scripts/podman_live_tests.sh --with-minio
+
+# Grafana ダッシュボードをログにエクスポート
+PODMAN_LIVE_EXPORT_DASHBOARDS=true scripts/podman_live_tests.sh
 ```
 
 任意のポートやフォールバック設定は環境変数で上書き可能です（例: `PODMAN_HOST_FALLBACK_MODE=never scripts/podman_live_tests.sh`）。実行が完了するとスタックは自動的に停止します。
