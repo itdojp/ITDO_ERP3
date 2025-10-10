@@ -21,3 +21,8 @@ jobs:
       - name: Generate sample Projects share message
         run: npm run --silent share:projects:sample
         working-directory: ui-poc
+      - name: Verify CLI markdown/json output
+        run: |
+          node scripts/project-share-slack.js --url 'https://example.com/projects?status=active&manager=Yamada&tags=DX,SAP' --title 'CI Check' --notes 'format check' --format markdown > /tmp/share.md
+          test -s /tmp/share.md
+          node scripts/project-share-slack.js --url 'https://example.com/projects?status=active&manager=Yamada&tags=DX,SAP' --title 'CI Check' --notes 'format check' --format json | jq -e '.filters.manager == "Yamada" and .notes == "format check"'
