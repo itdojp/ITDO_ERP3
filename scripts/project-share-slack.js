@@ -106,7 +106,7 @@ const tagList = [
 
 const bulletLines = [];
 
-if (status && status !== 'all') {
+if (params.has('status') && status !== 'all') {
   const label = statusLabels.get(status) ?? status;
   bulletLines.push(`• ステータス: *${label}*`);
 }
@@ -130,7 +130,7 @@ if (bulletLines.length === 0) {
 }
 
 const title = options.title ?? 'Projects 共有リンク';
-const timestamp = new Date().toLocaleString('ja-JP', { hour12: false });
+const timestamp = new Date().toLocaleString('ja-JP', { hour12: false, timeZone: 'Asia/Tokyo' });
 
 const message = [
   `:clipboard: *${title}* _(${timestamp})_`,
