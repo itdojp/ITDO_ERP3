@@ -12,5 +12,8 @@
 ## UI Feedback
 - [UI PoC フィードバック・バックログ](ui-poc-feedback-backlog.md)
 
+## CLI ユーティリティ
+- [Projects Slack 共有 CLI ガイド](projects-share-cli.md)
+
 ## API Examples
 - [Projects 一覧のページネーション例](api-projects-pagination.md)
