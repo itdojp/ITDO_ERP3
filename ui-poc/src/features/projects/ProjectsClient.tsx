@@ -169,17 +169,20 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     const notesInput = window.prompt("補足メモ（任意）", "");
     const timestamp = new Date().toLocaleString("ja-JP", { hour12: false });
     const bulletLines: string[] = [];
+    const trimmedKeyword = appliedKeyword.trim();
+    const trimmedManager = appliedManager.trim();
+    const trimmedHealth = appliedHealth.trim();
     if (filter !== "all") {
       bulletLines.push(`• ステータス: *${statusLabel}*`);
     }
-    if (appliedKeyword.trim().length > 0) {
-      bulletLines.push(`• キーワード: \`${appliedKeyword.trim()}\``);
+    if (trimmedKeyword.length > 0) {
+      bulletLines.push(`• キーワード: \`${trimmedKeyword}\``);
     }
-    if (appliedManager.trim().length > 0) {
-      bulletLines.push(`• マネージャ: ${appliedManager.trim()}`);
+    if (trimmedManager.length > 0) {
+      bulletLines.push(`• マネージャ: ${trimmedManager}`);
     }
-    if (appliedHealth.trim().length > 0) {
-      bulletLines.push(`• ヘルス: ${appliedHealth.trim()}`);
+    if (trimmedHealth.length > 0) {
+      bulletLines.push(`• ヘルス: ${trimmedHealth}`);
     }
     const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
     if (tagValues.length > 0) {
