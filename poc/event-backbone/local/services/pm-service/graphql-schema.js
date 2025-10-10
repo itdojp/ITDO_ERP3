@@ -56,6 +56,17 @@ export function createGraphQLSchema({
 
   const projectStore = ensureStore(projectIdempotencyKeys);
   const timesheetStore = ensureStore(timesheetIdempotencyKeys);
+  const prepareTagFilters = (manualTagRaw, tagsArg) => {
+    const manual = typeof manualTagRaw === 'string' ? manualTagRaw.trim().toLowerCase() : '';
+    const secondary = Array.isArray(tagsArg)
+      ? tagsArg
+          .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+          .filter(Boolean)
+      : [];
+    const deduped = [...new Set(manual ? [manual, ...secondary] : secondary)];
+    const optional = deduped.filter((value) => value !== manual);
+    return { manual, optional };
+  };
   const MetricsSummaryType = new GraphQLObjectType({
     name: 'MetricsSummary',
     fields: () => ({
@@ -285,13 +296,14 @@ export function createGraphQLSchema({
           manager: { type: GraphQLString },
           health: { type: GraphQLString },
           tag: { type: GraphQLString },
+          tags: { type: new GraphQLList(GraphQLString) },
         },
         resolve: (_root, args) => {
           const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : '';
           const status = typeof args?.status === 'string' ? args.status.trim().toLowerCase() : '';
           const manager = typeof args?.manager === 'string' ? args.manager.trim().toLowerCase() : '';
           const health = typeof args?.health === 'string' ? args.health.trim().toLowerCase() : '';
-          const tag = typeof args?.tag === 'string' ? args.tag.trim().toLowerCase() : '';
+          const { manual: manualTag, optional: secondaryTagFilters } = prepareTagFilters(args?.tag, args?.tags);
           const filteredProjects = projects.filter((project) => {
             const statusMatch = !status || status === 'all' || project.status === status;
             if (!statusMatch) return false;
@@ -302,12 +314,19 @@ export function createGraphQLSchema({
                 return false;
               }
             }
-            if (tag) {
+            if (manualTag || secondaryTagFilters.length > 0) {
               const tagList = Array.isArray(project.tags)
                 ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
                 : [];
-              if (!tagList.includes(tag)) {
+              // Manual tag (free-form) acts as a required match (AND). Optional preset tags behave as OR filters.
+              if (manualTag && !tagList.includes(manualTag)) {
                 return false;
+              }
+              if (secondaryTagFilters.length > 0) {
+                const hasMatch = secondaryTagFilters.some((value) => tagList.includes(value));
+                if (!hasMatch) {
+                  return false;
+                }
               }
             }
             if (!keyword) return true;

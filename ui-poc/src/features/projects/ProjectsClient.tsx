@@ -258,6 +258,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
             manager: managerValue.length > 0 ? managerValue : undefined,
             health: healthValue.length > 0 ? healthValue : undefined,
             tag: primaryTag.length > 0 ? primaryTag : undefined,
+            tags: selectedTagsRaw.length > 0 ? Array.from(new Set(selectedTagsRaw)) : undefined,
           },
         });
 
