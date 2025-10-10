@@ -45,10 +45,59 @@ PoC で流れる Telemetry イベントやメトリクスを Grafana/Loki から
 
 ## Loki への追加取り込み
 
-`scripts/collect_telemetry_health.sh` を cron 等で実行すると `/health/telemetry` の結果が `logs/telemetry-health/telemetry-health.ndjson` に追記されます。Promtail の additional scrape 対象に含めることで Grafana からステータスを確認できます。
+`scripts/collect_telemetry_health.sh` を定期実行すると `/health/telemetry` のレスポンスが `logs/telemetry-health/telemetry-health.ndjson` に追記されます。Promtail の scrape 対象へ加えることで Grafana からヘルス状況を横断的に把握できます。
+
+### 定期実行例
+
+```bash
+# cron で 5 分ごとに実行する例
+*/5 * * * * PM_PORT=3103 OUTPUT_DIR=/var/log/poc /opt/erp/scripts/collect_telemetry_health.sh
+```
+
+systemd timer を使う場合は以下のように構成します（`ExecStart` のパスは環境に合わせて調整してください）。
+
+```ini
+# /etc/systemd/system/telemetry-health.service
+[Unit]
+Description=Collect Podman telemetry health snapshot
+
+[Service]
+Type=oneshot
+Environment=PM_PORT=3103
+Environment=OUTPUT_DIR=/var/log/poc
+ExecStart=/opt/erp/scripts/collect_telemetry_health.sh
+
+# /etc/systemd/system/telemetry-health.timer
+[Unit]
+Description=Run telemetry-health collector every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=telemetry-health.service
+
+[Install]
+WantedBy=timers.target
+```
+
+### 単発実行
 
 ```bash
 PM_PORT=3103 OUTPUT_DIR=/var/log/poc scripts/collect_telemetry_health.sh
+```
+
+### Promtail 設定例
+
+NDJSON ファイルを Promtail に取り込む場合は scrape_config に以下を追加します。`__path__` は collector が出力するディレクトリに合わせて調整してください。
+
+```yaml
+- job_name: telemetry-health
+  static_configs:
+    - targets: [localhost]
+      labels:
+        job: telemetry-health
+        __path__: /var/log/poc/telemetry-health.ndjson
 ```
 
 ---
