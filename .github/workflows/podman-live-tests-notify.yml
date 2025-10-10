@@ -18,6 +18,9 @@ jobs:
           RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           RUN_DURATION: ${{ github.event.workflow_run.run_duration_ms }}
+          RUN_JOBS_URL: ${{ github.event.workflow_run.jobs_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           source scripts/lib/slack.sh
           case "$RUN_CONCLUSION" in
@@ -50,4 +53,44 @@ PY
           fi
           message="$title | duration=${duration_minutes}m"
           message+=" | details: $RUN_URL"
+
+          jobs_summary=""
+          if [[ -n "$RUN_JOBS_URL" ]] && command -v gh >/dev/null 2>&1; then
+            jobs_payload=$(gh api "$RUN_JOBS_URL" --paginate 2>/dev/null || echo "")
+            if [[ -n "$jobs_payload" ]]; then
+              jobs_summary=$(JOBS_PAYLOAD="$jobs_payload" python3 <<'PY'
+import json, os
+payload = os.environ.get("JOBS_PAYLOAD", "")
+if not payload:
+    print("")
+    raise SystemExit(0)
+try:
+    data = json.loads(payload)
+except Exception:
+    print("")
+    raise SystemExit(0)
+jobs = data.get("jobs", [])
+lines = []
+for job in jobs:
+    conclusion = job.get("conclusion") or job.get("status") or "unknown"
+    name = job.get("name", "job")
+    failure_step = ""
+    for step in job.get("steps") or []:
+        step_conclusion = step.get("conclusion")
+        if step_conclusion not in (None, "success"):
+            failure_step = step.get("name", "")
+            break
+    if failure_step:
+        lines.append(f"- {name}: {conclusion} (failed step: {failure_step})")
+    else:
+        lines.append(f"- {name}: {conclusion}")
+print("\n".join(lines))
+PY
+              ) || jobs_summary=""
+            fi
+          fi
+
+          if [[ -n "$jobs_summary" ]]; then
+            message+=$'\n'"${jobs_summary}"
+          fi
           slack_send "$status" "Podman Live Tests" "$message"
