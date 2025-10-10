@@ -6,6 +6,7 @@ PoC で流れる Telemetry イベントやメトリクスを Grafana/Loki から
 - `scripts/run_podman_ui_poc.sh --detach` などで Podman スタックを起動していること
 - Grafana が `http://localhost:3000` で利用可能であること（ユーザー/パスワードともに `admin` 既定）
 - Loki データソースが `Loki` という名前で登録済み（コンポーズファイル既定）
+- ダッシュボード JSON (`poc/event-backbone/local/grafana/dashboards/poc-telemetry.json`) は `scripts/run_podman_ui_poc.sh` で自動プロビジョニングされます。
 
 ## Explore でのクイックチェック
 1. ブラウザで Grafana にアクセスし、左メニューの **Explore** を開く。
