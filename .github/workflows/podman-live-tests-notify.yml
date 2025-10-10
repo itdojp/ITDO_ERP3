@@ -60,16 +60,14 @@ PY
             jobs_payload=$(gh api "$RUN_JOBS_URL" --paginate 2>/dev/null || echo "")
             if [[ -n "$jobs_payload" ]]; then
               jobs_summary=$(JOBS_PAYLOAD="$jobs_payload" python3 <<'PY'
-import json, os
+import json, os, sys
 payload = os.environ.get("JOBS_PAYLOAD", "")
 if not payload:
-    print("")
-    raise SystemExit(0)
+    sys.exit(0)
 try:
     data = json.loads(payload)
-except Exception:
-    print("")
-    raise SystemExit(0)
+except json.JSONDecodeError:
+    sys.exit(0)
 jobs = data.get("jobs", [])
 lines = []
 for job in jobs:
@@ -99,24 +97,21 @@ PY
             artifacts_payload=$(gh api "$ARTIFACTS_URL" 2>/dev/null || echo "")
             if [[ -n "$artifacts_payload" ]]; then
               artifact_lines=$(ARTIFACTS_PAYLOAD="$artifacts_payload" RUN_URL="$RUN_URL" python3 <<'PY'
-import json, os
+import json, os, sys
 
 payload = os.environ.get("ARTIFACTS_PAYLOAD", "")
 run_url = os.environ.get("RUN_URL", "")
 if not payload:
-    print("")
-    raise SystemExit(0)
+    sys.exit(0)
 
 try:
     data = json.loads(payload)
-except Exception:
-    print("")
-    raise SystemExit(0)
+except json.JSONDecodeError:
+    sys.exit(0)
 
 artifacts = data.get("artifacts", [])
 if not artifacts:
-    print("")
-    raise SystemExit(0)
+    sys.exit(0)
 
 lines = []
 for artifact in artifacts:
