@@ -1205,6 +1205,31 @@ async function main() {
     });
   });
 
+  app.get('/health/telemetry', (req, res) => {
+    const total = telemetryLog.length;
+    const seededEvents = telemetryLog.filter(
+      (item) => item?.detail && typeof item.detail === 'object' && item.detail.seeded === true,
+    );
+    const lastEvent = total > 0 ? telemetryLog[telemetryLog.length - 1] : null;
+    const lastSeeded = seededEvents.length > 0 ? seededEvents[seededEvents.length - 1] : null;
+    const status = seededEvents.length > 0 ? 'ok' : 'empty';
+    const fallbackActive = String(process.env.PODMAN_HOST_FALLBACK_ACTIVE || 'false').toLowerCase() === 'true';
+    res.json({
+      status,
+      message:
+        status === 'ok'
+          ? 'telemetry events available'
+          : 'no seeded telemetry events recorded',
+      events: {
+        total,
+        seeded: seededEvents.length,
+        lastEventAt: lastEvent?.timestamp ?? null,
+        lastSeededAt: lastSeeded?.timestamp ?? null,
+      },
+      fallbackActive,
+    });
+  });
+
   app.get('/metrics/summary', (req, res) => {
     const refresh = String(req.query?.refresh ?? '').toLowerCase() === 'true';
     const snapshot = getMetricsSnapshot(refresh);
