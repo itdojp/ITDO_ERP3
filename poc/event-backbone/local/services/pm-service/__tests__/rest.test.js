@@ -77,6 +77,7 @@ describe('Projects REST API pagination meta', () => {
 
     if (projectSeed.length > 2) {
       expect(first.body.next_cursor).toBeDefined();
+      const firstPageIds = first.body.items.map((item) => item.id);
       const next = await request(server.app)
         .get('/api/v1/projects')
         .query({ first: 2, after: first.body.next_cursor })
@@ -85,7 +86,7 @@ describe('Projects REST API pagination meta', () => {
       expect(next.body.meta.total).toBe(projectSeed.length);
       expect(next.body.meta.returned).toBeLessThanOrEqual(2);
       if (next.body.meta.returned > 0) {
-        expect(next.body.items.some((item) => item.id === first.body.items[0].id)).toBe(false);
+        expect(next.body.items.some((item) => firstPageIds.includes(item.id))).toBe(false);
       }
     } else {
       expect(first.body.next_cursor).toBeUndefined();

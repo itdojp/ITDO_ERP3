@@ -441,10 +441,14 @@ export function createTestServer(options = {}) {
       const limitRaw = Number.parseInt(first, 10);
       const hasExplicitLimit = Number.isFinite(limitRaw) && limitRaw > 0;
       const DEFAULT_LIMIT = 24;
-      const limit = hasExplicitLimit ? Math.min(limitRaw, 100) : filtered.length || DEFAULT_LIMIT;
+      const limit = hasExplicitLimit
+        ? Math.min(limitRaw, 100)
+        : filtered.length > 0
+          ? filtered.length
+          : DEFAULT_LIMIT;
       const cursorValue = typeof after === 'string' ? after.trim() : '';
       const cursorIndex = cursorValue
-        ? filtered.findIndex((project) => project.id === cursorValue || project.code === cursorValue)
+        ? filtered.findIndex((project) => project.id === cursorValue)
         : -1;
       const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
       const slice = hasExplicitLimit ? filtered.slice(startIndex, startIndex + limit) : filtered;
