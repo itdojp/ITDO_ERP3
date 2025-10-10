@@ -34,3 +34,15 @@
 ---
 
 進行状況は Issue コメントまたはこのファイルのチェックボックスを更新して追跡してください。
+
+### 自動 Issue 登録
+
+`scripts/ui_feedback_issue_cli.js` を実行すると未チェック項目を抽出できます。
+
+```bash
+# ドライラン（デフォルト）
+scripts/ui_feedback_issue_cli.js
+
+# 実際に Issue 化（Slack などと連携する場合はラベルを指定）
+scripts/ui_feedback_issue_cli.js --create --label "ui" --assignee @me
+```
