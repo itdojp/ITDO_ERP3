@@ -14,8 +14,8 @@ describe('GraphQL schema', () => {
   test('queries projects via GraphQL', async () => {
     const response = await graphql(
       `
-        query Projects($status: String) {
-          projects(status: $status) {
+        query Projects($status: String, $first: Int) {
+          projects(status: $status, first: $first) {
             items {
               id
               name
@@ -25,19 +25,27 @@ describe('GraphQL schema', () => {
               total
               fetchedAt
               fallback
+              returned
+            }
+            pageInfo {
+              endCursor
+              hasNextPage
             }
           }
         }
       `,
-      { status: 'all' },
+      { status: 'all', first: 100 },
     ).expect(200);
 
     expect(response.body.errors).toBeUndefined();
     const { items, meta } = response.body.data.projects;
     expect(items).toHaveLength(projects.length);
     expect(meta.total).toBe(projects.length);
+    expect(meta.returned).toBe(projects.length);
     expect(meta.fallback).toBe(false);
     expect(typeof meta.fetchedAt).toBe('string');
+    expect(response.body.data.projects.pageInfo.hasNextPage).toBe(false);
+    expect(response.body.data.projects.pageInfo.endCursor).toBe(items.at(-1)?.id ?? null);
     const ids = items.map((p) => p.id);
     expect(new Set(ids)).toEqual(new Set(projects.map((p) => p.id)));
   });
@@ -50,19 +58,23 @@ describe('GraphQL schema', () => {
 
     const response = await graphql(
       `
-        query Projects($keyword: String) {
-          projects(keyword: $keyword) {
+        query Projects($keyword: String, $first: Int) {
+          projects(keyword: $keyword, first: $first) {
             items {
               id
               clientName
             }
             meta {
               total
+              returned
+            }
+            pageInfo {
+              hasNextPage
             }
           }
         }
       `,
-      { keyword },
+      { keyword, first: 10 },
     ).expect(200);
 
     expect(response.body.errors).toBeUndefined();
@@ -72,14 +84,16 @@ describe('GraphQL schema', () => {
     returned.forEach((project) => {
       expect((project.clientName || '').toLowerCase()).toContain(keyword.toLowerCase());
     });
-    expect(meta.total).toBe(returned.length);
+    expect(meta.total).toBeGreaterThanOrEqual(returned.length);
+    expect(meta.returned).toBe(returned.length);
+    expect(typeof response.body.data.projects.pageInfo.hasNextPage).toBe('boolean');
   });
 
   test('filters projects by manager and tag', async () => {
     const response = await graphql(
       `
-        query Projects($manager: String, $tag: String) {
-          projects(manager: $manager, tag: $tag) {
+        query Projects($manager: String, $tag: String, $first: Int) {
+          projects(manager: $manager, tag: $tag, first: $first) {
             items {
               id
               manager
@@ -87,11 +101,15 @@ describe('GraphQL schema', () => {
             }
             meta {
               total
+              returned
+            }
+            pageInfo {
+              hasNextPage
             }
           }
         }
       `,
-      { manager: '山田', tag: 'dx' },
+      { manager: '山田', tag: 'dx', first: 10 },
     ).expect(200);
 
     expect(response.body.errors).toBeUndefined();
@@ -102,7 +120,9 @@ describe('GraphQL schema', () => {
       expect((project.manager || '').includes('山田')).toBeTruthy();
       expect(project.tags).toContain('DX');
     });
-    expect(meta.total).toBe(returned.length);
+    expect(meta.total).toBeGreaterThanOrEqual(returned.length);
+    expect(meta.returned).toBe(returned.length);
+    expect(typeof response.body.data.projects.pageInfo.hasNextPage).toBe('boolean');
   });
 
   test('creates and transitions project via GraphQL', async () => {

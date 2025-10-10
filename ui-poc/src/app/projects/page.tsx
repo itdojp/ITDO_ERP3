@@ -1,4 +1,5 @@
 import { ProjectsClient } from "@/features/projects/ProjectsClient";
+import { PROJECTS_PAGE_SIZE } from "@/features/projects/constants";
 import { mockProjects } from "@/features/projects/mock-data";
 import { PROJECTS_PAGE_QUERY } from "@/features/projects/queries";
 import type { ProjectListResponse } from "@/features/projects/types";
@@ -9,6 +10,7 @@ const defaultMeta: NonNullable<ProjectListResponse["meta"]> = {
   total: 0,
   fetchedAt: new Date().toISOString(),
   fallback: true,
+  returned: 0,
 };
 
 const ALLOWED_STATUS = new Set(["all", "planned", "active", "onhold", "closed"]);
@@ -30,7 +32,7 @@ async function fetchProjects({ status, keyword, manager, tag, health }: ProjectF
   const normalizedHealth = typeof health === "string" && ["green", "yellow", "red"].includes(health.trim()) ? health.trim() : undefined;
   try {
     const gql = await graphqlRequest<{
-      projects?: { items?: ProjectListResponse['items']; meta?: ProjectListResponse['meta']; };
+      projects?: { items?: ProjectListResponse["items"]; meta?: ProjectListResponse["meta"]; pageInfo?: ProjectListResponse["pageInfo"] };
     }>({
       query: PROJECTS_PAGE_QUERY,
       variables: {
@@ -39,12 +41,19 @@ async function fetchProjects({ status, keyword, manager, tag, health }: ProjectF
         manager: normalizedManager,
         tag: normalizedTag,
         health: normalizedHealth,
+        first: PROJECTS_PAGE_SIZE,
       },
       baseUrl: base,
     });
     const items = Array.isArray(gql.projects?.items) ? gql.projects.items : [];
-    const meta = gql.projects?.meta ?? { total: items.length, fetchedAt: new Date().toISOString(), fallback: false };
-    return { items, meta } satisfies ProjectListResponse;
+    const meta = gql.projects?.meta ?? { total: items.length, fetchedAt: new Date().toISOString(), fallback: false, returned: items.length };
+    const pageInfo = gql.projects?.pageInfo ?? { endCursor: null, hasNextPage: false };
+    return {
+      items,
+      meta,
+      pageInfo,
+      next_cursor: pageInfo.hasNextPage ? pageInfo.endCursor ?? undefined : undefined,
+    } satisfies ProjectListResponse;
   } catch (error) {
     console.warn("[projects] GraphQL fetch failed, fallback to REST", error);
     await reportServerTelemetry({
@@ -99,13 +108,21 @@ async function fetchProjects({ status, keyword, manager, tag, health }: ProjectF
         }
         return true;
       });
+      const limitedItems = filteredItems.slice(0, PROJECTS_PAGE_SIZE);
+      const endCursor = limitedItems.length > 0 ? limitedItems[limitedItems.length - 1]?.id ?? null : null;
       return {
-        items: filteredItems,
+        items: limitedItems,
         meta: {
           total: filteredItems.length,
           fetchedAt: data.meta?.fetchedAt ?? new Date().toISOString(),
           fallback: data.meta?.fallback ?? false,
+          returned: limitedItems.length,
         },
+        pageInfo: {
+          endCursor,
+          hasNextPage: limitedItems.length < filteredItems.length,
+        },
+        next_cursor: limitedItems.length < filteredItems.length ? endCursor ?? undefined : undefined,
       } satisfies ProjectListResponse;
     } catch (restError) {
       console.warn("[projects] falling back to mock data", restError);
@@ -118,12 +135,22 @@ async function fetchProjects({ status, keyword, manager, tag, health }: ProjectF
           error: restError instanceof Error ? restError.message : String(restError),
         },
       });
+      const limitedMockItems = mockProjects.items.slice(0, PROJECTS_PAGE_SIZE);
+      const mockTotal = mockProjects.meta?.total ?? mockProjects.items.length;
+      const mockEndCursor = limitedMockItems.length > 0 ? limitedMockItems[limitedMockItems.length - 1]?.id ?? null : null;
       return {
-        ...mockProjects,
+        items: limitedMockItems,
         meta: {
           ...defaultMeta,
           ...mockProjects.meta,
+          total: mockTotal,
+          returned: limitedMockItems.length,
         },
+        pageInfo: {
+          endCursor: mockEndCursor,
+          hasNextPage: limitedMockItems.length < mockTotal,
+        },
+        next_cursor: limitedMockItems.length < mockTotal ? mockEndCursor ?? undefined : undefined,
       };
     }
   }

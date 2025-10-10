@@ -1,6 +1,24 @@
 export const PROJECTS_PAGE_QUERY = `#graphql
-  query ProjectsPage($status: String, $keyword: String, $manager: String, $health: String, $tag: String, $tags: [String!]) {
-    projects(status: $status, keyword: $keyword, manager: $manager, health: $health, tag: $tag, tags: $tags) {
+  query ProjectsPage(
+    $status: String
+    $keyword: String
+    $manager: String
+    $health: String
+    $tag: String
+    $tags: [String!]
+    $first: Int
+    $after: String
+  ) {
+    projects(
+      status: $status
+      keyword: $keyword
+      manager: $manager
+      health: $health
+      tag: $tag
+      tags: $tags
+      first: $first
+      after: $after
+    ) {
       items {
         id
         code
@@ -17,6 +35,11 @@ export const PROJECTS_PAGE_QUERY = `#graphql
         total
         fetchedAt
         fallback
+        returned
+      }
+      pageInfo {
+        endCursor
+        hasNextPage
       }
     }
   }
