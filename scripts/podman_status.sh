@@ -14,6 +14,12 @@ PM_SERVICE_SEED_RETRY_ATTEMPTS="${TELEMETRY_SEED_RETRY_ATTEMPTS:-}"
 PM_SERVICE_SEED_RETRY_DELAY_MS="${TELEMETRY_SEED_RETRY_DELAY_MS:-}"
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
 PODMAN_STATUS_SLACK_NOTIFY_SUCCESS="${PODMAN_STATUS_SLACK_NOTIFY_SUCCESS:-false}"
+PODMAN_STATUS_SUMMARY_FILE="${PODMAN_STATUS_SUMMARY_FILE:-}"
+
+SERVICE_STATUS="ok"
+TELEMETRY_STATUS="skipped"
+TELEMETRY_MESSAGE=""
+TELEMETRY_ATTEMPTS=0
 
 print_section() {
   local title=$1
@@ -49,9 +55,10 @@ for endpoint in \
     echo "ok"
   else
     echo "error"
+    SERVICE_STATUS="error"
   fi
   sleep 0.1
- done
+done
 
 print_section "Telemetry seed verification"
 TELEMETRY_ENDPOINT="${TELEMETRY_ENDPOINT:-http://localhost:${PM_HOST_PORT}/api/v1/telemetry/ui?limit=50}"
@@ -60,6 +67,8 @@ printf "%-45s : " "${TELEMETRY_ENDPOINT}"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "skipped (python3 not available)"
   notify_slack "failure" "podman_status telemetry seed skipped (python3 not available)"
+  TELEMETRY_STATUS="skipped"
+  TELEMETRY_MESSAGE="python3 not available"
 else
   telemetry_attempts=1
   if [[ ${TELEMETRY_SEED_AUTO_RESET,,} == "true" ]]; then
@@ -169,6 +178,9 @@ PY2
   done
 
   if [ "${telemetry_status}" -eq 0 ]; then
+    TELEMETRY_STATUS="ok"
+    TELEMETRY_MESSAGE="${telemetry_message}"
+    TELEMETRY_ATTEMPTS=${attempt}
     telemetry_context="attempt=${attempt}, reset=${fallback_used}"
     if [[ -n "${PM_SERVICE_SEED_RETRY_ATTEMPTS}" ]]; then
       telemetry_context+="; pm-service-retries=${PM_SERVICE_SEED_RETRY_ATTEMPTS}"
@@ -184,15 +196,58 @@ PY2
       notify_slack "success" "podman_status telemetry seed ok (${telemetry_message}; ${telemetry_context})"
     fi
   else
+    TELEMETRY_STATUS="error"
+    TELEMETRY_ATTEMPTS=${attempt}
     if [ -n "${telemetry_message}" ]; then
       echo "error - ${telemetry_message} (attempt=${attempt})"
       notify_slack "failure" "podman_status telemetry seed failed after ${attempt} attempt(s): ${telemetry_message}"
+      TELEMETRY_MESSAGE="${telemetry_message}"
     else
       echo "error - telemetry seed verification failed (attempt=${attempt})"
       notify_slack "failure" "podman_status telemetry seed verification failed after ${attempt} attempt(s)"
+      TELEMETRY_MESSAGE="telemetry seed verification failed"
     fi
   fi
 fi
+
+
+if [[ -n "${PODMAN_STATUS_SUMMARY_FILE}" ]]; then
+  mkdir -p "$(dirname "${PODMAN_STATUS_SUMMARY_FILE}")"
+  timestamp=$(date -Is)
+  fallback_value=${fallback_used:-false}
+  if command -v python3 >/dev/null 2>&1; then
+    SUMMARY_FILE="${PODMAN_STATUS_SUMMARY_FILE}" \
+    SUMMARY_TIMESTAMP="${timestamp}" \
+    SUMMARY_PM_PORT="${PM_HOST_PORT}" \
+    SUMMARY_UI_PORT="${UI_PORT_VALUE}" \
+    SUMMARY_SERVICE_STATUS="${SERVICE_STATUS}" \
+    SUMMARY_TELEMETRY_STATUS="${TELEMETRY_STATUS}" \
+    SUMMARY_TELEMETRY_MESSAGE="${TELEMETRY_MESSAGE}" \
+    SUMMARY_TELEMETRY_ATTEMPTS="${TELEMETRY_ATTEMPTS}" \
+    SUMMARY_TELEMETRY_RESET="${fallback_value}" \
+    python3 <<'PY'
+import json
+import os
+
+data = {
+    "timestamp": os.environ["SUMMARY_TIMESTAMP"],
+    "pm_port": os.environ["SUMMARY_PM_PORT"],
+    "ui_port": os.environ["SUMMARY_UI_PORT"],
+    "service_health": os.environ["SUMMARY_SERVICE_STATUS"],
+    "telemetry_status": os.environ["SUMMARY_TELEMETRY_STATUS"],
+    "telemetry_message": os.environ.get("SUMMARY_TELEMETRY_MESSAGE", ""),
+    "telemetry_attempts": int(os.environ.get("SUMMARY_TELEMETRY_ATTEMPTS", 0) or 0),
+    "telemetry_reset_used": os.environ.get("SUMMARY_TELEMETRY_RESET", "false").lower() == "true",
+}
+with open(os.environ["SUMMARY_FILE"], "w", encoding="utf-8") as fh:
+    json.dump(data, fh, ensure_ascii=False, indent=2)
+PY
+    echo "[summary] wrote ${PODMAN_STATUS_SUMMARY_FILE}" >&2
+  else
+    echo "[summary] python3 not available; skipping summary file" >&2
+  fi
+fi
+
 
 
 
