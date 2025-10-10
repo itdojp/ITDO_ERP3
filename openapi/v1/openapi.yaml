@@ -41,7 +41,46 @@ paths:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
-        
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, planned, active, onhold, closed]
+          description: 取得対象のステータス（省略時は all）
+        - name: keyword
+          in: query
+          schema: { type: string }
+          description: プロジェクト名・コードなどを対象とした部分一致検索
+        - name: manager
+          in: query
+          schema: { type: string }
+          description: マネージャ名の部分一致検索
+        - name: health
+          in: query
+          schema:
+            type: string
+            enum: [green, yellow, red]
+          description: ヘルス指標によるフィルタ
+        - name: tag
+          in: query
+          schema: { type: string }
+          description: 手入力タグ（AND 条件）
+        - name: tags
+          in: query
+          schema: { type: string }
+          description: 代表タグ（カンマ区切り）。いずれか一致で OR フィルタ
+        - name: first
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 24
+          description: 1ページあたりの取得件数
+        - name: after
+          in: query
+          schema: { type: string }
+          description: 直前ページのカーソル ID（`next_cursor`）
         - $ref: '#/components/parameters/Sort'
       responses:
         '200':
@@ -813,9 +852,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project'
+        meta:
+          $ref: '#/components/schemas/ProjectListMeta'
         next_cursor:
           type: string
-      required: [items]
+          description: 次ページ取得時に指定するカーソル（末尾ID）。存在しない場合は最終ページ
+      required: [items, meta]
+    ProjectListMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: フィルタ適用後の総件数
+        returned:
+          type: integer
+          description: 今回レスポンスに含まれる件数
+        fetched_at:
+          type: string
+          format: date-time
+          description: データ取得時刻（ISO8601）
+        fallback:
+          type: boolean
+          description: バックエンドがモック／フォールバック動作した場合は true
+      required: [total, returned, fetched_at, fallback]
     OcrInvoiceProcessRequest:
       type: object
       properties:
