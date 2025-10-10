@@ -94,6 +94,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
 
   const source: QuerySource = meta.fallback ? "mock" : "api";
   const apiReturned = meta.returned ?? projects.length;
+  const initialFetchSkippedRef = useRef(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -781,6 +782,10 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   }, [normalizeTagLabel]);
 
   useEffect(() => {
+    if (!initialFetchSkippedRef.current) {
+      initialFetchSkippedRef.current = true;
+      return;
+    }
     void fetchProjects(filter, appliedKeyword, {
       manager: appliedManager,
       health: appliedHealth || undefined,
