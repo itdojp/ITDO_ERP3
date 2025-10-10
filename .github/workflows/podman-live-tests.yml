@@ -22,9 +22,17 @@ jobs:
       - name: Run Playwright live suite via Podman stack
         env:
           USE_MINIO: ${{ github.event.inputs.with-minio }}
+          PODMAN_LIVE_EXPORT_DASHBOARDS: "true"
         run: |
           if [[ "${USE_MINIO,,}" == "true" ]]; then
             scripts/podman_live_tests.sh --with-minio
           else
             scripts/podman_live_tests.sh
           fi
+      - name: Upload podman live logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-live-tests-logs
+          path: logs/podman-live-tests
+          if-no-files-found: ignore
