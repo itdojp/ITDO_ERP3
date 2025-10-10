@@ -39,6 +39,7 @@ const dialogRequired: Record<TimesheetAction, boolean> = {
 };
 
 const STORAGE_KEY = "timesheets-filters-v1";
+const BULK_TEMPLATE_STORAGE_KEY = "timesheets-bulk-templates-v1";
 
 type QuerySource = "api" | "mock";
 
@@ -78,6 +79,38 @@ const initialBulkDialog: BulkDialogState = {
   targetIds: [],
 };
 
+type BulkTemplate = {
+  comment: string;
+  reasonCode?: string;
+};
+
+const defaultBulkTemplates: Record<TimesheetAction, BulkTemplate> = {
+  submit: { comment: "" },
+  approve: { comment: "" },
+  reject: { comment: "", reasonCode: "" },
+  resubmit: { comment: "" },
+};
+
+const TEMPLATE_ACTION_SETTINGS: Array<{ action: TimesheetAction; label: string; allowReason: boolean }> = [
+  { action: "reject", label: "Reject テンプレート", allowReason: true },
+  { action: "resubmit", label: "Resubmit テンプレート", allowReason: false },
+];
+
+const composeTemplate = (
+  action: TimesheetAction,
+  base: BulkTemplate | undefined,
+  patch?: Partial<BulkTemplate>,
+): BulkTemplate => {
+  const comment = patch?.comment ?? base?.comment ?? "";
+  if (action === "reject") {
+    return {
+      comment,
+      reasonCode: patch?.reasonCode ?? base?.reasonCode ?? "",
+    };
+  }
+  return { comment };
+};
+
 export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const initialMeta: TimesheetListMeta =
     initialTimesheets.meta ?? {
@@ -97,6 +130,9 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
   const [bulkDialog, setBulkDialog] = useState<BulkDialogState>(initialBulkDialog);
+  const [bulkTemplates, setBulkTemplates] = useState<Record<TimesheetAction, BulkTemplate>>(defaultBulkTemplates);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState<Record<TimesheetAction, BulkTemplate>>(defaultBulkTemplates);
   const [meta, setMeta] = useState(initialMeta);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
@@ -203,6 +239,35 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     selectAllRef.current.indeterminate = isIndeterminate;
   }, [selectedIds, filtered.length]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(BULK_TEMPLATE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Record<TimesheetAction, BulkTemplate>>;
+        if (parsed && typeof parsed === "object") {
+          setBulkTemplates((prev) => ({ ...prev, ...parsed }));
+          setTemplateDraft((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch (error) {
+      console.warn("[timesheets] failed to load bulk templates", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(BULK_TEMPLATE_STORAGE_KEY, JSON.stringify(bulkTemplates));
+    } catch (error) {
+      console.warn("[timesheets] failed to persist bulk templates", error);
+    }
+  }, [bulkTemplates]);
+
   const closeDialog = () => setDialog(initialDialog);
   const closeBulkDialog = () => setBulkDialog(initialBulkDialog);
 
@@ -220,6 +285,51 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     },
     [],
   );
+
+  const updateTemplateDraft = useCallback(
+    (action: TimesheetAction, patch: Partial<BulkTemplate>) => {
+      setTemplateDraft((prev) => ({
+        ...prev,
+        [action]: composeTemplate(action, prev[action], patch),
+      }));
+    },
+    [],
+  );
+
+  const handleTemplateDialogSave = useCallback(() => {
+    setBulkTemplates((prev) => {
+      const next = { ...prev };
+      TEMPLATE_ACTION_SETTINGS.forEach(({ action }) => {
+        next[action] = composeTemplate(action, prev[action], templateDraft[action]);
+      });
+      return next;
+    });
+    setTemplateDialogOpen(false);
+  }, [templateDraft]);
+
+  const storeBulkInputAsTemplate = useCallback(() => {
+    setBulkTemplates((prev) => ({
+      ...prev,
+      [bulkDialog.action]: composeTemplate(bulkDialog.action, prev[bulkDialog.action], {
+        comment: bulkDialog.comment,
+        reasonCode: bulkDialog.reasonCode,
+      }),
+    }));
+  }, [bulkDialog]);
+
+  const applyTemplateToDialog = useCallback(() => {
+    const template = bulkTemplates[bulkDialog.action];
+    setBulkDialog((prev) => ({
+      ...prev,
+      comment: template?.comment ?? "",
+      reasonCode: bulkDialog.action === "reject" ? template?.reasonCode ?? "" : prev.reasonCode,
+    }));
+  }, [bulkDialog.action, bulkTemplates]);
+
+  const closeTemplateDialog = useCallback(() => {
+    setTemplateDraft(bulkTemplates);
+    setTemplateDialogOpen(false);
+  }, [bulkTemplates]);
 
   const submitBulkDialog = () => {
     if (bulkTargets.length === 0) {
@@ -789,12 +899,19 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         return;
       }
       if (dialogRequired[action]) {
-        setBulkDialog({ open: true, action, comment: "", reasonCode: "", targetIds: targets.map((entry) => entry.id) });
+        const template = bulkTemplates[action] ?? { comment: "", reasonCode: "" };
+        setBulkDialog({
+          open: true,
+          action,
+          comment: template.comment ?? "",
+          reasonCode: template.reasonCode ?? "",
+          targetIds: targets.map((entry) => entry.id),
+        });
         return;
       }
       void executeBulkAction(action, targets);
     },
-    [selectedEntries, executeBulkAction],
+    [selectedEntries, executeBulkAction, bulkTemplates],
   );
 
   const handleCreateTimesheet = async (event: FormEvent<HTMLFormElement>) => {
@@ -1174,6 +1291,16 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           })}
           <button
             type="button"
+            onClick={() => {
+              setTemplateDraft(bulkTemplates);
+              setTemplateDialogOpen(true);
+            }}
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+          >
+            テンプレ設定
+          </button>
+          <button
+            type="button"
             onClick={() => setSelectedIds([])}
             className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
           >
@@ -1361,6 +1488,22 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
                   placeholder="全件に適用するコメント"
                 />
+                <div className="mt-2 flex flex-wrap justify-end gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={applyTemplateToDialog}
+                    className="rounded-md border border-slate-700 px-2 py-1 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                  >
+                    テンプレを反映
+                  </button>
+                  <button
+                    type="button"
+                    onClick={storeBulkInputAsTemplate}
+                    className="rounded-md border border-slate-700 px-2 py-1 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                  >
+                    現在の内容を保存
+                  </button>
+                </div>
               </label>
 
               {bulkDialog.action === "reject" ? (
@@ -1411,6 +1554,70 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
                 disabled={pendingId === BULK_PENDING_KEY}
               >
                 {ACTION_LABEL[bulkDialog.action]}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {templateDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900/90 p-6 text-sm text-slate-200 shadow-lg">
+            <h3 className="text-lg font-semibold text-white">バルクコメントテンプレ設定</h3>
+            <p className="mt-1 text-xs text-slate-400">Reject / Resubmit 用の定型文を編集できます。</p>
+
+            <div className="mt-4 space-y-4">
+              {TEMPLATE_ACTION_SETTINGS.map(({ action, label, allowReason }) => {
+                const template = templateDraft[action] ?? { comment: "", reasonCode: "" };
+                return (
+                  <div key={action} className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</h4>
+                    <label className="flex flex-col gap-1 text-xs text-slate-300">
+                      コメント
+                      <textarea
+                        value={template.comment}
+                        onChange={(event) => updateTemplateDraft(action, { comment: event.target.value })}
+                        rows={3}
+                        className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                        placeholder="例: 差戻し理由の定型文"
+                      />
+                    </label>
+                    {allowReason ? (
+                      <label className="flex flex-col gap-1 text-xs text-slate-300">
+                        理由コード
+                        <select
+                          value={template.reasonCode ?? ""}
+                          onChange={(event) => updateTemplateDraft(action, { reasonCode: event.target.value })}
+                          className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                        >
+                          <option value="">未選択</option>
+                          {REASON_CODES.map((reason) => (
+                            <option key={reason.value} value={reason.value}>
+                              {reason.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3 text-xs">
+              <button
+                type="button"
+                onClick={closeTemplateDialog}
+                className="rounded-md border border-slate-700 px-3 py-1 text-slate-300 hover:border-slate-600 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleTemplateDialogSave}
+                className="rounded-md border border-sky-600 bg-sky-600 px-3 py-1 text-white hover:bg-sky-500"
+              >
+                保存
               </button>
             </div>
           </div>
