@@ -10,3 +10,4 @@
 
 ## UI Feedback
 - [UI PoC フィードバック・バックログ](ui-poc-feedback-backlog.md)
+- [Telemetry Dashboard Guide](podman-telemetry-dashboard.md)
