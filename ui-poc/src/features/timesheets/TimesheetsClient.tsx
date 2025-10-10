@@ -62,6 +62,22 @@ const initialDialog: DialogState = {
   reasonCode: "",
 };
 
+type BulkDialogState = {
+  open: boolean;
+  action: TimesheetAction;
+  comment: string;
+  reasonCode: string;
+  targetIds: string[];
+};
+
+const initialBulkDialog: BulkDialogState = {
+  open: false,
+  action: "reject",
+  comment: "",
+  reasonCode: "",
+  targetIds: [],
+};
+
 export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const initialMeta: TimesheetListMeta =
     initialTimesheets.meta ?? {
@@ -80,6 +96,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(initialDialog);
+  const [bulkDialog, setBulkDialog] = useState<BulkDialogState>(initialBulkDialog);
   const [meta, setMeta] = useState(initialMeta);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
@@ -150,6 +167,10 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   }, [timesheets, filter, appliedKeyword, appliedManager, appliedProjectCode]);
 
   const selectedEntries = useMemo(() => timesheets.filter((entry) => selectedIds.includes(entry.id)), [timesheets, selectedIds]);
+  const bulkTargets = useMemo(
+    () => timesheets.filter((entry) => bulkDialog.targetIds.includes(entry.id)),
+    [timesheets, bulkDialog.targetIds],
+  );
 
   const toggleSelection = useCallback((timesheetId: string) => {
     setSelectedIds((prev) => {
@@ -183,6 +204,36 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   }, [selectedIds, filtered.length]);
 
   const closeDialog = () => setDialog(initialDialog);
+  const closeBulkDialog = () => setBulkDialog(initialBulkDialog);
+
+  const buildBulkActionPayload = useCallback(
+    (action: TimesheetAction, comment: string, reasonCode: string): ActionPayload | undefined => {
+      const trimmedComment = comment.trim();
+      const trimmedReason = reasonCode.trim();
+      if (!trimmedComment && !(action === "reject" && trimmedReason)) {
+        return undefined;
+      }
+      return {
+        comment: trimmedComment || undefined,
+        reasonCode: action === "reject" ? (trimmedReason || undefined) : undefined,
+      };
+    },
+    [],
+  );
+
+  const submitBulkDialog = () => {
+    if (bulkTargets.length === 0) {
+      closeBulkDialog();
+      return;
+    }
+    const payload = buildBulkActionPayload(
+      bulkDialog.action,
+      bulkDialog.comment,
+      bulkDialog.reasonCode,
+    );
+    void executeBulkAction(bulkDialog.action, bulkTargets, payload);
+    closeBulkDialog();
+  };
 
   const normalizeTimesheet = useCallback(
     (entry: Partial<TimesheetEntry> | null | undefined): TimesheetEntry | null => {
@@ -699,21 +750,21 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     [normalizeTimesheet, updateTimesheetItem],
   );
 
-  const BULK_ACTIONS: TimesheetAction[] = ["submit", "approve"];
+  const BULK_ACTIONS: TimesheetAction[] = ["approve", "reject", "resubmit", "submit"];
   const BULK_PENDING_KEY = "__bulk__";
 
-  const handleBulkAction = useCallback(
-    async (action: TimesheetAction) => {
-      const targets = selectedEntries.filter((entry) => availableActions(entry.approvalStatus).includes(action));
-      if (targets.length === 0) {
+  const executeBulkAction = useCallback(
+    async (action: TimesheetAction, targets: TimesheetEntry[], payload?: ActionPayload) => {
+      const applicableTargets = targets.filter((entry) => availableActions(entry.approvalStatus).includes(action));
+      if (applicableTargets.length === 0) {
         return;
       }
       setPendingId(BULK_PENDING_KEY);
       try {
         const results = await Promise.allSettled(
-          targets.map((entry) => performAction(entry, action, undefined, { suppressPending: true })),
+          applicableTargets.map((entry) => performAction(entry, action, payload, { suppressPending: true })),
         );
-        const succeededIds = targets
+        const succeededIds = applicableTargets
           .map((entry, index) => (results[index]?.status === "fulfilled" ? entry.id : null))
           .filter((id): id is string => Boolean(id));
         if (succeededIds.length > 0) {
@@ -722,13 +773,28 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
         }
         const failed = results.filter((result) => result.status === "rejected");
         if (failed.length > 0) {
-          console.warn("[timesheets] bulk action failures", failed);
+          console.warn("[timesheets] bulk action failures", { action, failedCount: failed.length });
         }
       } finally {
         setPendingId(null);
       }
     },
-    [selectedEntries, performAction],
+    [performAction, setSelectedIds, setMessage],
+  );
+
+  const handleBulkAction = useCallback(
+    (action: TimesheetAction) => {
+      const targets = selectedEntries.filter((entry) => availableActions(entry.approvalStatus).includes(action));
+      if (targets.length === 0) {
+        return;
+      }
+      if (dialogRequired[action]) {
+        setBulkDialog({ open: true, action, comment: "", reasonCode: "", targetIds: targets.map((entry) => entry.id) });
+        return;
+      }
+      void executeBulkAction(action, targets);
+    },
+    [selectedEntries, executeBulkAction],
   );
 
   const handleCreateTimesheet = async (event: FormEvent<HTMLFormElement>) => {
@@ -1266,6 +1332,85 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
                 className="rounded-md border border-sky-600 bg-sky-600 px-3 py-1 text-white hover:bg-sky-500"
               >
                 {ACTION_LABEL[dialog.action]}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {bulkDialog.open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900/90 p-6 text-sm text-slate-200 shadow-lg">
+            <h3 className="text-lg font-semibold text-white">
+              {ACTION_LABEL[bulkDialog.action]} — 選択 {bulkTargets.length} 件
+            </h3>
+            {bulkTargets.length > 0 ? (
+              <p className="mt-1 text-xs text-slate-400">
+                例: {bulkTargets.slice(0, 3).map((entry) => `${entry.userName} / ${entry.projectCode}`).join("、")}
+                {bulkTargets.length > 3 ? ` 他 ${bulkTargets.length - 3} 件` : ""}
+              </p>
+            ) : null}
+
+            <div className="mt-4 space-y-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                コメント
+                <textarea
+                  value={bulkDialog.comment}
+                  onChange={(event) => setBulkDialog((prev) => ({ ...prev, comment: event.target.value }))}
+                  rows={4}
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                  placeholder="全件に適用するコメント"
+                />
+              </label>
+
+              {bulkDialog.action === "reject" ? (
+                <label className="flex flex-col gap-1 text-xs text-slate-300">
+                  理由コード
+                  <select
+                    value={bulkDialog.reasonCode}
+                    onChange={(event) => setBulkDialog((prev) => ({ ...prev, reasonCode: event.target.value }))}
+                    className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                  >
+                    <option value="">未選択</option>
+                    {REASON_CODES.map((reason) => (
+                      <option key={reason.value} value={reason.value}>
+                        {reason.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <div className="max-h-32 overflow-auto rounded-md border border-slate-800 bg-slate-950/70 p-2 text-[11px] text-slate-300">
+                {bulkTargets.length === 0 ? (
+                  <p>対象が見つかりませんでした。</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {bulkTargets.map((entry) => (
+                      <li key={entry.id}>
+                        {entry.userName} / {entry.projectCode}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3 text-xs">
+              <button
+                type="button"
+                onClick={closeBulkDialog}
+                className="rounded-md border border-slate-700 px-3 py-1 text-slate-300 hover:border-slate-600 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitBulkDialog}
+                className="rounded-md border border-sky-600 bg-sky-600 px-3 py-1 text-white hover:bg-sky-500"
+                disabled={pendingId === BULK_PENDING_KEY}
+              >
+                {ACTION_LABEL[bulkDialog.action]}
               </button>
             </div>
           </div>
