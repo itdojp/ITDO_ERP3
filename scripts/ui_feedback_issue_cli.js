@@ -17,18 +17,44 @@ try {
 }
 
 const args = process.argv.slice(2);
-const hasFlag = (flag) => args.includes(flag);
-const readOption = (flag) => {
-  const index = args.indexOf(flag);
-  if (index >= 0 && index + 1 < args.length) {
-    return args[index + 1];
-  }
-  return '';
-};
+let createMode = false;
+let labelValue = '';
+let assigneeValue = '';
+const sectionFilters = [];
+let containsFilter = '';
 
-const createMode = hasFlag('--create');
-const labelValue = readOption('--label');
-const assigneeValue = readOption('--assignee');
+for (let index = 0; index < args.length; index += 1) {
+  const flag = args[index];
+  switch (flag) {
+    case '--create':
+      createMode = true;
+      break;
+    case '--label':
+      labelValue = args[index + 1] || '';
+      index += 1;
+      break;
+    case '--assignee':
+      assigneeValue = args[index + 1] || '';
+      index += 1;
+      break;
+    case '--section':
+      if (args[index + 1]) {
+        sectionFilters.push(args[index + 1].toLowerCase());
+        index += 1;
+      }
+      break;
+    case '--contains':
+      containsFilter = (args[index + 1] || '').toLowerCase();
+      index += 1;
+      break;
+    case '--help':
+    case '-h':
+      console.log('Usage: ui_feedback_issue_cli.js [--create] [--label LABEL] [--assignee USER] [--section NAME] [--contains TEXT]');
+      process.exit(0);
+    default:
+      break;
+  }
+}
 
 const tasks = [];
 let currentSection = 'General';
@@ -41,6 +67,11 @@ for (const line of fileContent.split(/\r?\n/)) {
   if (!match) continue;
   if (match[1].toLowerCase() === 'x') continue;
   const rawText = match[2].trim();
+  const sectionMatch = sectionFilters.length === 0 || sectionFilters.includes(currentSection.toLowerCase());
+  const containsMatch = !containsFilter || rawText.toLowerCase().includes(containsFilter);
+  if (!sectionMatch || !containsMatch) {
+    continue;
+  }
   let title = rawText;
   let body = '';
   const colonIndex = rawText.indexOf(':');

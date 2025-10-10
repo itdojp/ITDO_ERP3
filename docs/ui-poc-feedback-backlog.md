@@ -45,4 +45,10 @@ scripts/ui_feedback_issue_cli.js
 
 # 実際に Issue 化（Slack などと連携する場合はラベルを指定）
 scripts/ui_feedback_issue_cli.js --create --label "ui" --assignee @me
+
+# 特定セクションのみ（例: Telemetry）
+scripts/ui_feedback_issue_cli.js --section Telemetry --section "Cross-cutting"
+
+# 文字列フィルタを併用
+scripts/ui_feedback_issue_cli.js --contains fallback
 ```
