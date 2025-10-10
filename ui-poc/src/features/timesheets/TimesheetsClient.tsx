@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
@@ -1015,54 +1016,69 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {filtered.map((entry) => (
-              <tr key={entry.id} className="hover:bg-slate-800/40">
-                <td className="px-4 py-3 text-slate-200">{entry.workDate}</td>
-                <td className="px-4 py-3 text-slate-200">
-                  <div className="flex flex-col">
-                    <span>{entry.userName}</span>
-                    <span className="text-xs text-slate-400">#{entry.id}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-200">
-                  <div className="flex flex-col">
-                    <span>{entry.projectName}</span>
-                    <span className="text-xs text-slate-400">{entry.projectCode}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-200">
-                  <div className="flex flex-col">
-                    <span>{entry.hours.toFixed(1)}h</span>
-                    {entry.submittedAt ? (
-                      <span className="text-xs text-slate-400">提出: {formatDateTime(entry.submittedAt)}</span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-xs">
-                  <StatusBadge status={entry.approvalStatus} />
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-300">{entry.note ?? "—"}</td>
-                <td className="px-4 py-3 text-right text-xs text-slate-200">
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {availableActions(entry.approvalStatus).map((action) => (
-                      <button
-                        key={action}
-                        type="button"
-                        disabled={pendingId === entry.id}
-                        onClick={() => handleAction(entry, action)}
-                        className={`rounded-md border px-3 py-1 transition-colors ${
-                          pendingId === entry.id
-                            ? "cursor-not-allowed border-slate-700 bg-slate-800 text-slate-500"
-                            : "border-slate-700 bg-slate-800 hover:border-slate-600 hover:text-white"
-                        }`}
+            {filtered.map((entry) => {
+              const telemetryParams = new URLSearchParams({
+                component: 'ui/timesheets',
+                detail: entry.id,
+                detail_path: '$.detail.timesheetId',
+              });
+              const telemetryHref = `/telemetry?${telemetryParams.toString()}`;
+              return (
+                <tr key={entry.id} className="hover:bg-slate-800/40">
+                  <td className="px-4 py-3 text-slate-200">{entry.workDate}</td>
+                  <td className="px-4 py-3 text-slate-200">
+                    <div className="flex flex-col">
+                      <span>{entry.userName}</span>
+                      <span className="text-xs text-slate-400">#{entry.id}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-200">
+                    <div className="flex flex-col">
+                      <span>{entry.projectName}</span>
+                      <span className="text-xs text-slate-400">{entry.projectCode}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-200">
+                    <div className="flex flex-col">
+                      <span>{entry.hours.toFixed(1)}h</span>
+                      {entry.submittedAt ? (
+                        <span className="text-xs text-slate-400">提出: {formatDateTime(entry.submittedAt)}</span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <StatusBadge status={entry.approvalStatus} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-300">{entry.note ?? "—"}</td>
+                  <td className="px-4 py-3 text-right text-xs text-slate-200">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {availableActions(entry.approvalStatus).map((action) => (
+                        <button
+                          key={action}
+                          type="button"
+                          disabled={pendingId === entry.id}
+                          onClick={() => handleAction(entry, action)}
+                          className={`rounded-md border px-3 py-1 transition-colors ${
+                            pendingId === entry.id
+                              ? "cursor-not-allowed border-slate-700 bg-slate-800 text-slate-500"
+                              : "border-slate-700 bg-slate-800 hover:border-slate-600 hover:text-white"
+                          }`}
+                        >
+                          {ACTION_LABEL[action]}
+                        </button>
+                      ))}
+                      <Link
+                        href={telemetryHref}
+                        className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-sky-400 hover:text-sky-100"
+                        data-testid={`timesheet-telemetry-link-${entry.id}`}
                       >
-                        {ACTION_LABEL[action]}
-                      </button>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                        Telemetry
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
