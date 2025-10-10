@@ -43,5 +43,13 @@ PoC で流れる Telemetry イベントやメトリクスを Grafana/Loki から
 - Telemetry 画面の操作後に上記クエリを実行し、UI 上でのアクションがログへ反映されているか検証してください。
 - Slack 通知と組み合わせて、`scripts/podman_status.sh` が送信した `telemetry seed ok/failure` メッセージのタイムスタンプと Grafana のログの整合性を確認すると原因分析が容易になります。
 
+## Loki への追加取り込み
+
+`scripts/collect_telemetry_health.sh` を cron 等で実行すると `/health/telemetry` の結果が `logs/telemetry-health/telemetry-health.ndjson` に追記されます。Promtail の additional scrape 対象に含めることで Grafana からステータスを確認できます。
+
+```bash
+PM_PORT=3103 OUTPUT_DIR=/var/log/poc scripts/collect_telemetry_health.sh
+```
+
 ---
 必要に応じてこのガイドを更新し、よく使うログクエリやパネル構成を蓄積してください。
