@@ -128,4 +128,41 @@ test.describe('Telemetry page (mock fallback)', () => {
     await expect(page).toHaveURL(/detail=BRAVO/);
     await expect(page).toHaveURL(/detail_path=items%5B1%5D.code/);
   });
+
+  test('renders related links for Projects/Slack details', async ({ page }) => {
+    const receivedAt = new Date().toISOString();
+    await page.route('**/api/v1/telemetry/ui*', async (route) => {
+      const payload: TelemetryResponse = {
+        items: [
+          {
+            component: 'ui/projects',
+            event: 'share_generated',
+            level: 'info',
+            origin: 'client',
+            receivedAt,
+            detail: {
+              shareUrl: 'https://app.example.com/projects?status=active',
+              slackMemo: 'posted to https://slack.com/app_redirect?channel=proj-updates',
+              projectCode: 'DX-2045',
+            },
+          },
+        ],
+        total: 1,
+      };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+    });
+
+    await page.goto('/telemetry?pollMs=1000');
+    await expect(page.getByTestId('telemetry-table')).toContainText('share_generated');
+    await page.getByRole('row', { name: /share_generated/ }).click();
+
+    await expect(page.getByRole('link', { name: 'Projects 画面で開く' })).toHaveAttribute(
+      'href',
+      'https://app.example.com/projects?status=active',
+    );
+    await expect(page.getByRole('link', { name: /Slack/ })).toHaveAttribute(
+      'href',
+      'https://slack.com/app_redirect?channel=proj-updates',
+    );
+  });
 });
