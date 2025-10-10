@@ -96,6 +96,21 @@ const TEMPLATE_ACTION_SETTINGS: Array<{ action: TimesheetAction; label: string; 
   { action: "resubmit", label: "Resubmit テンプレート", allowReason: false },
 ];
 
+const composeTemplate = (
+  action: TimesheetAction,
+  base: BulkTemplate | undefined,
+  patch?: Partial<BulkTemplate>,
+): BulkTemplate => {
+  const comment = patch?.comment ?? base?.comment ?? "";
+  if (action === "reject") {
+    return {
+      comment,
+      reasonCode: patch?.reasonCode ?? base?.reasonCode ?? "",
+    };
+  }
+  return { comment };
+};
+
 export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const initialMeta: TimesheetListMeta =
     initialTimesheets.meta ?? {
@@ -275,13 +290,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     (action: TimesheetAction, patch: Partial<BulkTemplate>) => {
       setTemplateDraft((prev) => ({
         ...prev,
-        [action]: {
-          comment: patch.comment ?? prev[action]?.comment ?? "",
-          reasonCode:
-            action === "reject"
-              ? patch.reasonCode ?? prev[action]?.reasonCode ?? ""
-              : prev[action]?.reasonCode,
-        },
+        [action]: composeTemplate(action, prev[action], patch),
       }));
     },
     [],
@@ -291,12 +300,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     setBulkTemplates((prev) => {
       const next = { ...prev };
       TEMPLATE_ACTION_SETTINGS.forEach(({ action }) => {
-        next[action] = {
-          comment: templateDraft[action]?.comment ?? "",
-          ...(action === "reject"
-            ? { reasonCode: templateDraft[action]?.reasonCode ?? "" }
-            : {}),
-        };
+        next[action] = composeTemplate(action, prev[action], templateDraft[action]);
       });
       return next;
     });
@@ -306,12 +310,10 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const storeBulkInputAsTemplate = useCallback(() => {
     setBulkTemplates((prev) => ({
       ...prev,
-      [bulkDialog.action]: {
+      [bulkDialog.action]: composeTemplate(bulkDialog.action, prev[bulkDialog.action], {
         comment: bulkDialog.comment,
-        ...(bulkDialog.action === "reject"
-          ? { reasonCode: bulkDialog.reasonCode }
-          : { reasonCode: prev[bulkDialog.action]?.reasonCode }),
-      },
+        reasonCode: bulkDialog.reasonCode,
+      }),
     }));
   }, [bulkDialog]);
 
@@ -320,15 +322,12 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     setBulkDialog((prev) => ({
       ...prev,
       comment: template?.comment ?? "",
-      reasonCode:
-        bulkDialog.action === "reject"
-          ? template?.reasonCode ?? ""
-          : prev.reasonCode,
+      reasonCode: bulkDialog.action === "reject" ? template?.reasonCode ?? "" : prev.reasonCode,
     }));
   }, [bulkDialog.action, bulkTemplates]);
 
   const closeTemplateDialog = useCallback(() => {
-    setTemplateDraft((prev) => ({ ...prev, ...bulkTemplates }));
+    setTemplateDraft(bulkTemplates);
     setTemplateDialogOpen(false);
   }, [bulkTemplates]);
 
