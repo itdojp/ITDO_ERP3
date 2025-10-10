@@ -411,6 +411,27 @@ export function createTestServer(options = {}) {
       res.json({ items: sliced, total: dataset.length, limit, offset, order: sortOrder, sort: sortField });
     });
 
+    app.get('/health/telemetry', (req, res) => {
+      const total = telemetryLog.length;
+      const seededEvents = telemetryLog.filter(
+        (item) => item?.detail && typeof item.detail === 'object' && item.detail.seeded === true,
+      );
+      const lastEvent = total > 0 ? telemetryLog[telemetryLog.length - 1] : null;
+      const lastSeeded = seededEvents.length > 0 ? seededEvents[seededEvents.length - 1] : null;
+      const status = seededEvents.length > 0 ? 'ok' : 'empty';
+      res.json({
+        status,
+        message: status === 'ok' ? 'telemetry events available' : 'no seeded telemetry events recorded',
+        events: {
+          total,
+          seeded: seededEvents.length,
+          lastEventAt: lastEvent?.timestamp ?? null,
+          lastSeededAt: lastSeeded?.timestamp ?? null,
+        },
+        fallbackActive: false,
+      });
+    });
+
     app.post('/api/v1/projects', (req, res) => {
       const { code, name, clientName, status = 'planned', startOn, endOn, manager, health = 'green', tags = [] } = req.body || {};
       if (!name) {

@@ -341,4 +341,13 @@ describe('Telemetry API', () => {
     expect(secondPage.body.items[0].event).toBe('evt-6');
     expect(secondPage.body.offset).toBe(3);
   });
+
+  test('exposes telemetry health summary', async () => {
+    const { app: telemetryApp } = createTestServer({ enableRest: true, seedTelemetry: true });
+
+    const res = await request(telemetryApp).get('/health/telemetry').expect(200);
+    expect(res.body.status).toBe('ok');
+    expect(res.body.events.total).toBeGreaterThan(0);
+    expect(res.body.events.seeded).toBeGreaterThan(0);
+  });
 });
