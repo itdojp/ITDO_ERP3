@@ -206,21 +206,32 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const closeDialog = () => setDialog(initialDialog);
   const closeBulkDialog = () => setBulkDialog(initialBulkDialog);
 
+  const buildBulkActionPayload = useCallback(
+    (action: TimesheetAction, comment: string, reasonCode: string): ActionPayload | undefined => {
+      const trimmedComment = comment.trim();
+      const trimmedReason = reasonCode.trim();
+      if (!trimmedComment && !(action === "reject" && trimmedReason)) {
+        return undefined;
+      }
+      return {
+        comment: trimmedComment || undefined,
+        reasonCode: action === "reject" ? (trimmedReason || undefined) : undefined,
+      };
+    },
+    [],
+  );
+
   const submitBulkDialog = () => {
-    const targets = timesheets.filter((entry) => bulkDialog.targetIds.includes(entry.id));
-    if (targets.length === 0) {
+    if (bulkTargets.length === 0) {
       closeBulkDialog();
       return;
     }
-    const comment = bulkDialog.comment.trim();
-    const reason = bulkDialog.reasonCode.trim();
-    const payload: ActionPayload | undefined = comment || (bulkDialog.action === "reject" && reason)
-      ? {
-          comment: comment || undefined,
-          reasonCode: bulkDialog.action === "reject" ? (reason || undefined) : undefined,
-        }
-      : undefined;
-    void executeBulkAction(bulkDialog.action, targets, payload);
+    const payload = buildBulkActionPayload(
+      bulkDialog.action,
+      bulkDialog.comment,
+      bulkDialog.reasonCode,
+    );
+    void executeBulkAction(bulkDialog.action, bulkTargets, payload);
     closeBulkDialog();
   };
 
