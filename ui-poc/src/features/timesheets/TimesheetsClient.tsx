@@ -96,10 +96,10 @@ const TEMPLATE_ACTION_SETTINGS: Array<{ action: TimesheetAction; label: string; 
   { action: "resubmit", label: "Resubmit テンプレート", allowReason: false },
 ];
 
-const composeTemplate = (
-  action: TimesheetAction,
-  base: BulkTemplate | undefined,
-  patch?: Partial<BulkTemplate>,
+  const composeTemplate = (
+    action: TimesheetAction,
+    base: BulkTemplate | undefined,
+    patch?: Partial<BulkTemplate>,
 ): BulkTemplate => {
   const comment = patch?.comment ?? base?.comment ?? "";
   if (action === "reject") {
@@ -133,6 +133,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const [bulkTemplates, setBulkTemplates] = useState<Record<TimesheetAction, BulkTemplate>>(defaultBulkTemplates);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateDraft, setTemplateDraft] = useState<Record<TimesheetAction, BulkTemplate>>(defaultBulkTemplates);
+  const [templateDialogMessage, setTemplateDialogMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState(initialMeta);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
@@ -181,6 +182,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
   const keywordRef = useRef(appliedKeyword);
   const managerRef = useRef(appliedManager);
   const projectCodeRef = useRef(appliedProjectCode);
+  const templateFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filtered = useMemo(() => {
     const keyword = appliedKeyword.trim().toLowerCase();
@@ -330,6 +332,62 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
     setTemplateDraft(bulkTemplates);
     setTemplateDialogOpen(false);
   }, [bulkTemplates]);
+
+  const openTemplateDialog = useCallback(() => {
+    setTemplateDraft(bulkTemplates);
+    setTemplateDialogMessage(null);
+    setTemplateDialogOpen(true);
+  }, [bulkTemplates]);
+
+  const handleExportTemplates = useCallback(() => {
+    const payload = JSON.stringify({ version: 1, templates: bulkTemplates }, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `timesheet-bulk-templates-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setTemplateDialogMessage('テンプレートをエクスポートしました');
+  }, [bulkTemplates]);
+
+  const handleImportTemplates = useCallback(
+    async (file: File) => {
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const candidate = (parsed?.templates ?? parsed) as Record<string, unknown> | undefined;
+        if (!candidate || typeof candidate !== 'object') {
+          throw new Error('templates フィールドが見つかりません');
+        }
+        const allowedActions = Object.keys(defaultBulkTemplates) as TimesheetAction[];
+        const next: Record<TimesheetAction, BulkTemplate> = { ...defaultBulkTemplates };
+        allowedActions.forEach((action) => {
+          const item = candidate[action];
+          if (item && typeof item === 'object') {
+            const payload = item as Partial<BulkTemplate>;
+            next[action] = composeTemplate(action, next[action], payload);
+          }
+        });
+        setBulkTemplates(next);
+        setTemplateDraft(next);
+        setTemplateDialogMessage('テンプレートをインポートしました');
+      } catch (error) {
+        console.warn('[timesheets] failed to import templates', error);
+        setTemplateDialogMessage('テンプレートの読み込みに失敗しました');
+      }
+    },
+    [],
+  );
+
+  const handleTemplateFileChange = useCallback(
+    async (file: File) => {
+      await handleImportTemplates(file);
+    },
+    [handleImportTemplates],
+  );
 
   const submitBulkDialog = () => {
     if (bulkTargets.length === 0) {
@@ -1291,10 +1349,7 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           })}
           <button
             type="button"
-            onClick={() => {
-              setTemplateDraft(bulkTemplates);
-              setTemplateDialogOpen(true);
-            }}
+            onClick={openTemplateDialog}
             className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
           >
             テンプレ設定
@@ -1565,6 +1620,39 @@ export function TimesheetsClient({ initialTimesheets }: TimesheetsClientProps) {
           <div className="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900/90 p-6 text-sm text-slate-200 shadow-lg">
             <h3 className="text-lg font-semibold text-white">バルクコメントテンプレ設定</h3>
             <p className="mt-1 text-xs text-slate-400">Reject / Resubmit 用の定型文を編集できます。</p>
+            {templateDialogMessage ? (
+              <p className="mt-2 text-xs text-emerald-300">{templateDialogMessage}</p>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              <button
+                type="button"
+                onClick={handleExportTemplates}
+                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+              >
+                JSON をエクスポート
+              </button>
+              <button
+                type="button"
+                onClick={() => templateFileInputRef.current?.click()}
+                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
+              >
+                JSON を読み込む
+              </button>
+            </div>
+            <input
+              ref={templateFileInputRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void handleTemplateFileChange(file);
+                }
+                event.target.value = "";
+              }}
+            />
 
             <div className="mt-4 space-y-4">
               {TEMPLATE_ACTION_SETTINGS.map(({ action, label, allowReason }) => {
