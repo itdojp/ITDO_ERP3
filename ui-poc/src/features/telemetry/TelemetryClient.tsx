@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { resolveApiBase, reportClientTelemetry } from '@/lib/telemetry';
+import { collectRelatedLinks } from './link-utilities';
 import { useTelemetryFiltersContext } from '@/contexts/telemetry/TelemetryFiltersContext';
 import type { TelemetryItem, TelemetryResponse, TelemetryFilters } from './types';
 import { DEFAULT_TELEMETRY_FILTERS } from './types';
@@ -134,52 +135,7 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selectedItem = useMemo(() => (selectedIndex !== null ? renderedItems[selectedIndex] ?? null : null), [renderedItems, selectedIndex]);
   const { projectLinks, slackLinks } = useMemo(() => {
-    if (!selectedItem?.detail || typeof selectedItem.detail !== 'object') {
-      return { projectLinks: [] as Array<{ href: string; label: string }>, slackLinks: [] as string[] };
-    }
-    const entries = extractStringEntries(selectedItem.detail);
-    const slackSet = new Set<string>();
-    entries.forEach(({ value }) => {
-      const trimmed = value.trim();
-      if (!trimmed) return;
-      if (/^https?:\/\//i.test(trimmed) && /slack\.com/i.test(trimmed)) {
-        slackSet.add(trimmed);
-      } else if (/^slack:\/\//i.test(trimmed)) {
-        slackSet.add(trimmed);
-      }
-    });
-    const slackLinks = Array.from(slackSet);
-    const projectLinkSet = new Set<string>();
-    const projectLinks: Array<{ href: string; label: string }> = [];
-    const direct = selectedItem.detail as Record<string, unknown>;
-    const shareUrlField = typeof direct.shareUrl === 'string' ? direct.shareUrl.trim() : '';
-    const entriesByPriority = [...entries];
-    const shareEntry = entriesByPriority.find(({ value, path }) => {
-      const trimmed = value.trim();
-      if (!trimmed) return false;
-      if (/^https?:\/\//i.test(trimmed) && /\/projects\b/i.test(trimmed)) return true;
-      return /shareurl|projecturl/i.test(path) && /^https?:\/\//i.test(trimmed);
-    });
-    const registerProjectLink = (href: string, label: string) => {
-      const trimmed = href.trim();
-      if (!trimmed || projectLinkSet.has(trimmed)) return;
-      projectLinkSet.add(trimmed);
-      projectLinks.push({ href: trimmed, label });
-    };
-    if (shareEntry) {
-      registerProjectLink(shareEntry.value, 'Projects 画面で開く');
-    }
-    if (shareUrlField) {
-      registerProjectLink(shareUrlField, 'Projects 共有リンク');
-    }
-    if (projectLinks.length === 0) {
-      const identifierEntry = entries.find(({ path }) => /project(id|code)$/i.test(path));
-      const identifier = identifierEntry?.value.trim();
-      if (identifier) {
-        registerProjectLink(`${PROJECTS_PAGE_PATH}?keyword=${encodeURIComponent(identifier)}`, `Projects: ${identifier}`);
-      }
-    }
-    return { projectLinks, slackLinks };
+    return collectRelatedLinks(selectedItem?.detail ?? null, { projectsPagePath: PROJECTS_PAGE_PATH });
   }, [selectedItem]);
 
   const highlightMatches = useMemo(() => {
@@ -500,7 +456,7 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
             <div><dt className="text-slate-500">Origin</dt><dd>{selectedItem.origin ?? 'n/a'}</dd></div>
           </dl>
           <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-            {projectLinks.length > 0 || slackLinks.length > 0 ? (
+              {projectLinks.length > 0 || slackLinks.length > 0 ? (
               <div className="mb-3 space-y-2">
                 <p className="text-xs uppercase tracking-wide text-slate-400">関連リンク</p>
                 <div className="flex flex-wrap gap-2">
@@ -555,49 +511,4 @@ export function TelemetryClient({ initialData, pollIntervalMs }: TelemetryClient
 
     </div>
   );
-}
-
-type StringEntry = { path: string; value: string };
-
-function extractStringEntries(root: unknown): StringEntry[] {
-  const result: StringEntry[] = [];
-  const stack: Array<{ value: unknown; path: string }> = [{ value: root, path: '' }];
-  const visited = new Set<unknown>();
-  while (stack.length > 0) {
-    const popped = stack.pop();
-    if (!popped) {
-      continue;
-    }
-    const { value, path } = popped;
-    if (value === null || value === undefined) {
-      continue;
-    }
-    if (typeof value === 'string') {
-      result.push({ path, value });
-      continue;
-    }
-    if (typeof value !== 'object') {
-      continue;
-    }
-    if (visited.has(value)) {
-      continue;
-    }
-    visited.add(value);
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => {
-        stack.push({
-          value: item,
-          path: path ? `${path}[${index}]` : `[${index}]`,
-        });
-      });
-    } else {
-      Object.entries(value).forEach(([key, child]) => {
-        stack.push({
-          value: child,
-          path: path ? `${path}.${key}` : key,
-        });
-      });
-    }
-  }
-  return result;
 }
