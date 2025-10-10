@@ -5,11 +5,32 @@ import json
 import sys
 from pathlib import Path
 
-DASHBOARD_DIR = Path("poc/event-backbone/local/grafana/dashboards")
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = SCRIPT_DIR.parent
+DASHBOARD_DIR = ROOT_DIR / "poc" / "event-backbone" / "local" / "grafana" / "dashboards"
 
 
 class DashboardError(Exception):
     pass
+
+
+def validate_field(
+    mapping: dict,
+    key: str,
+    expected_type: type,
+    context: str,
+    description: str,
+) -> object:
+    if key not in mapping:
+        raise DashboardError(f"{context}: missing key '{key}'")
+    value = mapping[key]
+    if not isinstance(value, expected_type):
+        raise DashboardError(f"{context}: {key} must be {description}")
+    if isinstance(value, str) and not value.strip():
+        raise DashboardError(f"{context}: {key} must be {description}")
+    if isinstance(value, list) and not value:
+        raise DashboardError(f"{context}: {key} must be {description}")
+    return value
 
 
 def validate_dashboard(path: Path) -> None:
@@ -17,23 +38,20 @@ def validate_dashboard(path: Path) -> None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise DashboardError(f"{path}: invalid JSON ({exc})") from exc
+    validate_field(data, "title", str, f"{path}", "a non-empty string")
+    validate_field(data, "uid", str, f"{path}", "a non-empty string")
+    panels = validate_field(data, "panels", list, f"{path}", "a non-empty list")
 
-    for key in ("title", "uid", "panels"):
-        if key not in data:
-            raise DashboardError(f"{path}: missing key '{key}'")
-
-    if not isinstance(data["title"], str) or not data["title"].strip():
-        raise DashboardError(f"{path}: title must be a non-empty string")
-    if not isinstance(data["uid"], str) or not data["uid"].strip():
-        raise DashboardError(f"{path}: uid must be a non-empty string")
-    if not isinstance(data["panels"], list) or not data["panels"]:
-        raise DashboardError(f"{path}: panels must be a non-empty list")
-
-    for index, panel in enumerate(data["panels"], start=1):
+    for index, panel in enumerate(panels, start=1):
         if not isinstance(panel, dict):
             raise DashboardError(f"{path}: panel #{index} is not an object")
-        if "title" not in panel:
-            raise DashboardError(f"{path}: panel #{index} missing title")
+        validate_field(
+            panel,
+            "title",
+            str,
+            f"{path}: panel #{index}",
+            "a non-empty string",
+        )
 
 
 def main(argv: list[str]) -> int:
