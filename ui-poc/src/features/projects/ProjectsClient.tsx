@@ -117,6 +117,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [appliedHealth, setAppliedHealth] = useState<"" | ProjectItem["health"]>("");
   const [shareUrl, setShareUrl] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [slackCopyState, setSlackCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const toggleTagSelection = useCallback((tag: string) => {
     setSelectedTags((prev) => {
@@ -150,6 +151,71 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       setTimeout(() => setCopyState('idle'), 2000);
     }
   }, [shareUrl]);
+
+  const handleCopySlackTemplate = useCallback(async () => {
+    if (typeof window === "undefined") {
+      setSlackCopyState("error");
+      return;
+    }
+    const baseUrl = shareUrl || window.location.toString();
+    if (!baseUrl) {
+      setSlackCopyState("error");
+      return;
+    }
+    const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
+    const titleInput = window.prompt("Slack メッセージのタイトル", "Projects 共有リンク");
+    if (titleInput === null) {
+      return;
+    }
+    const notesInput = window.prompt("補足メモ（任意）", "");
+    const timestamp = new Date().toLocaleString("ja-JP", { hour12: false });
+    const bulletLines: string[] = [];
+    const trimmedKeyword = appliedKeyword.trim();
+    const trimmedManager = appliedManager.trim();
+    const trimmedHealth = appliedHealth.trim();
+    if (filter !== "all") {
+      bulletLines.push(`• ステータス: *${statusLabel}*`);
+    }
+    if (trimmedKeyword.length > 0) {
+      bulletLines.push(`• キーワード: \`${trimmedKeyword}\``);
+    }
+    if (trimmedManager.length > 0) {
+      bulletLines.push(`• マネージャ: ${trimmedManager}`);
+    }
+    if (trimmedHealth.length > 0) {
+      bulletLines.push(`• ヘルス: ${trimmedHealth}`);
+    }
+    const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
+    if (tagValues.length > 0) {
+      bulletLines.push(`• タグ: ${tagValues.join(", ")}`);
+    }
+    if (notesInput && notesInput.trim().length > 0) {
+      bulletLines.push(`• メモ: ${notesInput.trim()}`);
+    }
+    if (bulletLines.length === 0) {
+      bulletLines.push("• フィルタ: 指定なし");
+    }
+    const title = titleInput.trim().length > 0 ? titleInput.trim() : "Projects 共有リンク";
+    const message = [
+      `:clipboard: *${title}* _(${timestamp})_`,
+      baseUrl,
+      "",
+      ...bulletLines,
+    ].join("\n");
+    if (!navigator.clipboard) {
+      setSlackCopyState("error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(message);
+      setSlackCopyState("copied");
+      setTimeout(() => setSlackCopyState("idle"), 2000);
+    } catch (error) {
+      console.warn("[projects] failed to copy slack template", error);
+      setSlackCopyState("error");
+      setTimeout(() => setSlackCopyState("idle"), 2000);
+    }
+  }, [shareUrl, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags]);
 
   const matchesProjectTags = useCallback(
     (project: ProjectItem, manualTagValue: string, selectedTagValues: readonly string[]) => {
@@ -1229,6 +1295,17 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-sky-400 hover:text-sky-100"
         >
           {copyState === 'copied' ? 'リンクをコピーしました' : copyState === 'error' ? 'コピーできませんでした' : 'リンクをコピー'}
+        </button>
+        <button
+          type="button"
+          onClick={handleCopySlackTemplate}
+          className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-emerald-400 hover:text-emerald-100"
+        >
+          {slackCopyState === "copied"
+            ? "Slack テンプレをコピーしました"
+            : slackCopyState === "error"
+              ? "Slack テンプレを生成できませんでした"
+              : "Slack テンプレをコピー"}
         </button>
         {listLoading ? <span className="text-sky-300">読み込み中...</span> : null}
         {loadingMore ? <span className="text-sky-300">追加読み込み中...</span> : null}
