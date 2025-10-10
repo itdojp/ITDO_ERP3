@@ -80,8 +80,6 @@ export function collectRelatedLinks(detail: unknown, options: LinkOptions = {}):
   });
 
   const slackLinks = Array.from(slackSet);
-  const projectLinkSet = new Set<string>();
-  const projectLinks: Array<{ href: string; label: string }> = [];
   const direct = detail as Record<string, unknown>;
   const shareUrlField = typeof direct.shareUrl === 'string' ? direct.shareUrl.trim() : '';
   const shareEntry = entries.find(({ value, path }) => {
@@ -91,6 +89,8 @@ export function collectRelatedLinks(detail: unknown, options: LinkOptions = {}):
     return /shareurl|projecturl/i.test(path) && SLACK_HTTP_REGEX.test(trimmed);
   });
 
+  const projectLinkSet = new Set<string>();
+  const projectLinks: Array<{ href: string; label: string }> = [];
   const registerProjectLink = (href: string, label: string) => {
     const trimmed = href.trim();
     if (!trimmed || projectLinkSet.has(trimmed)) return;
@@ -114,4 +114,3 @@ export function collectRelatedLinks(detail: unknown, options: LinkOptions = {}):
 
   return { projectLinks, slackLinks };
 }
-
