@@ -11,6 +11,8 @@ npm install
 cp .env.local.example .env.local  # 必要に応じて API エンドポイントを調整
 ```
 
+`.env.local` に `NEXT_PUBLIC_SLACK_WORKSPACE_URL=https://example.slack.com` を設定すると、Telemetry 画面の Slack リンクが自社ワークスペースの URL へ変換されます。
+
 ## 起動
 
 ### バックエンドとフロントを個別に起動する場合
