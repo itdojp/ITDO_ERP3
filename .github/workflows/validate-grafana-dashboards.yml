@@ -1,0 +1,21 @@
+name: Validate Grafana Dashboards
+
+on:
+  push:
+    paths:
+      - 'poc/event-backbone/local/grafana/dashboards/**/*.json'
+      - 'scripts/validate_grafana_dashboards.py'
+      - '.github/workflows/validate-grafana-dashboards.yml'
+  pull_request:
+    paths:
+      - 'poc/event-backbone/local/grafana/dashboards/**/*.json'
+      - 'scripts/validate_grafana_dashboards.py'
+      - '.github/workflows/validate-grafana-dashboards.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate dashboards
+        run: scripts/validate_grafana_dashboards.py
