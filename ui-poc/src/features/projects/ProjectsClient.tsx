@@ -17,6 +17,7 @@ const statusFilters: Array<{ value: "all" | ProjectStatus; label: string }> = [
 ];
 
 const popularTags = ["DX", "Compliance", "Risk", "Priority", "SAP", "AMS"] as const;
+const popularTagLookup = new Map(popularTags.map((tag) => [tag.toLowerCase(), tag]));
 
 const transitions: Record<ProjectStatus, ProjectAction[]> = {
   planned: ["activate", "close"],
@@ -114,6 +115,32 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     });
   }, []);
 
+  const normalizeTagLabel = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const popularMatch = popularTagLookup.get(trimmed.toLowerCase());
+    return popularMatch ?? trimmed;
+  }, []);
+
+  const matchesProjectTags = useCallback(
+    (project: ProjectItem, manualTagValue: string, selectedTagValues: readonly string[]) => {
+      const tagList = Array.isArray(project.tags)
+        ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
+        : [];
+      if (manualTagValue && !tagList.includes(manualTagValue)) {
+        return false;
+      }
+      if (selectedTagValues.length > 0) {
+        const hasMatch = selectedTagValues.some((value) => tagList.includes(value));
+        if (!hasMatch) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [],
+  );
+
   const tagFiltersLower = useMemo(() => {
     const manual = appliedTag.trim().toLowerCase();
     const selected = appliedSelectedTags.map((value) => value.toLowerCase());
@@ -125,6 +152,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     const keyword = appliedKeyword.trim().toLowerCase();
     const manager = appliedManager.trim().toLowerCase();
     const health = appliedHealth;
+    const manual = appliedTag.trim().toLowerCase();
     return projects.filter((project) => {
       const statusMatch = filter === "all" || project.status === filter;
       if (!statusMatch) return false;
@@ -137,20 +165,14 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           return false;
         }
       }
-      if (tagFiltersLower.length > 0) {
-        const tagList = Array.isArray(project.tags)
-          ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
-          : [];
-        const hasMatch = tagFiltersLower.some((value) => tagList.includes(value));
-        if (!hasMatch) {
-          return false;
-        }
+      if (!matchesProjectTags(project, manual, tagFiltersLower)) {
+        return false;
       }
       if (!keyword) return true;
       const haystack = `${project.name} ${project.code ?? ""} ${project.clientName ?? ""}`.toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [projects, filter, appliedKeyword, appliedManager, appliedHealth, tagFiltersLower]);
+  }, [projects, filter, appliedKeyword, appliedManager, appliedTag, appliedHealth, matchesProjectTags, tagFiltersLower]);
 
   const normalizeProject = useCallback((project: Partial<ProjectItem> | undefined | null): ProjectItem | null => {
     if (!project?.id) return null;
@@ -225,22 +247,6 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         }
       };
 
-      const matchesTagFilters = (project: ProjectItem) => {
-        const tagList = Array.isArray(project.tags)
-          ? project.tags.filter(Boolean).map((value) => value.toLowerCase())
-          : [];
-        if (manualTag && !tagList.includes(manualTag)) {
-          return false;
-        }
-        if (selectedTagsLower.length > 0) {
-          const hasMatch = selectedTagsLower.some((value) => tagList.includes(value));
-          if (!hasMatch) {
-            return false;
-          }
-        }
-        return true;
-      };
-
       try {
         const gql = await graphqlRequest<{
           projects?: Partial<ProjectItem>[];
@@ -259,7 +265,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         const normalized = items
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
-        const filtered = normalized.filter(matchesTagFilters);
+        const filtered = normalized.filter((project) => matchesProjectTags(project, manualTag, selectedTagsLower));
         assignProjects(filtered, false);
         finishLoading();
         return;
@@ -300,7 +306,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               return false;
             }
           }
-          if (!matchesTagFilters(project)) {
+          if (!matchesProjectTags(project, manualTag, selectedTagsLower)) {
             return false;
           }
           if (trimmedKeyword.length > 0) {
@@ -353,7 +359,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               return false;
             }
           }
-          if (!matchesTagFilters(project)) {
+          if (!matchesProjectTags(project, manualTag, selectedTagsLower)) {
             return false;
           }
           if (trimmedKeyword.length > 0) {
@@ -366,7 +372,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         finishLoading();
       }
     },
-    [normalizeProject],
+    [normalizeProject, matchesProjectTags],
   );
 
   useEffect(() => {
@@ -463,13 +469,6 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       return;
     }
 
-    const normalizeTagLabel = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) return "";
-      const popularMatch = popularTags.find((item) => item.toLowerCase() === trimmed.toLowerCase());
-      return popularMatch ?? trimmed;
-    };
-
     const isSameSelection = (next: string[], prev: string[]) =>
       next.length === prev.length && next.every((value, index) => value === prev[index]);
 
@@ -531,7 +530,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           .map((value) => normalizeTagLabel(String(value)))
           .filter(Boolean);
       }
-      normalizedSelectedTags = normalizedSelectedTags.filter((value, index, array) => array.indexOf(value) === index);
+      normalizedSelectedTags = [...new Set(normalizedSelectedTags)];
 
       let normalizedHealth: "" | ProjectItem["health"] = "";
       const healthCandidate = (healthFromQuery ?? stored?.health ?? "").trim();
@@ -591,7 +590,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, []);
+  }, [normalizeTagLabel]);
 
   useEffect(() => {
     void fetchProjects(filter, appliedKeyword, {
