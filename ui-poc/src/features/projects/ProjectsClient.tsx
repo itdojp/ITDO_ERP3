@@ -365,10 +365,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
         const normalized = items
           .map((item) => normalizeProject(item))
           .filter(Boolean) as ProjectItem[];
-        const filtered = normalized.filter((project) =>
-          matchesProjectTags(project, manualTag, selectedTagsLower),
-        );
-        const fallbackCursor = filtered.length > 0 ? filtered[filtered.length - 1].id : cursorValue ?? null;
+        const filtered = normalized.filter((project) => matchesProjectTags(project, manualTag, selectedTagsLower));
+        const fallbackCursor = filtered.length > 0 ? filtered[filtered.length - 1]?.id ?? null : null;
         applyResult({
           items: filtered,
           fallback: gql.projects?.meta?.fallback ?? false,
@@ -520,26 +518,35 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     [normalizeProject, matchesProjectTags],
   );
 
+  const resolveAppendCursor = useCallback(() => {
+    if (nextCursor != null) {
+      return nextCursor;
+    }
+    if (projects.length === 0) {
+      return null;
+    }
+    const lastProject = projects[projects.length - 1];
+    return lastProject?.id ?? null;
+  }, [nextCursor, projects]);
+
   const handleLoadMore = useCallback(() => {
     if (!hasMore || loadingMore || listLoading) {
       return;
     }
-    const fallbackCursor =
-      nextCursor ?? (projects.length > 0 ? projects[projects.length - 1]?.id ?? null : null);
+    const cursorForAppend = resolveAppendCursor();
     void fetchProjects(filter, appliedKeyword, {
       manager: appliedManager,
       health: appliedHealth || undefined,
       tag: appliedTag,
       tags: appliedSelectedTags,
-      cursor: fallbackCursor,
+      cursor: cursorForAppend,
       mode: "append",
     });
   }, [
     hasMore,
     loadingMore,
     listLoading,
-    nextCursor,
-    projects,
+    resolveAppendCursor,
     fetchProjects,
     filter,
     appliedKeyword,

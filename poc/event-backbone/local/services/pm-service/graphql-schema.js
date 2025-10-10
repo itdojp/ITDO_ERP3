@@ -368,12 +368,12 @@ export function createGraphQLSchema({
             return haystack.includes(keyword);
           });
           const cursorIndex = cursorValue
-            ? filteredProjects.findIndex((project) => project.id === cursorValue || project.code === cursorValue)
+            ? filteredProjects.findIndex((project) => project.id === cursorValue)
             : -1;
           const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
           const slice = filteredProjects.slice(startIndex, startIndex + limit);
           const hasNextPage = startIndex + slice.length < filteredProjects.length;
-          const endCursor = slice.length > 0 ? slice[slice.length - 1].id : cursorValue || null;
+          const endCursor = slice.length > 0 ? slice[slice.length - 1].id : null;
           const fetchedAt = new Date().toISOString();
           return {
             items: cloneDeep(slice),
