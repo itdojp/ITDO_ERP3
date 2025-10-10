@@ -58,7 +58,7 @@ type QuerySource = "api" | "mock";
 export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const initialMeta: NonNullable<ProjectListResponse['meta']> =
     initialProjects.meta ?? {
-      total: 0,
+      total: initialProjects.items.length,
       fetchedAt: new Date().toISOString(),
       fallback: true,
     };
