@@ -2,6 +2,7 @@ name: Projects Slack Share Check
 
 on:
   schedule:
+    # Runs weekly on Mondays at 2 AM UTC
     - cron: '0 2 * * 1'
   workflow_dispatch: {}
 
