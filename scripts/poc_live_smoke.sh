@@ -60,14 +60,6 @@ TELEMETRY_SEED_ATTEMPTS_USED=0
 TELEMETRY_SEED_RESET_COUNT=0
 TELEMETRY_SEED_ENDPOINT="${TELEMETRY_SEED_ENDPOINT:-http://localhost:${PM_PORT}/api/v1/telemetry/ui?limit=50}"
 TELEMETRY_MIN_SEEDED="${TELEMETRY_MIN_SEEDED:-5}"
-TELEMETRY_HEALTH_ENDPOINT="${TELEMETRY_HEALTH_ENDPOINT:-http://localhost:${PM_PORT}/health/telemetry}"
-TELEMETRY_HEALTH_STATUS="unknown"
-TELEMETRY_HEALTH_MESSAGE=""
-TELEMETRY_HEALTH_TOTAL="unknown"
-TELEMETRY_HEALTH_SEEDED="unknown"
-TELEMETRY_HEALTH_LAST_EVENT=""
-TELEMETRY_HEALTH_LAST_SEEDED=""
-TELEMETRY_HEALTH_FALLBACK="unknown"
 
 usage() {
   cat <<USAGE
@@ -211,7 +203,6 @@ write_summary() {
   if [[ "${fallback,,}" == "true" ]]; then
     fallback_json=true
   fi
-  collect_telemetry_health_summary || true
   local telemetry_status="${TELEMETRY_SEED_STATUS:-unknown}"
   local telemetry_seeded="${TELEMETRY_SEEDED_COUNT:-unknown}"
   local telemetry_attempts="${TELEMETRY_SEED_ATTEMPTS_USED:-0}"
@@ -222,22 +213,6 @@ write_summary() {
   local telemetry_attempts_json="\"${telemetry_attempts}\""
   if [[ "${telemetry_attempts}" =~ ^[0-9]+$ ]]; then
     telemetry_attempts_json="${telemetry_attempts}"
-  fi
-  local tele_health_total_json="\"${TELEMETRY_HEALTH_TOTAL}\""
-  if [[ "${TELEMETRY_HEALTH_TOTAL}" =~ ^[0-9]+$ ]]; then
-    tele_health_total_json="${TELEMETRY_HEALTH_TOTAL}"
-  fi
-  local tele_health_seeded_json="\"${TELEMETRY_HEALTH_SEEDED}\""
-  if [[ "${TELEMETRY_HEALTH_SEEDED}" =~ ^[0-9]+$ ]]; then
-    tele_health_seeded_json="${TELEMETRY_HEALTH_SEEDED}"
-  fi
-  local tele_health_fallback_json=false
-  if [[ "${TELEMETRY_HEALTH_FALLBACK}" =~ ^(true|True|TRUE)$ ]]; then
-    tele_health_fallback_json=true
-  elif [[ "${TELEMETRY_HEALTH_FALLBACK}" =~ ^(false|False|FALSE)$ ]]; then
-    tele_health_fallback_json=false
-  else
-    tele_health_fallback_json=false
   fi
   mkdir -p "${LOG_DIR}"
   cat >"${file}" <<JSON
@@ -251,17 +226,6 @@ write_summary() {
     "status": "${telemetry_status}",
     "seeded_count": ${telemetry_seeded_json},
     "attempts": ${telemetry_attempts_json}
-  },
-  "telemetry_health": {
-    "status": "${TELEMETRY_HEALTH_STATUS}",
-    "message": "${TELEMETRY_HEALTH_MESSAGE}",
-    "events": {
-      "total": ${tele_health_total_json},
-      "seeded": ${tele_health_seeded_json},
-      "last_event_at": "${TELEMETRY_HEALTH_LAST_EVENT}",
-      "last_seeded_at": "${TELEMETRY_HEALTH_LAST_SEEDED}"
-    },
-    "fallback_active": ${tele_health_fallback_json}
   }
 }
 JSON
@@ -494,83 +458,6 @@ PY2
   else
     TELEMETRY_SEEDED_COUNT="unknown"
   fi
-  return 0
-}
-
-collect_telemetry_health_summary() {
-  local url="${TELEMETRY_HEALTH_ENDPOINT:-http://localhost:${PM_PORT}/health/telemetry}"
-  TELEMETRY_HEALTH_STATUS="unknown"
-  TELEMETRY_HEALTH_MESSAGE=""
-  TELEMETRY_HEALTH_TOTAL="unknown"
-  TELEMETRY_HEALTH_SEEDED="unknown"
-  TELEMETRY_HEALTH_LAST_EVENT=""
-  TELEMETRY_HEALTH_LAST_SEEDED=""
-  TELEMETRY_HEALTH_FALLBACK="unknown"
-
-  local response
-  if ! response=$(curl -fsS "$url" 2>/dev/null); then
-    TELEMETRY_HEALTH_MESSAGE="request failed"
-    return 1
-  fi
-
-  local interpreter=""
-  for candidate in "${PYTHON_BIN:-}" python3 python; do
-    if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
-      interpreter="$candidate"
-      break
-    fi
-  done
-  if [[ -z "$interpreter" ]]; then
-    TELEMETRY_HEALTH_MESSAGE="python interpreter not available"
-    return 1
-  fi
-
-  local parsed
-  set +e
-  parsed=$(SUMMARY_FILE=/dev/null printf '%s' "$response" | "$interpreter" <<'PY'
-import json, os, sys
-
-def emit(key, value):
-    import json
-    print(f"{key}={json.dumps(value)}")
-
-try:
-    data = json.load(sys.stdin)
-except Exception as exc:
-    emit('STATUS', 'error')
-    emit('MESSAGE', f'parse error: {exc}')
-    emit('TOTAL', 'unknown')
-    emit('SEEDED', 'unknown')
-    emit('LAST_EVENT', '')
-    emit('LAST_SEEDED', '')
-    emit('FALLBACK', 'unknown')
-    sys.exit(0)
-
-emit('STATUS', data.get('status', 'unknown'))
-emit('MESSAGE', data.get('message', ''))
-events = data.get('events') or {}
-emit('TOTAL', events.get('total', 'unknown'))
-emit('SEEDED', events.get('seeded', 'unknown'))
-emit('LAST_EVENT', events.get('lastEventAt', events.get('last_event_at', '')))
-emit('LAST_SEEDED', events.get('lastSeededAt', events.get('last_seeded_at', '')))
-emit('FALLBACK', data.get('fallbackActive', False))
-PY
-  )
-  local status=$?
-  set -e
-  if (( status != 0 )); then
-    TELEMETRY_HEALTH_MESSAGE="parser error"
-    return 1
-  fi
-
-  eval "$parsed"
-  TELEMETRY_HEALTH_STATUS="${STATUS:-unknown}"
-  TELEMETRY_HEALTH_MESSAGE="${MESSAGE:-}"
-  TELEMETRY_HEALTH_TOTAL="${TOTAL:-unknown}"
-  TELEMETRY_HEALTH_SEEDED="${SEEDED:-unknown}"
-  TELEMETRY_HEALTH_LAST_EVENT="${LAST_EVENT:-}"
-  TELEMETRY_HEALTH_LAST_SEEDED="${LAST_SEEDED:-}"
-  TELEMETRY_HEALTH_FALLBACK="${FALLBACK:-unknown}"
   return 0
 }
 
