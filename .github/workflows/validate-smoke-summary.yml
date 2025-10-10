@@ -1,0 +1,24 @@
+name: Validate Smoke Summary
+
+on:
+  push:
+    paths:
+      - 'scripts/poc_live_smoke.sh'
+      - 'scripts/validate_smoke_summary.py'
+      - 'scripts/samples/example_poc_smoke_summary.json'
+      - '.github/workflows/validate-smoke-summary.yml'
+  pull_request:
+    paths:
+      - 'scripts/poc_live_smoke.sh'
+      - 'scripts/validate_smoke_summary.py'
+      - 'scripts/samples/example_poc_smoke_summary.json'
+      - '.github/workflows/validate-smoke-summary.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate sample summary
+        run: |
+          scripts/validate_smoke_summary.py scripts/samples/example_poc_smoke_summary.json
