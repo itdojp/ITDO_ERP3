@@ -40,6 +40,33 @@ const HEALTH_CLASS: Record<string, string> = {
   red: "bg-rose-500",
 };
 
+const SHARE_PRESETS: Array<{ key: string; label: string; title: string; notes: string }> = [
+  {
+    key: "weekly",
+    label: "週次アップデート",
+    title: "Weekly Projects Update",
+    notes: "進捗サマリとフォローが必要な案件を共有してください",
+  },
+  {
+    key: "daily",
+    label: "日次スタンドアップ",
+    title: "Daily Projects Standup",
+    notes: "本日のフォーカスとブロッカーを共有してください",
+  },
+  {
+    key: "review",
+    label: "経営レビュー",
+    title: "Projects Exec Review",
+    notes: "リスクとマイルストーンの状況を確認しています",
+  },
+  {
+    key: "custom",
+    label: "カスタム",
+    title: "",
+    notes: "",
+  },
+];
+
 const STORAGE_KEY = "projects-filters-v1";
 
 type ProjectsClientProps = {
@@ -118,6 +145,8 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   const [shareUrl, setShareUrl] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [slackCopyState, setSlackCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [shareDialog, setShareDialog] = useState({ open: false, title: "Projects 共有リンク", notes: "", preset: "custom" });
+  const [shareDialogCopyState, setShareDialogCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const toggleTagSelection = useCallback((tag: string) => {
     setSelectedTags((prev) => {
@@ -152,70 +181,111 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     }
   }, [shareUrl]);
 
+  const composeSlackTemplate = useCallback(
+    (title: string, notes?: string | null) => {
+      if (typeof window === "undefined") {
+        return null;
+      }
+      const baseUrl = shareUrl || window.location.toString();
+      if (!baseUrl) {
+        return null;
+      }
+      const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
+      const timestamp = new Date().toLocaleString("ja-JP", { hour12: false });
+      const bulletLines: string[] = [];
+      const trimmedKeyword = appliedKeyword.trim();
+      const trimmedManager = appliedManager.trim();
+      const trimmedHealth = appliedHealth.trim();
+      if (filter !== "all") {
+        bulletLines.push(`• ステータス: *${statusLabel}*`);
+      }
+      if (trimmedKeyword.length > 0) {
+        bulletLines.push(`• キーワード: \`${trimmedKeyword}\``);
+      }
+      if (trimmedManager.length > 0) {
+        bulletLines.push(`• マネージャ: ${trimmedManager}`);
+      }
+      if (trimmedHealth.length > 0) {
+        bulletLines.push(`• ヘルス: ${trimmedHealth}`);
+      }
+      const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
+      if (tagValues.length > 0) {
+        bulletLines.push(`• タグ: ${tagValues.join(", ")}`);
+      }
+      const trimmedNotes = notes?.trim();
+      if (trimmedNotes) {
+        bulletLines.push(`• メモ: ${trimmedNotes}`);
+      }
+      if (bulletLines.length === 0) {
+        bulletLines.push("• フィルタ: 指定なし");
+      }
+      const effectiveTitle = title.trim().length > 0 ? title.trim() : "Projects 共有リンク";
+      return [
+        `:clipboard: *${effectiveTitle}* _(${timestamp})_`,
+        baseUrl,
+        "",
+        ...bulletLines,
+      ].join("\n");
+    },
+    [shareUrl, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags],
+  );
+
+  const copySlackTemplate = useCallback(
+    async (
+      message: string | null,
+      setState: React.Dispatch<React.SetStateAction<"idle" | "copied" | "error">>,
+    ) => {
+      if (!message || typeof navigator === "undefined" || !navigator.clipboard) {
+        setState("error");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(message);
+        setState("copied");
+        setTimeout(() => setState("idle"), 2000);
+      } catch (error) {
+        console.warn("[projects] failed to copy slack template", error);
+        setState("error");
+        setTimeout(() => setState("idle"), 2000);
+      }
+    },
+    [],
+  );
+
   const handleCopySlackTemplate = useCallback(async () => {
-    if (typeof window === "undefined") {
-      setSlackCopyState("error");
-      return;
-    }
-    const baseUrl = shareUrl || window.location.toString();
-    if (!baseUrl) {
-      setSlackCopyState("error");
-      return;
-    }
-    const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
-    const titleInput = window.prompt("Slack メッセージのタイトル", "Projects 共有リンク");
-    if (titleInput === null) {
-      return;
-    }
-    const notesInput = window.prompt("補足メモ（任意）", "");
-    const timestamp = new Date().toLocaleString("ja-JP", { hour12: false });
-    const bulletLines: string[] = [];
-    const trimmedKeyword = appliedKeyword.trim();
-    const trimmedManager = appliedManager.trim();
-    const trimmedHealth = appliedHealth.trim();
-    if (filter !== "all") {
-      bulletLines.push(`• ステータス: *${statusLabel}*`);
-    }
-    if (trimmedKeyword.length > 0) {
-      bulletLines.push(`• キーワード: \`${trimmedKeyword}\``);
-    }
-    if (trimmedManager.length > 0) {
-      bulletLines.push(`• マネージャ: ${trimmedManager}`);
-    }
-    if (trimmedHealth.length > 0) {
-      bulletLines.push(`• ヘルス: ${trimmedHealth}`);
-    }
-    const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
-    if (tagValues.length > 0) {
-      bulletLines.push(`• タグ: ${tagValues.join(", ")}`);
-    }
-    if (notesInput && notesInput.trim().length > 0) {
-      bulletLines.push(`• メモ: ${notesInput.trim()}`);
-    }
-    if (bulletLines.length === 0) {
-      bulletLines.push("• フィルタ: 指定なし");
-    }
-    const title = titleInput.trim().length > 0 ? titleInput.trim() : "Projects 共有リンク";
-    const message = [
-      `:clipboard: *${title}* _(${timestamp})_`,
-      baseUrl,
-      "",
-      ...bulletLines,
-    ].join("\n");
-    if (!navigator.clipboard) {
-      setSlackCopyState("error");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(message);
-      setSlackCopyState("copied");
-      setTimeout(() => setSlackCopyState("idle"), 2000);
-    } catch (error) {
-      console.warn("[projects] failed to copy slack template", error);
-      setSlackCopyState("error");
-      setTimeout(() => setSlackCopyState("idle"), 2000);
-    }
-  }, [shareUrl, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags]);
+    const message = composeSlackTemplate("Projects 共有リンク", "");
+    void copySlackTemplate(message, setSlackCopyState);
+  }, [composeSlackTemplate, copySlackTemplate]);
+
+  const openShareDialog = useCallback(() => {
+    const defaultPreset = SHARE_PRESETS[0];
+    setShareDialog({ open: true, title: defaultPreset.title, notes: defaultPreset.notes, preset: defaultPreset.key });
+    setShareDialogCopyState("idle");
+  }, []);
+
+  const closeShareDialog = () => setShareDialog((prev) => ({ ...prev, open: false }));
+
+  const handleSharePresetChange = (presetKey: string) => {
+    setShareDialog((prev) => {
+      const preset = SHARE_PRESETS.find((item) => item.key === presetKey) ?? SHARE_PRESETS[SHARE_PRESETS.length - 1];
+      if (preset.key === "custom") {
+        return { ...prev, preset: preset.key };
+      }
+      return {
+        ...prev,
+        preset: preset.key,
+        title: preset.title,
+        notes: preset.notes,
+      };
+    });
+  };
+
+  const sharePreview = useMemo(() => composeSlackTemplate(shareDialog.title, shareDialog.notes) ?? "", [composeSlackTemplate, shareDialog]);
+
+  const handleShareDialogCopy = useCallback(() => {
+    const message = composeSlackTemplate(shareDialog.title, shareDialog.notes);
+    void copySlackTemplate(message, setShareDialogCopyState);
+  }, [composeSlackTemplate, copySlackTemplate, shareDialog.title, shareDialog.notes]);
 
   const matchesProjectTags = useCallback(
     (project: ProjectItem, manualTagValue: string, selectedTagValues: readonly string[]) => {
@@ -1307,6 +1377,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               ? "Slack テンプレを生成できませんでした"
               : "Slack テンプレをコピー"}
         </button>
+        <button
+          type="button"
+          onClick={openShareDialog}
+          className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-100"
+        >
+          編集してコピー
+        </button>
         {listLoading ? <span className="text-sky-300">読み込み中...</span> : null}
         {loadingMore ? <span className="text-sky-300">追加読み込み中...</span> : null}
         {listError ? <span className="text-amber-300">{listError}</span> : null}
@@ -1348,15 +1425,15 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
               </div>
             </dl>
 
-            {project.tags && project.tags.length > 0 ? (
-              <div className="mt-4 flex flex-wrap gap-1 text-[11px] text-slate-300">
-                {project.tags.map((tag) => (
-                  <span key={tag} className="rounded-full border border-slate-700 px-2 py-0.5">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+      {project.tags && project.tags.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-1 text-[11px] text-slate-300">
+          {project.tags.map((tag) => (
+            <span key={tag} className="rounded-full border border-slate-700 px-2 py-0.5">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
             <div className="mt-6 flex flex-wrap gap-2">
               {transitions[project.status].length === 0 ? (
@@ -1392,6 +1469,85 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
           </article>
         ))}
       </div>
+
+      {shareDialog.open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900/90 p-6 text-sm text-slate-200 shadow-lg">
+            <h3 className="text-lg font-semibold text-white">Slack 共有テンプレートを編集</h3>
+            <p className="mt-1 text-xs text-slate-400">タイトルやメモを調整してからコピーできます。</p>
+
+            <div className="mt-4 space-y-4">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                プリセット
+                <select
+                  value={shareDialog.preset}
+                  onChange={(event) => handleSharePresetChange(event.target.value)}
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                >
+                  {SHARE_PRESETS.map((preset) => (
+                    <option key={preset.key} value={preset.key}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                タイトル
+                <input
+                  value={shareDialog.title}
+                  onChange={(event) =>
+                    setShareDialog((prev) => ({ ...prev, title: event.target.value, preset: 'custom' }))
+                  }
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                  placeholder="例: Weekly Projects Update"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                メモ
+                <textarea
+                  value={shareDialog.notes}
+                  onChange={(event) =>
+                    setShareDialog((prev) => ({ ...prev, notes: event.target.value, preset: 'custom' }))
+                  }
+                  rows={3}
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                  placeholder="共有時に添える補足メモ"
+                />
+              </label>
+
+              <div className="space-y-2">
+                <p className="text-xs text-slate-400">プレビュー</p>
+                <pre className="max-h-64 overflow-auto rounded-md border border-slate-800 bg-slate-950/70 p-3 text-[11px] text-slate-200 whitespace-pre-wrap break-words">
+                  {sharePreview || 'リンクがまだ生成されていません'}
+                </pre>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3 text-xs">
+              <button
+                type="button"
+                onClick={closeShareDialog}
+                className="rounded-md border border-slate-700 px-3 py-1 text-slate-300 hover:border-slate-600 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleShareDialogCopy}
+                className="rounded-md border border-emerald-500 bg-emerald-500 px-3 py-1 text-white hover:bg-emerald-400"
+              >
+                {shareDialogCopyState === 'copied'
+                  ? 'コピーしました'
+                  : shareDialogCopyState === 'error'
+                    ? 'コピーに失敗しました'
+                    : 'この内容でコピー'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {hasMore ? (
         <div className="flex justify-center">
