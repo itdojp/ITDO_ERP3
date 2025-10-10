@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { createTestServer } from '../test-utils/createTestServer.js';
-import { telemetrySeed } from '../sample-data.js';
+import { projectSeed, telemetrySeed } from '../sample-data.js';
 
 describe('REST API idempotency', () => {
 const { app } = createTestServer({ enableRest: true });
@@ -59,6 +59,50 @@ const { app } = createTestServer({ enableRest: true });
       .post('/api/v1/timesheets')
       .send({ id: timesheetId, userName: 'Rest Tester', projectCode: 'REST' })
       .expect(409);
+  });
+});
+
+describe('Projects REST API pagination meta', () => {
+  test('returns total count and supports cursor-based pagination', async () => {
+    const server = createTestServer({ enableRest: true });
+    const first = await request(server.app)
+      .get('/api/v1/projects')
+      .query({ first: 2 })
+      .expect(200);
+
+    expect(first.body.meta).toBeDefined();
+    expect(first.body.meta.total).toBe(projectSeed.length);
+    expect(first.body.meta.returned).toBeLessThanOrEqual(2);
+    expect(first.body.items.length).toBe(first.body.meta.returned);
+
+    if (projectSeed.length > 2) {
+      expect(first.body.next_cursor).toBeDefined();
+      const next = await request(server.app)
+        .get('/api/v1/projects')
+        .query({ first: 2, after: first.body.next_cursor })
+        .expect(200);
+
+      expect(next.body.meta.total).toBe(projectSeed.length);
+      expect(next.body.meta.returned).toBeLessThanOrEqual(2);
+      if (next.body.meta.returned > 0) {
+        expect(next.body.items.some((item) => item.id === first.body.items[0].id)).toBe(false);
+      }
+    } else {
+      expect(first.body.next_cursor).toBeUndefined();
+    }
+  });
+
+  test('respects status filter when counting projects', async () => {
+    const server = createTestServer({ enableRest: true });
+    const expected = projectSeed.filter((project) => project.status === 'active').length;
+    const res = await request(server.app)
+      .get('/api/v1/projects')
+      .query({ status: 'active', first: 10 })
+      .expect(200);
+
+    expect(res.body.meta.total).toBe(expected);
+    expect(res.body.meta.returned).toBe(expected);
+    expect(res.body.items.every((project) => project.status === 'active')).toBe(true);
   });
 });
 

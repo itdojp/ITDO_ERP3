@@ -432,6 +432,36 @@ export function createTestServer(options = {}) {
       });
     });
 
+    app.get('/api/v1/projects', (req, res) => {
+      const { status, first, after } = req.query || {};
+      let filtered = projects;
+      if (status && status !== 'all') {
+        filtered = filtered.filter((project) => project.status === status);
+      }
+      const limitRaw = Number.parseInt(first, 10);
+      const hasExplicitLimit = Number.isFinite(limitRaw) && limitRaw > 0;
+      const DEFAULT_LIMIT = 24;
+      const limit = hasExplicitLimit ? Math.min(limitRaw, 100) : filtered.length || DEFAULT_LIMIT;
+      const cursorValue = typeof after === 'string' ? after.trim() : '';
+      const cursorIndex = cursorValue
+        ? filtered.findIndex((project) => project.id === cursorValue || project.code === cursorValue)
+        : -1;
+      const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+      const slice = hasExplicitLimit ? filtered.slice(startIndex, startIndex + limit) : filtered;
+      const hasNextPage = hasExplicitLimit ? startIndex + slice.length < filtered.length : false;
+      const nextCursor = hasNextPage && slice.length > 0 ? slice[slice.length - 1].id : null;
+      res.json({
+        items: slice,
+        meta: {
+          total: filtered.length,
+          returned: slice.length,
+          fetchedAt: new Date().toISOString(),
+          fallback: false,
+        },
+        next_cursor: hasNextPage ? nextCursor : undefined,
+      });
+    });
+
     app.post('/api/v1/projects', (req, res) => {
       const { code, name, clientName, status = 'planned', startOn, endOn, manager, health = 'green', tags = [] } = req.body || {};
       if (!name) {
