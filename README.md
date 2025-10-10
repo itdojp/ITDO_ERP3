@@ -116,8 +116,11 @@ Projects 一覧の共有メッセージは以下の CLI で生成できます。
 
 - `make share-projects ARGS="--url https://example.com/projects?status=active"`
 - `cd ui-poc && PROJECTS_TITLE="Weekly Projects" npm run share:projects -- --url https://example.com/projects?status=active --notes "17 件をレビュー"`
+- `cd ui-poc && npm run share:projects -- --url https://example.com/projects?status=active --format json`
 
 `PROJECTS_URL` / `PROJECTS_TITLE` / `PROJECTS_NOTES` の各環境変数を上書きすることでサンプルスクリプトの出力を変更できます。
+
+`--format markdown` / `--format json` を指定すると、それぞれ Markdown 形式・JSON 形式で出力できます。
 
 GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
 
