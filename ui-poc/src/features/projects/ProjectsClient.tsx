@@ -81,6 +81,55 @@ const SHARE_FORMATS: Array<{ value: ShareFormat; label: string; hint: string }> 
   { value: "json", label: "JSON", hint: "自動連携・API 用の JSON 形式" },
 ];
 
+type ShareSuggestionContext = {
+  status: (typeof statusFilters)[number]["value"];
+  statusLabel: string;
+  manager: string;
+  health: "" | ProjectItem["health"];
+  tags: string[];
+  manualTag: string;
+};
+
+type ShareSuggestion = {
+  key: string;
+  label: string;
+  shouldDisplay: (context: ShareSuggestionContext) => boolean;
+  buildNote: (context: ShareSuggestionContext) => string;
+};
+
+const SHARE_NOTE_SUGGESTIONS: ShareSuggestion[] = [
+  {
+    key: "status-focus",
+    label: "ステータス別の進捗に言及",
+    shouldDisplay: (context) => context.status !== "all",
+    buildNote: (context) => `ステータス ${context.statusLabel} の案件進捗を共有します。`,
+  },
+  {
+    key: "health-alert",
+    label: "リスク案件のフォロー",
+    shouldDisplay: (context) => context.health === "red" || context.health === "yellow",
+    buildNote: (context) =>
+      context.health === "red"
+        ? "重大リスク案件の対応状況と課題を整理しました。"
+        : "注意が必要な案件のフォロー状況を共有します。",
+  },
+  {
+    key: "manager-focus",
+    label: "担当マネージャーの状況",
+    shouldDisplay: (context) => context.manager.length > 0,
+    buildNote: (context) => `担当 ${context.manager} の案件状況とサポートが必要な点をまとめました。`,
+  },
+  {
+    key: "tag-highlight",
+    label: "タグ別の着眼点",
+    shouldDisplay: (context) => context.manualTag.length > 0 || context.tags.length > 0,
+    buildNote: (context) => {
+      const tagList = [context.manualTag, ...context.tags].filter(Boolean);
+      return tagList.length > 0 ? `タグ ${tagList.join(", ")} に該当する案件のハイライトを共有します。` : "タグ指定案件の状況を共有します。";
+    },
+  },
+];
+
 const CUSTOM_PRESET_STORAGE_KEY = "projects-share-presets-v1";
 
 const generatePresetId = () => {
@@ -365,6 +414,23 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     [customSharePresets],
   );
 
+  const shareSuggestionContext = useMemo<ShareSuggestionContext>(
+    () => ({
+      status: filter,
+      statusLabel: statusFilters.find((item) => item.value === filter)?.label ?? "All",
+      manager: appliedManager.trim(),
+      health: appliedHealth,
+      tags: appliedSelectedTags,
+      manualTag: appliedTag.trim(),
+    }),
+    [filter, appliedManager, appliedHealth, appliedSelectedTags, appliedTag],
+  );
+
+  const availableSuggestions = useMemo(
+    () => SHARE_NOTE_SUGGESTIONS.filter((suggestion) => suggestion.shouldDisplay(shareSuggestionContext)),
+    [shareSuggestionContext],
+  );
+
   const copySlackTemplate = useCallback(
     async (
       message: string | null,
@@ -435,6 +501,18 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       };
     });
   };
+
+  const handleNoteSuggestion = useCallback((note: string) => {
+    setShareDialog((prev) => {
+      const trimmedExisting = prev.notes.trim();
+      const appended = trimmedExisting.length > 0 ? `${trimmedExisting}\n${note}` : note;
+      return {
+        ...prev,
+        notes: appended,
+        preset: "custom",
+      };
+    });
+  }, []);
 
   const handleSharePresetSave = useCallback(() => {
     if (typeof window === "undefined") {
@@ -1812,6 +1890,24 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                 </select>
                 <span className="text-[11px] text-slate-500">{shareFormatHint}</span>
               </label>
+
+              {availableSuggestions.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-400">おすすめメモ</p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableSuggestions.map((suggestion) => (
+                      <button
+                        type="button"
+                        key={suggestion.key}
+                        onClick={() => handleNoteSuggestion(suggestion.buildNote(shareSuggestionContext))}
+                        className="rounded-full border border-emerald-500/40 px-3 py-1 text-[11px] text-emerald-200 transition-colors hover:border-emerald-400 hover:text-emerald-100"
+                      >
+                        {suggestion.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
                 <button
