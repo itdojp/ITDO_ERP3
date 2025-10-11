@@ -21,6 +21,33 @@ const runScript = (extraArgs: string[] = []) =>
     encoding: "utf-8",
   });
 
+const validateSharePayload = (payload: any) => {
+  expect(payload).toBeTruthy();
+  expect(typeof payload.title).toBe("string");
+  expect(payload.title.length).toBeGreaterThan(0);
+  expect(typeof payload.url).toBe("string");
+  expect(() => new URL(payload.url)).not.toThrow();
+  expect(typeof payload.generatedAt).toBe("string");
+  expect(Number.isNaN(Date.parse(payload.generatedAt))).toBe(false);
+  expect(typeof payload.message).toBe("string");
+  expect(typeof payload.notes).toBe("string");
+  expect(payload).toHaveProperty("filters");
+  expect(typeof payload.filters.status).toBe("string");
+  expect(typeof payload.filters.keyword).toBe("string");
+  expect(typeof payload.filters.manager).toBe("string");
+  expect(typeof payload.filters.health).toBe("string");
+  expect(Array.isArray(payload.filters.tags)).toBe(true);
+  expect(
+    payload.filters.count === null ||
+      typeof payload.filters.count === "number" ||
+      typeof payload.filters.count === "undefined",
+  ).toBe(true);
+  if (typeof payload.projectCount !== "undefined" && payload.projectCount !== null) {
+    expect(typeof payload.projectCount).toBe("number");
+    expect(payload.projectCount).toBeGreaterThanOrEqual(0);
+  }
+};
+
 const runScriptAsync = (extraArgs: string[] = []) =>
   new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath, ...baseArgs, ...extraArgs], {
@@ -91,6 +118,7 @@ describe("project-share-slack CLI", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     const payload = JSON.parse(result.stdout);
+    validateSharePayload(payload);
     expect(payload.title).toBe("テスト");
     expect(payload.filters.manager).toBe("Yamada");
     expect(payload.filters.tags).toEqual(["DX", "SAP"]);
