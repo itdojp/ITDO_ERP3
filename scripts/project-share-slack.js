@@ -11,8 +11,12 @@
  *   --title <value>   Optional. 見出しに使うタイトル。デフォルトは "Projects 共有リンク"。
  *   --notes <value>   Optional. 箇条書きの末尾に補足を追加。
  *   --format <value>  Optional. 出力形式 text|markdown|json（既定: text）。
+ *   --post <value>    Optional. Slack Incoming Webhook URL に投稿。
  *   --help            このヘルプを表示します。
  */
+
+const http = require('node:http');
+const https = require('node:https');
 
 const args = process.argv.slice(2);
 
@@ -21,6 +25,7 @@ const optionAliases = new Map([
   ['-t', 'title'],
   ['-n', 'notes'],
   ['-f', 'format'],
+  ['-p', 'post'],
   ['-h', 'help'],
 ]);
 
@@ -73,6 +78,7 @@ Options:
   --title <value>   Optional. Slack メッセージのタイトル。デフォルト "Projects 共有リンク"。
   --notes <value>   Optional. 箇条書きに追加するメモ。
   --format <value>  Optional. text | markdown | json。
+  --post <value>    Optional. Slack Incoming Webhook URL に投稿。
   --help            このヘルプを表示します。
 `);
   process.exit(options.help ? 0 : 1);
@@ -142,6 +148,7 @@ const message = [
 ].join('\n');
 
 const format = (options.format ?? 'text').toLowerCase();
+const webhookUrl = typeof options.post === 'string' ? options.post.trim() : '';
 const filters = {
   status: params.has('status') ? status : 'all',
   keyword: keyword ?? '',
@@ -150,27 +157,106 @@ const filters = {
   tags: tagList,
 };
 
-if (format === 'markdown') {
-  const markdown = [
-    `**${title}** (_${timestamp}_)`,
-    parsedUrl.toString(),
-    '',
-    ...bulletLines.map((line) => line.replace(/^• /, '- ')),
-  ].join('\n');
-  console.log(markdown);
-} else if (format === 'json') {
-  const payload = {
-    title,
-    url: parsedUrl.toString(),
-    generatedAt: generatedAt.toISOString(),
-    filters,
-    notes: trimmedNotes,
-    message,
-  };
-  console.log(JSON.stringify(payload, null, 2));
-} else if (format === 'text') {
-  console.log(message);
-} else {
+const markdown = [
+  `**${title}** (_${timestamp}_)`,
+  parsedUrl.toString(),
+  '',
+  ...bulletLines.map((line) => line.replace(/^• /, '- ')),
+].join('\n');
+
+const payload = {
+  title,
+  url: parsedUrl.toString(),
+  generatedAt: generatedAt.toISOString(),
+  filters,
+  notes: trimmedNotes,
+  message,
+};
+
+const jsonOutput = JSON.stringify(payload, null, 2);
+
+const allowedFormats = new Set(['text', 'markdown', 'json']);
+if (!allowedFormats.has(format)) {
   console.error(`Unknown format: ${format}. Use text | markdown | json.`);
   process.exit(1);
 }
+
+function postToWebhook(url, text) {
+  const target = new URL(url);
+  const isHttps = target.protocol === 'https:';
+  if (!isHttps && target.protocol !== 'http:') {
+    return Promise.reject(new Error(`Unsupported protocol for webhook: ${target.protocol}`));
+  }
+  const client = isHttps ? https : http;
+  const body = JSON.stringify({ text });
+  const timeoutMs = 10000;
+
+  return new Promise((resolve, reject) => {
+    const request = client.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (isHttps ? 443 : 80),
+        path: target.pathname + target.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+        timeout: timeoutMs,
+      },
+      (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => {
+          if (chunks.length < 256) {
+            chunks.push(chunk);
+          }
+        });
+        response.on('end', () => {
+          const responseBody = Buffer.concat(chunks).toString('utf-8');
+          if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                `Failed to post to webhook (${response.statusCode ?? 'unknown'}): ${responseBody}`,
+              ),
+            );
+          }
+        });
+      },
+    );
+
+    request.on('timeout', () => {
+      request.destroy(new Error(`Webhook request timed out after ${timeoutMs} ms`));
+    });
+    request.on('error', (error) => {
+      reject(error);
+    });
+
+    request.write(body);
+    request.end();
+  });
+}
+
+(async () => {
+  if (format === 'markdown') {
+    console.log(markdown);
+  } else if (format === 'json') {
+    console.log(jsonOutput);
+  } else {
+    console.log(message);
+  }
+
+  if (webhookUrl) {
+    if (!/^https?:\/\//i.test(webhookUrl)) {
+      console.error(`Invalid webhook URL: ${webhookUrl}`);
+      process.exit(1);
+    }
+    await postToWebhook(webhookUrl, payload.message);
+    console.error('Posted share message to webhook');
+  }
+})().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

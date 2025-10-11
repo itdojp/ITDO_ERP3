@@ -56,6 +56,17 @@ JSON 形式では Slack で利用するメッセージ文字列に加え、フ�
 
 この JSON をそのままワークフローへ渡すことで、Slack 以外の通知基盤にも再利用できます。
 
+Slack への投稿を自動化したい場合は Incoming Webhook URL を `--post` に渡してください。メッセージ本文（text 形式）がそのまま送信されます。
+
+```bash
+node scripts/project-share-slack.js \
+  --url '<URL>' \
+  --format json \
+  --post 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
+```
+
+Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。
+
 ## CI への組み込み例
 `.github/workflows/projects-share-template.yml` では CLI を定期実行して体裁崩れを検知しています。JSON 出力を検証する際は `jq` で値をチェックすると安全です。
 
