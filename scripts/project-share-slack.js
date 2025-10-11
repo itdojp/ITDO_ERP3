@@ -11,6 +11,7 @@
  *   --title <value>   Optional. 見出しに使うタイトル。デフォルトは "Projects 共有リンク"。
  *   --notes <value>   Optional. 箇条書きの末尾に補足を追加。
  *   --format <value>  Optional. 出力形式 text|markdown|json（既定: text）。
+ *   --count <value>   Optional. 対象件数を bullet に追加。
  *   --post <value>    Optional. Slack Incoming Webhook URL に投稿。
  *   --help            このヘルプを表示します。
  */
@@ -25,6 +26,7 @@ const optionAliases = new Map([
   ['-t', 'title'],
   ['-n', 'notes'],
   ['-f', 'format'],
+  ['-c', 'count'],
   ['-p', 'post'],
   ['-h', 'help'],
 ]);
@@ -78,7 +80,8 @@ Options:
   --title <value>   Optional. Slack メッセージのタイトル。デフォルト "Projects 共有リンク"。
   --notes <value>   Optional. 箇条書きに追加するメモ。
   --format <value>  Optional. text | markdown | json。
-  --post <value>    Optional. Slack Incoming Webhook URL に投稿。
+  --count <value>   Optional. 対象件数を追加表示します。
+  --post <value>    Optional. Slack Incoming Webhook URL に投稿します。
   --help            このヘルプを表示します。
 `);
   process.exit(options.help ? 0 : 1);
@@ -111,11 +114,24 @@ const health = params.get('health');
 const trimmedNotes = options.notes?.trim() ?? '';
 const tagList = [tag?.trim(), ...(tags ? tags.split(',').map((value) => value.trim()) : [])].filter(Boolean);
 
+let projectCount = null;
+if (typeof options.count !== 'undefined') {
+  const parsedCount = Number(options.count);
+  if (!Number.isFinite(parsedCount) || parsedCount < 0) {
+    console.error(`Invalid count provided: ${options.count}`);
+    process.exit(1);
+  }
+  projectCount = Math.floor(parsedCount);
+}
+
 const bulletLines = [];
 
 if (params.has('status') && status !== 'all') {
   const label = statusLabels.get(status) ?? status;
   bulletLines.push(`• ステータス: *${label}*`);
+}
+if (projectCount !== null) {
+  bulletLines.push(`• 件数: ${projectCount}`);
 }
 if (keyword) {
   bulletLines.push(`• キーワード: \`${keyword}\``);
@@ -155,6 +171,7 @@ const filters = {
   manager: manager ?? '',
   health: health ?? '',
   tags: tagList,
+  count: projectCount,
 };
 
 const markdown = [
@@ -171,6 +188,7 @@ const payload = {
   filters,
   notes: trimmedNotes,
   message,
+  projectCount,
 };
 
 const jsonOutput = JSON.stringify(payload, null, 2);

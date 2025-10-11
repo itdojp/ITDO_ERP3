@@ -55,6 +55,13 @@ describe("project-share-slack CLI", () => {
     expect(result.stdout).toContain("• タグ: DX, SAP");
   });
 
+  test("includes count bullet when provided", () => {
+    const result = runScript(["--count", "17"]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("• 件数: 17");
+  });
+
   test("outputs markdown format", () => {
     const result = runScript(["--format", "markdown"]);
     expect(result.status).toBe(0);
@@ -63,8 +70,8 @@ describe("project-share-slack CLI", () => {
     expect(result.stdout).toContain("- タグ: DX, SAP");
   });
 
-  test("outputs json format with filters", () => {
-    const result = runScript(["--format", "json"]);
+  test("outputs json format with filters and count", () => {
+    const result = runScript(["--format", "json", "--count", "42"]);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     const payload = JSON.parse(result.stdout);
@@ -73,6 +80,8 @@ describe("project-share-slack CLI", () => {
     expect(payload.filters.tags).toEqual(["DX", "SAP"]);
     expect(payload.notes).toBe("メモ");
     expect(typeof payload.generatedAt).toBe("string");
+    expect(payload.projectCount).toBe(42);
+    expect(payload.message).toContain("• 件数: 42");
   });
 
   test("returns error for unknown format", () => {
@@ -80,6 +89,13 @@ describe("project-share-slack CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Unknown format");
+  });
+
+  test("returns error for invalid count", () => {
+    const result = runScript(["--count", "abc"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Invalid count provided");
   });
 
   test("posts to webhook when --post provided", async () => {

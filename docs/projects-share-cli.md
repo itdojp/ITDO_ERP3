@@ -48,13 +48,16 @@ JSON 形式では Slack で利用するメッセージ文字列に加え、フ�
   "filters": {
     "status": "active",
     "manager": "Yamada",
-    "tags": ["DX", "SAP"]
+    "tags": ["DX", "SAP"],
+    "count": 24
   },
+  "projectCount": 24,
   "message": ":clipboard: *Weekly Projects Update* _(2025/10/11 6:30:00)_\n..."
 }
 ```
 
 この JSON をそのままワークフローへ渡すことで、Slack 以外の通知基盤にも再利用できます。
+`--count <number>` を指定すると、bullet / JSON の両方に対象件数 (`filters.count` / `projectCount`) が含まれるため、KPI 抜粋やダッシュボードとの照合にも活用できます。
 
 Slack への投稿を自動化したい場合は Incoming Webhook URL を `--post` に渡してください。メッセージ本文（text 形式）がそのまま送信されます。
 
