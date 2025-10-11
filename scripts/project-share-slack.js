@@ -48,6 +48,14 @@ for (let index = 0; index < args.length; index += 1) {
       console.error(`Option --${key} requires a value`);
       process.exit(1);
     }
+    if (key === 'post') {
+      if (!Array.isArray(options.post)) {
+        options.post = [];
+      }
+      options.post.push(next);
+      index += 1;
+      continue;
+    }
     options[key] = next;
     index += 1;
   } else if (token.startsWith('-')) {
@@ -64,6 +72,14 @@ for (let index = 0; index < args.length; index += 1) {
     if (!next || next.startsWith('-')) {
       console.error(`Option ${token} requires a value`);
       process.exit(1);
+    }
+    if (alias === 'post') {
+      if (!Array.isArray(options.post)) {
+        options.post = [];
+      }
+      options.post.push(next);
+      index += 1;
+      continue;
     }
     options[alias] = next;
     index += 1;
@@ -222,7 +238,12 @@ const message = [
 
 const format = (options.format ?? 'text').toLowerCase();
 const outPath = typeof options.out === 'string' ? options.out.trim() : '';
-const webhookUrl = typeof options.post === 'string' ? options.post.trim() : '';
+const rawWebhookOption = options.post;
+const webhookTargets = Array.isArray(rawWebhookOption)
+  ? rawWebhookOption.map((value) => String(value).trim()).filter(Boolean)
+  : rawWebhookOption
+    ? [String(rawWebhookOption).trim()].filter(Boolean)
+    : [];
 const filters = {
   status: params.has('status') ? status : 'all',
   keyword: keyword ?? '',
@@ -337,13 +358,13 @@ function postToWebhook(url, text) {
     }
   }
 
-  if (webhookUrl) {
-    if (!/^https?:\/\//i.test(webhookUrl)) {
-      console.error(`Invalid webhook URL: ${webhookUrl}`);
+  for (const target of webhookTargets) {
+    if (!/^https?:\/\//i.test(target)) {
+      console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postToWebhook(webhookUrl, payload.message);
-    console.error('Posted share message to webhook');
+    await postToWebhook(target, payload.message);
+    console.error(`Posted share message to webhook: ${target}`);
   }
 })().catch((error) => {
   console.error(error instanceof Error ? error.message : error);

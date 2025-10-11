@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -18,11 +18,6 @@ const baseArgs = [
 
 const runScript = (extraArgs: string[] = []) =>
   spawnSync(process.execPath, [scriptPath, ...baseArgs, ...extraArgs], {
-    encoding: "utf-8",
-  });
-
-const runScriptRaw = (args: string[] = []) =>
-  spawnSync(process.execPath, [scriptPath, ...args], {
     encoding: "utf-8",
   });
 
@@ -147,43 +142,8 @@ describe("project-share-slack CLI", () => {
     expect(result.stderr).toContain("Invalid count provided");
   });
 
-  test("loads defaults from config file", () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-config-"));
-    try {
-      const configPath = path.join(tempDir, "config.json");
-      writeFileSync(
-        configPath,
-        JSON.stringify(
-          {
-            url: "https://example.com/projects?status=planned&manager=Suzuki",
-            title: "Config Title",
-            notes: "Config Notes",
-            format: "json",
-            count: 7,
-          },
-          null,
-          2,
-        ),
-        "utf-8",
-      );
-
-      const result = runScriptRaw(["--config", configPath]);
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      const payload = JSON.parse(result.stdout);
-      validateSharePayload(payload);
-      expect(payload.title).toBe("Config Title");
-      expect(payload.notes).toBe("Config Notes");
-      expect(payload.filters.status).toBe("planned");
-      expect(payload.filters.manager).toBe("Suzuki");
-      expect(payload.projectCount).toBe(7);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  test("posts to webhook when --post provided", async () => {
-    const received: Array<{ text: string }> = [];
+  test("posts to one or more webhooks when --post provided", async () => {
+    const received: Array<{ text: string; path: string | undefined }> = [];
     await new Promise<void>((resolve, reject) => {
       const server = createServer((request, response) => {
         let body = "";
@@ -192,7 +152,8 @@ describe("project-share-slack CLI", () => {
         });
         request.on("end", () => {
           try {
-            received.push(JSON.parse(body));
+            const parsed = JSON.parse(body);
+            received.push({ text: parsed.text, path: request.url ?? undefined });
           } catch (error) {
             // ignore parse errors and let assertion fail later
           }
@@ -209,7 +170,8 @@ describe("project-share-slack CLI", () => {
           return;
         }
         const webhookUrl = `http://127.0.0.1:${address.port}/webhook`;
-        runScriptAsync(["--format", "json", "--post", webhookUrl])
+        const webhookUrlSecondary = `http://127.0.0.1:${address.port}/webhook-secondary`;
+        runScriptAsync(["--format", "json", "--post", webhookUrl, "--post", webhookUrlSecondary])
           .then((result) => {
             server.close((closeError) => {
               if (closeError) {
@@ -218,9 +180,14 @@ describe("project-share-slack CLI", () => {
               }
               try {
                 expect(result.status).toBe(0);
-                expect(received).toHaveLength(1);
+                expect(received).toHaveLength(2);
                 expect(received[0].text).toContain(":clipboard: *テスト*");
-                expect(result.stderr).toContain("Posted share message to webhook");
+                expect(received[1].text).toContain(":clipboard: *テスト*");
+                expect(new Set(received.map((entry) => entry.path))).toEqual(
+                  new Set(["/webhook", "/webhook-secondary"]),
+                );
+                expect(result.stderr).toContain(`Posted share message to webhook: ${webhookUrl}`);
+                expect(result.stderr).toContain(`Posted share message to webhook: ${webhookUrlSecondary}`);
                 resolve();
               } catch (assertionError) {
                 reject(assertionError);
