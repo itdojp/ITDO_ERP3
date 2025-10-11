@@ -16,6 +16,7 @@
  *   --help            このヘルプを表示します。
  */
 
+const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 
@@ -27,6 +28,7 @@ const optionAliases = new Map([
   ['-n', 'notes'],
   ['-f', 'format'],
   ['-c', 'count'],
+  ['-o', 'out'],
   ['-p', 'post'],
   ['-h', 'help'],
 ]);
@@ -81,6 +83,7 @@ Options:
   --notes <value>   Optional. 箇条書きに追加するメモ。
   --format <value>  Optional. text | markdown | json。
   --count <value>   Optional. 対象件数を追加表示します。
+  --out <value>     Optional. 出力内容をファイルへ保存します。
   --post <value>    Optional. Slack Incoming Webhook URL に投稿します。
   --help            このヘルプを表示します。
 `);
@@ -164,6 +167,7 @@ const message = [
 ].join('\n');
 
 const format = (options.format ?? 'text').toLowerCase();
+const outPath = typeof options.out === 'string' ? options.out.trim() : '';
 const webhookUrl = typeof options.post === 'string' ? options.post.trim() : '';
 const filters = {
   status: params.has('status') ? status : 'all',
@@ -197,6 +201,16 @@ const allowedFormats = new Set(['text', 'markdown', 'json']);
 if (!allowedFormats.has(format)) {
   console.error(`Unknown format: ${format}. Use text | markdown | json.`);
   process.exit(1);
+}
+
+let renderedOutput = '';
+
+if (format === 'markdown') {
+  renderedOutput = markdown;
+} else if (format === 'json') {
+  renderedOutput = jsonOutput;
+} else {
+  renderedOutput = message;
 }
 
 function postToWebhook(url, text) {
@@ -258,12 +272,15 @@ function postToWebhook(url, text) {
 }
 
 (async () => {
-  if (format === 'markdown') {
-    console.log(markdown);
-  } else if (format === 'json') {
-    console.log(jsonOutput);
-  } else {
-    console.log(message);
+  console.log(renderedOutput);
+
+  if (outPath) {
+    try {
+      fs.writeFileSync(outPath, `${renderedOutput}\n`, 'utf-8');
+    } catch (error) {
+      console.error(`Failed to write output to ${outPath}: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
   }
 
   if (webhookUrl) {

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -68,6 +70,20 @@ describe("project-share-slack CLI", () => {
     expect(result.stderr).toBe("");
     expect(result.stdout.startsWith("**テスト** (_")).toBe(true);
     expect(result.stdout).toContain("- タグ: DX, SAP");
+  });
+
+  test("writes output to file when --out is provided", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-"));
+    try {
+      const outPath = path.join(tempDir, "share.txt");
+      const result = runScript(["--out", outPath]);
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      const fileContent = readFileSync(outPath, "utf-8");
+      expect(fileContent.trimEnd()).toBe(result.stdout.trimEnd());
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("outputs json format with filters and count", () => {

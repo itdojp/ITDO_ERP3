@@ -120,8 +120,7 @@ Projects 一覧の共有メッセージは以下の CLI で生成できます。
 
 `PROJECTS_URL` / `PROJECTS_TITLE` / `PROJECTS_NOTES` の各環境変数を上書きすることでサンプルスクリプトの出力を変更できます。
 
-`--format markdown` / `--format json` を指定すると、それぞれ Markdown 形式・JSON 形式で出力できます。`--count <number>` で対象件数を bullet に追加し、`--post <webhook-url>` を併用すると Slack Incoming Webhook へメッセージを直接送信します。
-`--post <webhook-url>` を併用すると Slack Incoming Webhook へメッセージを直接送信します。
+`--format markdown` / `--format json` を指定すると、それぞれ Markdown 形式・JSON 形式で出力できます。`--count <number>` で対象件数を bullet に追加し、`--out <path>` で生成結果をファイル保存できます。`--post <webhook-url>` を併用すると Slack Incoming Webhook へメッセージを直接送信します。
 
 GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
 
