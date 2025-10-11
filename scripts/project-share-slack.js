@@ -30,6 +30,7 @@ const optionAliases = new Map([
   ['-c', 'count'],
   ['-o', 'out'],
   ['-p', 'post'],
+  ['-C', 'config'],
   ['-h', 'help'],
 ]);
 
@@ -89,9 +90,8 @@ for (let index = 0; index < args.length; index += 1) {
   }
 }
 
-if (options.help || !options.url) {
-  console.log(`Usage:
-  node scripts/project-share-slack.js --url <projects-share-url> [--title <title>] [--notes <notes>]
+const USAGE_TEXT = `Usage:
+  node scripts/project-share-slack.js --url <projects-share-url> [--title <title>] [--notes <notes>] [--config <path>]
 
 Options:
   --url <value>     Required. Projects の共有リンク (絶対 URL)。
@@ -100,10 +100,64 @@ Options:
   --format <value>  Optional. text | markdown | json。
   --count <value>   Optional. 対象件数を追加表示します。
   --out <value>     Optional. 出力内容をファイルへ保存します。
-  --post <value>    Optional. Slack Incoming Webhook URL に投稿します。
+  --post <value>    Optional. Slack Incoming Webhook URL に投稿します。複数指定可。
+  --config <path>   Optional. 上記オプションの既定値を含む JSON を読み込みます。
   --help            このヘルプを表示します。
-`);
-  process.exit(options.help ? 0 : 1);
+`;
+
+if (options.help) {
+  console.log(USAGE_TEXT);
+  process.exit(0);
+}
+
+let config = {};
+if (options.config) {
+  const configPath = String(options.config).trim();
+  try {
+    const rawConfig = fs.readFileSync(configPath, 'utf-8');
+    const parsedConfig = JSON.parse(rawConfig);
+    if (!parsedConfig || typeof parsedConfig !== 'object') {
+      throw new Error('Config must be a JSON object');
+    }
+    config = parsedConfig;
+  } catch (error) {
+    console.error(`Failed to load config file: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
+}
+
+const assignDefault = (key) => {
+  if (options[key] === undefined && config[key] !== undefined) {
+    options[key] = config[key];
+  }
+};
+
+['url', 'title', 'notes', 'format', 'count', 'out'].forEach(assignDefault);
+
+if (config.post !== undefined) {
+  const configPosts = Array.isArray(config.post) ? config.post : [config.post];
+  configPosts
+    .filter((value) => value !== undefined && value !== null && String(value).trim().length > 0)
+    .forEach((value) => {
+      if (!Array.isArray(options.post)) {
+        options.post = options.post ? [options.post] : [];
+      }
+      options.post.push(String(value));
+    });
+}
+
+if (!options.url) {
+  console.log(USAGE_TEXT);
+  process.exit(1);
+}
+
+options.url = String(options.url).trim();
+options.title = options.title !== undefined ? String(options.title) : undefined;
+options.notes = options.notes !== undefined ? String(options.notes) : undefined;
+options.format = options.format !== undefined ? String(options.format) : undefined;
+options.out = options.out !== undefined ? String(options.out) : undefined;
+if (Array.isArray(options.post)) {
+  options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
 }
 
 let parsedUrl;
