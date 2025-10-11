@@ -114,8 +114,8 @@ describe("project-share-slack CLI", () => {
     expect(result.stderr).toContain("Invalid count provided");
   });
 
-  test("posts to webhook when --post provided", async () => {
-    const received: Array<{ text: string }> = [];
+  test("posts to one or more webhooks when --post provided", async () => {
+    const received: Array<{ text: string; path: string | undefined }> = [];
     await new Promise<void>((resolve, reject) => {
       const server = createServer((request, response) => {
         let body = "";
@@ -124,7 +124,8 @@ describe("project-share-slack CLI", () => {
         });
         request.on("end", () => {
           try {
-            received.push(JSON.parse(body));
+            const parsed = JSON.parse(body);
+            received.push({ text: parsed.text, path: request.url ?? undefined });
           } catch (error) {
             // ignore parse errors and let assertion fail later
           }
@@ -141,7 +142,8 @@ describe("project-share-slack CLI", () => {
           return;
         }
         const webhookUrl = `http://127.0.0.1:${address.port}/webhook`;
-        runScriptAsync(["--format", "json", "--post", webhookUrl])
+        const webhookUrlSecondary = `http://127.0.0.1:${address.port}/webhook-secondary`;
+        runScriptAsync(["--format", "json", "--post", webhookUrl, "--post", webhookUrlSecondary])
           .then((result) => {
             server.close((closeError) => {
               if (closeError) {
@@ -150,9 +152,14 @@ describe("project-share-slack CLI", () => {
               }
               try {
                 expect(result.status).toBe(0);
-                expect(received).toHaveLength(1);
+                expect(received).toHaveLength(2);
                 expect(received[0].text).toContain(":clipboard: *テスト*");
-                expect(result.stderr).toContain("Posted share message to webhook");
+                expect(received[1].text).toContain(":clipboard: *テスト*");
+                expect(new Set(received.map((entry) => entry.path))).toEqual(
+                  new Set(["/webhook", "/webhook-secondary"]),
+                );
+                expect(result.stderr).toContain(`Posted share message to webhook: ${webhookUrl}`);
+                expect(result.stderr).toContain(`Posted share message to webhook: ${webhookUrlSecondary}`);
                 resolve();
               } catch (assertionError) {
                 reject(assertionError);
