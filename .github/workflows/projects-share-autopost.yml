@@ -1,0 +1,58 @@
+name: Projects Slack Auto Share
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Projects 共有リンク URL'
+        required: true
+        default: 'https://example.com/projects?status=active'
+        type: string
+      title:
+        description: 'Slack メッセージタイトル'
+        required: false
+        default: 'Weekly Projects Update'
+        type: string
+      notes:
+        description: '共有メモ (任意)'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Slack 送信をスキップし、メッセージ生成のみ行う'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  post-share:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate share payload (JSON)
+        run: |
+          node scripts/project-share-slack.js \
+            --url '${{ inputs.url }}' \
+            --title '${{ inputs.title }}' \
+            --notes '${{ inputs.notes }}' \
+            --format json > share.json
+          cat share.json
+
+      - name: Upload generated message
+        uses: actions/upload-artifact@v4
+        with:
+          name: projects-share
+          path: share.json
+
+      - name: Post message to Slack
+        if: ${{ inputs.dry_run == false }}
+        env:
+          SHARE_WEBHOOK: ${{ secrets.PROJECTS_SHARE_WEBHOOK }}
+        run: |
+          if [ -z "$SHARE_WEBHOOK" ]; then
+            echo 'PROJECTS_SHARE_WEBHOOK secret is not configured' >&2
+            exit 1
+          fi
+          payload=$(jq -c '{ text: .message }' share.json)
+          curl -X POST -H 'Content-Type: application/json' --data "$payload" "$SHARE_WEBHOOK"
