@@ -68,7 +68,7 @@ node scripts/project-share-slack.js \
   --post 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
 ```
 
-Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。
+Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。Slack Webhook の応答本文が `ok` になることを保証したい場合は `--ensure-ok` を併用してください。
 
 ## 設定ファイルの利用
 繰り返し利用する設定は JSON ファイルにまとめておくのがおすすめです。`--config <path>` を指定すると、ファイル内の値を既定値として読み込み、CLI 引数で上書きできます。

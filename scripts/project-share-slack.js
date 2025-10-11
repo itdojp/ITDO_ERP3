@@ -31,16 +31,36 @@ const optionAliases = new Map([
   ['-o', 'out'],
   ['-p', 'post'],
   ['-C', 'config'],
+  ['-E', 'ensure-ok'],
   ['-h', 'help'],
 ]);
 
 const options = {};
-for (let index = 0; index < args.length; index += 1) {
+for (let index = 0; index < args.length;) {
   const token = args[index];
   if (token.startsWith('--')) {
     const key = token.slice(2);
     if (key === 'help') {
       options.help = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'ensure-ok') {
+      options['ensure-ok'] = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'post') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error('Option --post requires a value');
+        process.exit(1);
+      }
+      if (!Array.isArray(options.post)) {
+        options.post = [];
+      }
+      options.post.push(next);
+      index += 2;
       continue;
     }
     const next = args[index + 1];
@@ -48,16 +68,8 @@ for (let index = 0; index < args.length; index += 1) {
       console.error(`Option --${key} requires a value`);
       process.exit(1);
     }
-    if (key === 'post') {
-      if (!Array.isArray(options.post)) {
-        options.post = [];
-      }
-      options.post.push(next);
-      index += 1;
-      continue;
-    }
     options[key] = next;
-    index += 1;
+    index += 2;
   } else if (token.startsWith('-')) {
     const alias = optionAliases.get(token);
     if (!alias) {
@@ -66,6 +78,25 @@ for (let index = 0; index < args.length; index += 1) {
     }
     if (alias === 'help') {
       options.help = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'ensure-ok') {
+      options['ensure-ok'] = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'post') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error(`Option ${token} requires a value`);
+        process.exit(1);
+      }
+      if (!Array.isArray(options.post)) {
+        options.post = [];
+      }
+      options.post.push(next);
+      index += 2;
       continue;
     }
     const next = args[index + 1];
@@ -73,20 +104,14 @@ for (let index = 0; index < args.length; index += 1) {
       console.error(`Option ${token} requires a value`);
       process.exit(1);
     }
-    if (alias === 'post') {
-      if (!Array.isArray(options.post)) {
-        options.post = [];
-      }
-      options.post.push(next);
-      index += 1;
-      continue;
-    }
     options[alias] = next;
-    index += 1;
+    index += 2;
   } else if (!options.url) {
     options.url = token;
+    index += 1;
   } else {
     console.warn(`Ignoring unexpected argument: ${token}`);
+    index += 1;
   }
 }
 
@@ -102,6 +127,7 @@ Options:
   --out <value>     Optional. 出力内容をファイルへ保存します。
   --post <value>    Optional. Slack Incoming Webhook URL に投稿します。複数指定可。
   --config <path>   Optional. 上記オプションの既定値を含む JSON を読み込みます。
+  --ensure-ok       Optional. Webhook 応答が "ok" でなければエラーにします。
   --help            このヘルプを表示します。
 `;
 
@@ -144,6 +170,11 @@ if (config.post !== undefined) {
       }
       options.post.push(String(value));
     });
+}
+
+const configEnsureValue = config['ensure-ok'] ?? config.ensureOk;
+if (options['ensure-ok'] === undefined && configEnsureValue !== undefined) {
+  options['ensure-ok'] = Boolean(configEnsureValue);
 }
 
 if (!options.url) {
@@ -238,12 +269,10 @@ const message = [
 
 const format = (options.format ?? 'text').toLowerCase();
 const outPath = typeof options.out === 'string' ? options.out.trim() : '';
-const rawWebhookOption = options.post;
-const webhookTargets = Array.isArray(rawWebhookOption)
-  ? rawWebhookOption.map((value) => String(value).trim()).filter(Boolean)
-  : rawWebhookOption
-    ? [String(rawWebhookOption).trim()].filter(Boolean)
-    : [];
+const webhookTargets = Array.isArray(options.post)
+  ? options.post.map((value) => String(value).trim()).filter((value) => value.length > 0)
+  : [];
+const ensureOk = Boolean(options['ensure-ok']);
 const filters = {
   status: params.has('status') ? status : 'all',
   keyword: keyword ?? '',
@@ -288,7 +317,7 @@ if (format === 'markdown') {
   renderedOutput = message;
 }
 
-function postToWebhook(url, text) {
+function postToWebhook(url, text, ensureOkResponse) {
   const target = new URL(url);
   const isHttps = target.protocol === 'https:';
   if (!isHttps && target.protocol !== 'http:') {
@@ -322,7 +351,14 @@ function postToWebhook(url, text) {
         response.on('end', () => {
           const responseBody = Buffer.concat(chunks).toString('utf-8');
           if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
-            resolve();
+            if (ensureOkResponse) {
+              const normalized = responseBody.trim().toLowerCase();
+              if (normalized !== 'ok') {
+                reject(new Error(`Unexpected webhook response body: ${responseBody.trim() || '(empty)'}`));
+                return;
+              }
+            }
+            resolve(responseBody);
           } else {
             reject(
               new Error(
@@ -363,7 +399,7 @@ function postToWebhook(url, text) {
       console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postToWebhook(target, payload.message);
+    await postToWebhook(target, payload.message, ensureOk);
     console.error(`Posted share message to webhook: ${target}`);
   }
 })().catch((error) => {
