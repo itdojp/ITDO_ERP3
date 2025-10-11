@@ -40,30 +40,34 @@ const HEALTH_CLASS: Record<string, string> = {
   red: "bg-rose-500",
 };
 
-const SHARE_PRESETS: Array<{ key: string; label: string; title: string; notes: string }> = [
+const SHARE_PRESETS: Array<{ key: string; label: string; title: string; notes: string; format?: ShareFormat }> = [
   {
     key: "weekly",
     label: "週次アップデート",
     title: "Weekly Projects Update",
     notes: "進捗サマリとフォローが必要な案件を共有してください",
+    format: "text",
   },
   {
     key: "daily",
     label: "日次スタンドアップ",
     title: "Daily Projects Standup",
     notes: "本日のフォーカスとブロッカーを共有してください",
+    format: "text",
   },
   {
     key: "review",
     label: "経営レビュー",
     title: "Projects Exec Review",
     notes: "リスクとマイルストーンの状況を確認しています",
+    format: "text",
   },
   {
     key: "custom",
     label: "カスタム",
     title: "",
     notes: "",
+    format: "text",
   },
 ];
 
@@ -76,6 +80,23 @@ const SHARE_FORMATS: Array<{ value: ShareFormat; label: string; hint: string }> 
   { value: "markdown", label: "Markdown", hint: "Wiki / Docs 用の Markdown 形式" },
   { value: "json", label: "JSON", hint: "自動連携・API 用の JSON 形式" },
 ];
+
+const CUSTOM_PRESET_STORAGE_KEY = "projects-share-presets-v1";
+
+const generatePresetId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+type CustomSharePreset = {
+  id: string;
+  name: string;
+  title: string;
+  notes: string;
+  format: ShareFormat;
+};
 
 type ProjectsClientProps = {
   initialProjects: ProjectListResponse;
@@ -168,7 +189,56 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     preset: "custom",
     format: "text",
   });
+  const [customSharePresets, setCustomSharePresets] = useState<CustomSharePreset[]>([]);
+  const [sharePresetMessage, setSharePresetMessage] = useState<string | null>(null);
   const [shareDialogCopyState, setShareDialogCopyState] = useState<"idle" | "copied" | "error">("idle");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(CUSTOM_PRESET_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const restored: CustomSharePreset[] = parsed
+            .map((item) => {
+              if (!item || typeof item !== "object") {
+                return null;
+              }
+              const formatValue: ShareFormat =
+                item.format === "markdown" || item.format === "json" ? item.format : "text";
+              return {
+                id: String(item.id ?? generatePresetId()),
+                name: String(item.name ?? "未命名プリセット"),
+                title: String(item.title ?? ""),
+                notes: String(item.notes ?? ""),
+                format: formatValue,
+              } satisfies CustomSharePreset;
+            })
+            .filter(Boolean) as CustomSharePreset[];
+          if (restored.length > 0) {
+            setCustomSharePresets(restored);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("[projects] failed to restore share presets", error);
+    }
+  }, []);
+
+  const persistCustomPresets = useCallback((next: CustomSharePreset[]) => {
+    setCustomSharePresets(next);
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(CUSTOM_PRESET_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.warn("[projects] failed to persist share presets", error);
+    }
+  }, []);
 
   const toggleTagSelection = useCallback((tag: string) => {
     setSelectedTags((prev) => {
@@ -280,6 +350,21 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     [shareUrl, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags],
   );
 
+  const sharePresetOptions = useMemo(
+    () => [
+      ...SHARE_PRESETS.map((preset) => ({ ...preset, isCustom: false })),
+      ...customSharePresets.map((preset) => ({
+        key: `custom:${preset.id}`,
+        label: `★ ${preset.name}`,
+        title: preset.title,
+        notes: preset.notes,
+        format: preset.format,
+        isCustom: true,
+      })),
+    ],
+    [customSharePresets],
+  );
+
   const copySlackTemplate = useCallback(
     async (
       message: string | null,
@@ -308,33 +393,118 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   }, [composeShareTemplate, copySlackTemplate]);
 
   const openShareDialog = useCallback(() => {
-    const defaultPreset = SHARE_PRESETS[0];
-    setShareDialog((prev) => ({
+    const defaultPreset = sharePresetOptions[0] ?? SHARE_PRESETS[0];
+    setSharePresetMessage(null);
+    setShareDialog({
       open: true,
-      title: defaultPreset.title,
-      notes: defaultPreset.notes,
-      preset: defaultPreset.key,
-      format: prev.format ?? "text",
-    }));
+      title: defaultPreset?.title ?? "",
+      notes: defaultPreset?.notes ?? "",
+      preset: defaultPreset?.key ?? "custom",
+      format: defaultPreset?.format ?? "text",
+    });
     setShareDialogCopyState("idle");
-  }, []);
+  }, [sharePresetOptions]);
 
-  const closeShareDialog = () => setShareDialog((prev) => ({ ...prev, open: false }));
+  const closeShareDialog = () => {
+    setShareDialog((prev) => ({ ...prev, open: false }));
+    setSharePresetMessage(null);
+  };
 
   const handleSharePresetChange = (presetKey: string) => {
+    setSharePresetMessage(null);
     setShareDialog((prev) => {
-      const preset = SHARE_PRESETS.find((item) => item.key === presetKey) ?? SHARE_PRESETS[SHARE_PRESETS.length - 1];
-      if (preset.key === "custom") {
-        return { ...prev, preset: preset.key };
+      const preset = sharePresetOptions.find((item) => item.key === presetKey);
+      if (!preset) {
+        return { ...prev, preset: presetKey };
+      }
+      if (preset.key === "custom" && !preset.isCustom) {
+        return {
+          ...prev,
+          preset: preset.key,
+          title: "",
+          notes: "",
+          format: "text",
+        };
       }
       return {
         ...prev,
         preset: preset.key,
         title: preset.title,
         notes: preset.notes,
+        format: preset.format ?? prev.format,
       };
     });
   };
+
+  const handleSharePresetSave = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const suggestion = shareDialog.title.trim().length > 0 ? shareDialog.title.trim() : "共有テンプレ";
+    const input = window.prompt("保存するプリセット名を入力してください", suggestion);
+    if (input === null) {
+      return;
+    }
+    const trimmedName = input.trim();
+    if (trimmedName.length === 0) {
+      setSharePresetMessage("プリセット名を入力してください");
+      return;
+    }
+
+    const selectedId = shareDialog.preset.startsWith("custom:")
+      ? shareDialog.preset.slice("custom:".length)
+      : null;
+    const nextId = selectedId ?? generatePresetId();
+    const nextPreset: CustomSharePreset = {
+      id: nextId,
+      name: trimmedName,
+      title: shareDialog.title,
+      notes: shareDialog.notes,
+      format: shareDialog.format,
+    };
+
+    const filtered = customSharePresets.filter((preset) => preset.id !== nextId && preset.name !== trimmedName);
+    persistCustomPresets([...filtered, nextPreset]);
+    setShareDialog((prev) => ({ ...prev, preset: `custom:${nextId}` }));
+    setSharePresetMessage(selectedId ? "プリセットを更新しました" : "プリセットを保存しました");
+    window.setTimeout(() => {
+      setSharePresetMessage(null);
+    }, 2500);
+  }, [customSharePresets, persistCustomPresets, shareDialog]);
+
+  const handleSharePresetDelete = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const selectedId = shareDialog.preset.startsWith("custom:")
+      ? shareDialog.preset.slice("custom:".length)
+      : null;
+    if (!selectedId) {
+      return;
+    }
+    const target = customSharePresets.find((preset) => preset.id === selectedId);
+    if (!target) {
+      return;
+    }
+    const confirmed = window.confirm(`プリセット「${target.name}」を削除しますか？`);
+    if (!confirmed) {
+      return;
+    }
+    const remaining = customSharePresets.filter((preset) => preset.id !== selectedId);
+    persistCustomPresets(remaining);
+    const fallback = SHARE_PRESETS[0];
+    setShareDialog((prev) => ({
+      ...prev,
+      preset: fallback.key,
+      title: fallback.title,
+      notes: fallback.notes,
+      format: fallback.format ?? "text",
+    }));
+    setSharePresetMessage("プリセットを削除しました");
+    window.setTimeout(() => {
+      setSharePresetMessage(null);
+    }, 2500);
+  }, [customSharePresets, persistCustomPresets, shareDialog.preset]);
 
   const sharePreview = useMemo(() => {
     const template = composeShareTemplate(shareDialog.title, shareDialog.notes);
@@ -1579,9 +1749,9 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                   onChange={(event) => handleSharePresetChange(event.target.value)}
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
                 >
-                  {SHARE_PRESETS.map((preset) => (
+                  {sharePresetOptions.map((preset) => (
                     <option key={preset.key} value={preset.key}>
-                      {preset.label}
+                      {preset.isCustom ? `${preset.label}` : preset.label}
                     </option>
                   ))}
                 </select>
@@ -1591,9 +1761,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                 タイトル
                 <input
                   value={shareDialog.title}
-                  onChange={(event) =>
-                    setShareDialog((prev) => ({ ...prev, title: event.target.value, preset: 'custom' }))
-                  }
+                  onChange={(event) => {
+                    setSharePresetMessage(null);
+                    setShareDialog((prev) => {
+                      const nextPreset = prev.preset.startsWith("custom:") ? prev.preset : "custom";
+                      return { ...prev, title: event.target.value, preset: nextPreset };
+                    });
+                  }}
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
                   placeholder="例: Weekly Projects Update"
                 />
@@ -1603,9 +1777,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                 メモ
                 <textarea
                   value={shareDialog.notes}
-                  onChange={(event) =>
-                    setShareDialog((prev) => ({ ...prev, notes: event.target.value, preset: 'custom' }))
-                  }
+                  onChange={(event) => {
+                    setSharePresetMessage(null);
+                    setShareDialog((prev) => {
+                      const nextPreset = prev.preset.startsWith("custom:") ? prev.preset : "custom";
+                      return { ...prev, notes: event.target.value, preset: nextPreset };
+                    });
+                  }}
                   rows={3}
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
                   placeholder="共有時に添える補足メモ"
@@ -1616,9 +1794,14 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                 出力形式
                 <select
                   value={shareDialog.format}
-                  onChange={(event) =>
-                    setShareDialog((prev) => ({ ...prev, format: event.target.value as ShareFormat }))
-                  }
+                  onChange={(event) => {
+                    setSharePresetMessage(null);
+                    const value = event.target.value as ShareFormat;
+                    setShareDialog((prev) => {
+                      const nextPreset = prev.preset.startsWith("custom:") ? prev.preset : "custom";
+                      return { ...prev, format: value, preset: nextPreset };
+                    });
+                  }}
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
                 >
                   {SHARE_FORMATS.map((item) => (
@@ -1629,6 +1812,28 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
                 </select>
                 <span className="text-[11px] text-slate-500">{shareFormatHint}</span>
               </label>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+                <button
+                  type="button"
+                  onClick={handleSharePresetSave}
+                  className="rounded-md border border-slate-700 px-3 py-1 hover:border-emerald-500 hover:text-emerald-300"
+                >
+                  現在の設定をプリセット保存
+                </button>
+                {shareDialog.preset.startsWith("custom:") ? (
+                  <button
+                    type="button"
+                    onClick={handleSharePresetDelete}
+                    className="rounded-md border border-slate-800 px-3 py-1 text-slate-400 hover:border-rose-500 hover:text-rose-300"
+                  >
+                    このプリセットを削除
+                  </button>
+                ) : null}
+                {sharePresetMessage ? (
+                  <span className="text-[11px] text-emerald-400">{sharePresetMessage}</span>
+                ) : null}
+              </div>
 
               <div className="space-y-2">
                 <p className="text-xs text-slate-400">{sharePreviewLabel}</p>
