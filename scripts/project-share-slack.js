@@ -30,6 +30,8 @@ const optionAliases = new Map([
   ['-c', 'count'],
   ['-o', 'out'],
   ['-p', 'post'],
+  ['-C', 'config'],
+  ['-E', 'ensure-ok'],
   ['-h', 'help'],
 ]);
 
@@ -40,6 +42,23 @@ for (let index = 0; index < args.length; index += 1) {
     const key = token.slice(2);
     if (key === 'help') {
       options.help = true;
+      continue;
+    }
+    if (key === 'ensure-ok') {
+      options['ensure-ok'] = true;
+      continue;
+    }
+    if (key === 'post') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error('Option --post requires a value');
+        process.exit(1);
+      }
+      if (!Array.isArray(options.post)) {
+        options.post = [];
+      }
+      options.post.push(next);
+      index += 1;
       continue;
     }
     const next = args[index + 1];
@@ -57,6 +76,23 @@ for (let index = 0; index < args.length; index += 1) {
     }
     if (alias === 'help') {
       options.help = true;
+      continue;
+    }
+    if (alias === 'ensure-ok') {
+      options['ensure-ok'] = true;
+      continue;
+    }
+    if (alias === 'post') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error(`Option ${token} requires a value`);
+        process.exit(1);
+      }
+      if (!Array.isArray(options.post)) {
+        options.post = [];
+      }
+      options.post.push(next);
+      index += 1;
       continue;
     }
     const next = args[index + 1];
@@ -85,6 +121,7 @@ Options:
   --count <value>   Optional. 対象件数を追加表示します。
   --out <value>     Optional. 出力内容をファイルへ保存します。
   --post <value>    Optional. Slack Incoming Webhook URL に投稿します。
+  --ensure-ok       Optional. Webhook 応答が "ok" でなければエラーにします。
   --help            このヘルプを表示します。
 `);
   process.exit(options.help ? 0 : 1);
@@ -168,7 +205,12 @@ const message = [
 
 const format = (options.format ?? 'text').toLowerCase();
 const outPath = typeof options.out === 'string' ? options.out.trim() : '';
-const webhookUrl = typeof options.post === 'string' ? options.post.trim() : '';
+const webhookTargets = Array.isArray(options.post)
+  ? options.post.map((value) => String(value).trim()).filter((value) => value.length > 0)
+  : options.post
+    ? [String(options.post).trim()].filter((value) => value.length > 0)
+    : [];
+const ensureOk = Boolean(options['ensure-ok']);
 const filters = {
   status: params.has('status') ? status : 'all',
   keyword: keyword ?? '',
@@ -213,7 +255,7 @@ if (format === 'markdown') {
   renderedOutput = message;
 }
 
-function postToWebhook(url, text) {
+function postToWebhook(url, text, ensureOkResponse) {
   const target = new URL(url);
   const isHttps = target.protocol === 'https:';
   if (!isHttps && target.protocol !== 'http:') {
@@ -247,7 +289,14 @@ function postToWebhook(url, text) {
         response.on('end', () => {
           const responseBody = Buffer.concat(chunks).toString('utf-8');
           if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
-            resolve();
+            if (ensureOkResponse) {
+              const normalized = responseBody.trim().toLowerCase();
+              if (normalized !== 'ok') {
+                reject(new Error(`Unexpected webhook response body: ${responseBody.trim() || '(empty)'}`));
+                return;
+              }
+            }
+            resolve(responseBody);
           } else {
             reject(
               new Error(
@@ -283,13 +332,13 @@ function postToWebhook(url, text) {
     }
   }
 
-  if (webhookUrl) {
-    if (!/^https?:\/\//i.test(webhookUrl)) {
-      console.error(`Invalid webhook URL: ${webhookUrl}`);
+  for (const target of webhookTargets) {
+    if (!/^https?:\/\//i.test(target)) {
+      console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postToWebhook(webhookUrl, payload.message);
-    console.error('Posted share message to webhook');
+    await postToWebhook(target, payload.message, ensureOk);
+    console.error(`Posted share message to webhook: ${target}`);
   }
 })().catch((error) => {
   console.error(error instanceof Error ? error.message : error);

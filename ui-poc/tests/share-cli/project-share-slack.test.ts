@@ -156,8 +156,8 @@ describe("project-share-slack CLI", () => {
           } catch (error) {
             // ignore parse errors and let assertion fail later
           }
-          response.writeHead(200, { "Content-Type": "application/json" });
-          response.end('{"ok":true}');
+          response.writeHead(200, { "Content-Type": "text/plain" });
+          response.end("ok");
         });
       });
 
@@ -180,7 +180,7 @@ describe("project-share-slack CLI", () => {
                 expect(result.status).toBe(0);
                 expect(received).toHaveLength(1);
                 expect(received[0].text).toContain(":clipboard: *テスト*");
-                expect(result.stderr).toContain("Posted share message to webhook");
+                expect(result.stderr).toContain(`Posted share message to webhook: ${webhookUrl}`);
                 resolve();
               } catch (assertionError) {
                 reject(assertionError);
@@ -191,6 +191,31 @@ describe("project-share-slack CLI", () => {
             server.close(() => {
               reject(error);
             });
+          });
+      });
+    });
+  });
+
+  test("fails when --ensure-ok and webhook body is not ok", async () => {
+    await new Promise<void>((resolve) => {
+      const server = createServer((request, response) => {
+        response.writeHead(200, { "Content-Type": "text/plain" });
+        response.end("accepted");
+      });
+
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as AddressInfo | null;
+        const webhookUrl = `http://127.0.0.1:${address?.port ?? 0}/webhook`;
+        runScriptAsync(["--format", "json", "--post", webhookUrl, "--ensure-ok"])
+          .then((result) => {
+            server.close(() => {
+              expect(result.status).toBe(1);
+              expect(result.stderr).toContain("Unexpected webhook response body");
+              resolve();
+            });
+          })
+          .catch(() => {
+            server.close(() => resolve());
           });
       });
     });

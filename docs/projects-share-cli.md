@@ -68,7 +68,7 @@ node scripts/project-share-slack.js \
   --post 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
 ```
 
-Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。
+Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。Slack Webhook の応答本文が `ok` になることを保証したい場合は `--ensure-ok` を併用してください。
 
 ## CI への組み込み例
 `.github/workflows/projects-share-template.yml` では CLI を定期実行して体裁崩れを検知しています。JSON 出力を検証する際は `jq` で値をチェックすると安全です。
