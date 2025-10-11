@@ -32,6 +32,8 @@ const optionAliases = new Map([
   ['-p', 'post'],
   ['-C', 'config'],
   ['-E', 'ensure-ok'],
+  ['-r', 'retry'],
+  ['-d', 'retry-delay'],
   ['-h', 'help'],
 ]);
 
@@ -158,7 +160,7 @@ const assignDefault = (key) => {
   }
 };
 
-['url', 'title', 'notes', 'format', 'count', 'out'].forEach(assignDefault);
+['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay'].forEach(assignDefault);
 
 if (config.post !== undefined) {
   const configPosts = Array.isArray(config.post) ? config.post : [config.post];
@@ -177,6 +179,10 @@ if (options['ensure-ok'] === undefined && configEnsureValue !== undefined) {
   options['ensure-ok'] = Boolean(configEnsureValue);
 }
 
+if (options['retry-delay'] === undefined && config.retryDelay !== undefined) {
+  options['retry-delay'] = config.retryDelay;
+}
+
 if (!options.url) {
   console.log(USAGE_TEXT);
   process.exit(1);
@@ -187,8 +193,32 @@ options.title = options.title !== undefined ? String(options.title) : undefined;
 options.notes = options.notes !== undefined ? String(options.notes) : undefined;
 options.format = options.format !== undefined ? String(options.format) : undefined;
 options.out = options.out !== undefined ? String(options.out) : undefined;
+options.retry = options.retry !== undefined ? String(options.retry) : undefined;
+options['retry-delay'] = options['retry-delay'] !== undefined ? String(options['retry-delay']) : undefined;
 if (Array.isArray(options.post)) {
   options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
+}
+
+let retryCount = 0;
+if (options.retry !== undefined) {
+  const parsedRetry = Number(options.retry);
+  if (!Number.isFinite(parsedRetry) || parsedRetry < 0) {
+    console.error(`Invalid retry value: ${options.retry}`);
+    process.exit(1);
+  }
+  retryCount = Math.floor(parsedRetry);
+}
+
+let retryDelayMs = 1000;
+if (options['retry-delay'] !== undefined) {
+  const parsedDelay = Number(options['retry-delay']);
+  if (!Number.isFinite(parsedDelay) || parsedDelay < 0) {
+    console.error(`Invalid retry-delay value: ${options['retry-delay']}`);
+    process.exit(1);
+  }
+  retryDelayMs = Math.floor(parsedDelay);
+} else if (retryCount === 0) {
+  retryDelayMs = 0;
 }
 
 let parsedUrl;
@@ -382,6 +412,26 @@ function postToWebhook(url, text, ensureOkResponse) {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function postWithRetry(url, text, ensureOkResponse, retries, delayMs) {
+  let attempt = 0;
+  while (true) {
+    try {
+      await postToWebhook(url, text, ensureOkResponse);
+      return;
+    } catch (error) {
+      if (attempt >= retries) {
+        throw error;
+      }
+      attempt += 1;
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+    }
+  }
+}
+
 (async () => {
   console.log(renderedOutput);
 
@@ -399,7 +449,7 @@ function postToWebhook(url, text, ensureOkResponse) {
       console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postToWebhook(target, payload.message, ensureOk);
+    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs);
     console.error(`Posted share message to webhook: ${target}`);
   }
 })().catch((error) => {

@@ -68,7 +68,7 @@ node scripts/project-share-slack.js \
   --post 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
 ```
 
-Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。Slack Webhook の応答本文が `ok` になることを保証したい場合は `--ensure-ok` を併用してください。
+Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI でも失敗を検知できます。Slack Webhook の応答本文が `ok` になることを保証したい場合は `--ensure-ok` を併用してください。ネットワーク揺らぎへの耐性を持たせたい場合は `--retry 3 --retry-delay 2000` のように再送回数と待機ミリ秒を指定できます。
 
 ## 設定ファイルの利用
 繰り返し利用する設定は JSON ファイルにまとめておくのがおすすめです。`--config <path>` を指定すると、ファイル内の値を既定値として読み込み、CLI 引数で上書きできます。
@@ -80,6 +80,9 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
   "notes": "Config から読み込んだメモ",
   "format": "json",
   "count": 12,
+  "retry": 2,
+  "retryDelay": 1500,
+  "ensure-ok": true,
   "post": ["https://hooks.slack.com/services/AAA/BBB/CCC"]
 }
 ```
@@ -88,7 +91,7 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 node scripts/project-share-slack.js --config share.config.json
 ```
 
-`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。
+`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `retry` / `retry-delay` も同様に設定ファイルで既定値を定義できます。
 
 ## CI への組み込み例
 `.github/workflows/projects-share-template.yml` では CLI を定期実行して体裁崩れを検知しています。JSON 出力を検証する際は `jq` で値をチェックすると安全です。

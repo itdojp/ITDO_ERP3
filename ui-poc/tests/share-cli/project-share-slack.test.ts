@@ -227,4 +227,86 @@ describe("project-share-slack CLI", () => {
       });
     });
   });
+
+  test("retries webhook posting when --retry is specified", async () => {
+    let callCount = 0;
+    await new Promise<void>((resolve, reject) => {
+      const server = createServer((request, response) => {
+        callCount += 1;
+        if (callCount === 1) {
+          response.writeHead(500, { "Content-Type": "text/plain" });
+          response.end("error");
+        } else {
+          response.writeHead(200, { "Content-Type": "text/plain" });
+          response.end("ok");
+        }
+      });
+
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as AddressInfo | null;
+        const webhookUrl = `http://127.0.0.1:${address?.port ?? 0}/retry`;
+        runScriptAsync([
+          "--format",
+          "json",
+          "--post",
+          webhookUrl,
+          "--retry",
+          "1",
+          "--retry-delay",
+          "10",
+          "--ensure-ok",
+        ])
+          .then((result) => {
+            server.close(() => {
+              try {
+                expect(result.status).toBe(0);
+                expect(callCount).toBe(2);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            });
+          })
+          .catch((error) => {
+            server.close(() => reject(error));
+          });
+      });
+    });
+  });
+
+  test("stops after exceeding retry attempts", async () => {
+    let callCount = 0;
+    await new Promise<void>((resolve) => {
+      const server = createServer((request, response) => {
+        callCount += 1;
+        response.writeHead(500, { "Content-Type": "text/plain" });
+        response.end("still failing");
+      });
+
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as AddressInfo | null;
+        const webhookUrl = `http://127.0.0.1:${address?.port ?? 0}/retry-fail`;
+        runScriptAsync([
+          "--format",
+          "json",
+          "--post",
+          webhookUrl,
+          "--retry",
+          "2",
+          "--retry-delay",
+          "5",
+        ])
+          .then((result) => {
+            server.close(() => {
+              expect(result.status).toBe(1);
+              expect(callCount).toBe(3);
+              resolve();
+            });
+          })
+          .catch(() => {
+            server.close(() => resolve());
+          });
+      });
+    });
+  });
 });
