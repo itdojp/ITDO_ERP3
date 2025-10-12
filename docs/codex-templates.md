@@ -14,6 +14,8 @@
 | `github-action` | GitHub Actions Workflow 雛形 | `.github/workflows/<workflow>.yaml` |
 | `terraform-module` | Terraform Module ベース | `iac/terraform/<module>` |
 
+Terraform モジュールでは、リモートステート設定用に `stateBucket` / `stateDynamoTable` / `stateRegion` / `stateKeyPrefix` (任意) を指定してください。
+
 ## 2. 使い方
 1. Codex CLI でテンプレートをプレビュー
    ```bash

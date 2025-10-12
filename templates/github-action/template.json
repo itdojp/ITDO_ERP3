@@ -1,6 +1,6 @@
 {
   "files": {
-    ".github/workflows/{{workflowFile}}.yaml": "name: {{workflowName}}\n\non:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        node-version: [18.x, 20.x]\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: ${{matrix.node-version}}\n          cache: 'npm'\n      - run: npm ci\n      - run: npm run lint\n      - run: npm test\n"
+    ".github/workflows/{{workflowFile}}.yaml": "name: {{workflowName}}\n\non:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        node-version: [18.x, 20.x]\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: ${{'{{'}} matrix.node-version {{'}}'}}\n          cache: 'npm'\n      - run: npm ci\n      - run: npm run lint\n      - run: npm test\n"
   },
   "helpers": {
     "workflowFile": "{{ workflowName | kebab }}"
