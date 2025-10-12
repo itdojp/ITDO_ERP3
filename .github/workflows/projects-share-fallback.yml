@@ -1,0 +1,77 @@
+name: Projects Share with Fallback
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1" # 毎週月曜 18:00 JST
+
+env:
+  PROJECTS_URL: https://example.com/projects?status=active&manager=Yamada
+  SHARE_TITLE: Weekly Projects Update
+  SHARE_NOTES: Primary channel delivery from GitHub Actions
+  FALLBACK_NOTES: Primary channel failed. Fallback delivery.
+
+jobs:
+  share-projects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Prepare artifacts directory
+        run: mkdir -p artifacts
+
+      - name: Share via primary webhook
+        id: share_primary
+        continue-on-error: true
+        env:
+          PRIMARY_WEBHOOK: ${{ secrets.PROJECTS_PRIMARY_WEBHOOK }}
+        run: |
+          node scripts/project-share-slack.js \
+            --url "${PROJECTS_URL}" \
+            --title "${SHARE_TITLE}" \
+            --notes "${SHARE_NOTES}" \
+            --format json \
+            --post "${PRIMARY_WEBHOOK}" \
+            --retry 2 \
+            --retry-delay 15000 \
+            --retry-backoff 1.5 \
+            --retry-max-delay 60000 \
+            --audit-log artifacts/share-primary.json
+
+      - name: Share via fallback webhook
+        if: steps.share_primary.outcome == 'failure'
+        env:
+          FALLBACK_WEBHOOK: ${{ secrets.PROJECTS_FALLBACK_WEBHOOK }}
+        run: |
+          echo "::warning::Primary webhook delivery failed. Sending fallback notification."
+          node scripts/project-share-slack.js \
+            --url "${PROJECTS_URL}" \
+            --title "${SHARE_TITLE} (Fallback)" \
+            --notes "${FALLBACK_NOTES}" \
+            --format text \
+            --post "${FALLBACK_WEBHOOK}" \
+            --retry 1 \
+            --retry-delay 20000 \
+            --ensure-ok
+
+      - name: Upload audit logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: projects-share-audit
+          path: artifacts/
+          if-no-files-found: ignore
+
+      - name: Fail job when primary delivery failed
+        if: steps.share_primary.outcome == 'failure'
+        run: |
+          echo "::error::Primary webhook delivery failed. Check fallback notification and audit logs."
+          exit 1

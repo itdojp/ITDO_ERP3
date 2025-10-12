@@ -143,6 +143,8 @@ Webhook ごとに異なるリトライ設定を利用したい場合は、`post`
 
 テンプレートを定義した場合は `--template <name>` で呼び出せます。テンプレート内で指定した値は CLI 引数よりも前に適用されるため、雛形を決めてから一部のみ上書きできます。
 
+生成した監査ログを要約したい場合は `node scripts/project-share-audit-report.js --input artifacts` のように実行すると、対象ファイル内の各 Webhook の成否・最終ステータスを整形して出力できます。`--fail-on-error` を付与すると最終結果が失敗の Webhook が含まれる場合に非ゼロ終了となり、CI でも検知しやすくなります。
+
 ## CI への組み込み例
 `.github/workflows/projects-share-template.yml` では CLI を定期実行して体裁崩れを検知しています。JSON 出力を検証する際は `jq` で値をチェックすると安全です。
 
@@ -154,6 +156,8 @@ Webhook ごとに異なるリトライ設定を利用したい場合は、`post`
 ```
 
 GitHub Actions と同じコマンドをローカルで実行すれば、CI と同じ結果を再現できます。
+
+フォールバック通知を行うサンプルは `.github/workflows/projects-share-fallback.yml` を参照してください。プライマリ Webhook が失敗した場合に別チャネルへ通知し、監査ログをアーティファクトとして保存する例をまとめています。
 
 ## トラブルシューティング
 - URL にクエリ文字 `&` を含める場合はシェルに解釈されないよう `'` で囲みます。
