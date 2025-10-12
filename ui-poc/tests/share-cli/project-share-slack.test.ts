@@ -337,6 +337,78 @@ describe("project-share-slack CLI", () => {
     });
   });
 
+  test("honors Retry-After header when --respect-retry-after is enabled", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-respect-"));
+    const auditPath = path.join(tempDir, "audit.json");
+    let callCount = 0;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const server = createServer((request, response) => {
+          callCount += 1;
+          if (callCount === 1) {
+            response.statusCode = 429;
+            response.setHeader("Retry-After", "0.05");
+            response.setHeader("Content-Type", "text/plain");
+            response.end("rate limited");
+          } else {
+            response.writeHead(200, { "Content-Type": "text/plain" });
+            response.end("ok");
+          }
+        });
+
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address() as AddressInfo | null;
+          const webhookUrl = `http://127.0.0.1:${address?.port ?? 0}/respect`;
+          runScriptAsync([
+            "--format",
+            "json",
+            "--post",
+            webhookUrl,
+            "--retry",
+            "1",
+            "--retry-delay",
+            "5",
+            "--retry-backoff",
+            "2",
+            "--retry-max-delay",
+            "100",
+            "--retry-jitter",
+            "0",
+            "--respect-retry-after",
+            "--audit-log",
+            auditPath,
+            "--ensure-ok",
+          ])
+            .then((result) => {
+              server.close(() => {
+                try {
+                  expect(result.status).toBe(0);
+                  resolve();
+                } catch (error) {
+                  reject(error);
+                }
+              });
+            })
+            .catch((error) => {
+              server.close(() => reject(error));
+            });
+        });
+      });
+
+      expect(callCount).toBe(2);
+      const auditContent = JSON.parse(readFileSync(auditPath, "utf-8"));
+      expect(Array.isArray(auditContent.attempts)).toBe(true);
+      expect(auditContent.attempts.length).toBe(2);
+      const firstAttempt = auditContent.attempts[0];
+      expect(firstAttempt.success).toBe(false);
+      expect(typeof firstAttempt.retryAfterMs).toBe("number");
+      expect(firstAttempt.retryAfterMs).toBeGreaterThanOrEqual(50);
+      expect(firstAttempt.nextDelayMs).toBeGreaterThanOrEqual(firstAttempt.retryAfterMs);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("writes audit log with retry details", async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-audit-"));
     const auditPath = path.join(tempDir, "audit.json");

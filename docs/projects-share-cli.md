@@ -73,6 +73,7 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 - `--retry-backoff` で遅延時間に乗算する係数（既定 2）を調整できます。
 - `--retry-max-delay` で遅延時間の上限をミリ秒単位で指定できます（既定 60000）。
 - `--retry-jitter` で各再試行に加算する 0〜指定値ミリ秒のジッタを追加できます。
+- `--respect-retry-after` を付けると、Slack から返される `Retry-After` ヘッダー（秒/日時）に応じて次回再試行までの待機時間を自動で延長します。
 
 ## 設定ファイルの利用
 繰り返し利用する設定は JSON ファイルにまとめておくのがおすすめです。`--config <path>` を指定すると、ファイル内の値を既定値として読み込み、CLI 引数で上書きできます。
@@ -95,7 +96,7 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 node scripts/project-share-slack.js --config share.config.json
 ```
 
-`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `retry` / `retry-delay` / `retry-backoff` / `retry-max-delay` / `retry-jitter` も同様に設定ファイルで既定値を定義できます。
+`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `respect-retry-after` / `retry` / `retry-delay` / `retry-backoff` / `retry-max-delay` / `retry-jitter` も同様に設定ファイルで既定値を定義できます。
 
 `templates` にプリセットを定義すると、`--template <name>` で適用できます。テンプレートで指定した値は CLI 引数に先立って設定されるため、雛形を用意した上で必要な部分だけ上書きするといった使い方ができます。
 
