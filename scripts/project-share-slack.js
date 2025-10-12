@@ -292,11 +292,15 @@ const coerceNumberOption = (value, field, context, { min = 0, allowFloat = false
   }
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    console.error(`Invalid ${field} value for ${context}: ${value}`);
+    console.error(
+      `Invalid ${field} value for ${context}: must be a finite number (received ${String(value)})`,
+    );
     process.exit(1);
   }
   if (numeric < min) {
-    console.error(`Invalid ${field} value for ${context}: ${value}`);
+    console.error(
+      `Invalid ${field} value for ${context}: must be >= ${min} (received ${numeric})`,
+    );
     process.exit(1);
   }
   if (allowFloat) {
@@ -1102,6 +1106,9 @@ async function postWithRetry(
     const targetRetryJitterMs = target.retryJitter !== undefined ? target.retryJitter : retryJitterMs;
 
     if (targetRetryDelayMs > targetRetryMaxDelayMs && targetRetryMaxDelayMs > 0) {
+      console.warn(
+        `[WARN] retryDelay (${targetRetryDelayMs}) for webhook ${targetUrl} exceeds retryMaxDelay (${targetRetryMaxDelayMs}). Capping retryDelay to retryMaxDelay.`,
+      );
       targetRetryDelayMs = targetRetryMaxDelayMs;
     }
 
