@@ -29,7 +29,7 @@ export class ChatSummarizer {
       return this.mockSummarize(messages);
     }
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -37,7 +37,15 @@ export class ChatSummarizer {
       },
       body: JSON.stringify({
         model: this.options.model ?? 'gpt-4o-mini',
-        input: messages.map((m) => `${m.author}: ${m.content}`).join('\n'),
+        messages: [
+          { role: 'system', content: 'Summarize the following project chat for internal stakeholders.' },
+          {
+            role: 'user',
+            content: messages
+              .map((m) => `${m.author} (${m.postedAt}): ${m.content}`)
+              .join('\n'),
+          },
+        ],
       }),
     });
 
@@ -45,10 +53,14 @@ export class ChatSummarizer {
       throw new Error(`Failed to summarize chat: ${response.status}`);
     }
 
-    const json = (await response.json()) as { output_text: string };
+    const json = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+    const summary = json.choices?.[0]?.message?.content?.trim();
+    if (!summary) {
+      throw new Error('OpenAI response did not include summary content');
+    }
     return {
-      summary: json.output_text,
-      embedding: this.computeEmbedding(json.output_text),
+      summary,
+      embedding: this.computeEmbedding(summary),
     };
   }
 

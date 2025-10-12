@@ -1,3 +1,4 @@
+'use client';
 import React from 'react';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -46,7 +47,7 @@ function useTimelineData(projectId: string) {
 
 function TimelineRow({ task }: { task: TimelineTask }) {
   return (
-    <div className="flex items-center gap-2 py-1" key={task.id}>
+    <div className="flex items-center gap-2 py-1">
       <div className="w-48 text-sm font-medium text-gray-700">{task.name}</div>
       <div className="text-xs text-gray-500">
         {task.startDate} → {task.endDate}
