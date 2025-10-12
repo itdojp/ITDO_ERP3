@@ -2,6 +2,8 @@
 
 Projects 一覧の共有メッセージを手元や CI から生成するときは `scripts/project-share-slack.js` を利用します。UI の共有モーダルと同じロジックでフィルタ内容を整形し、Slack でそのまま貼り付けられるフォーマットを作れます。
 
+リポジトリを直接参照して `npx github:itdojp/ITDO_ERP3#feature/share-cli-webhook-policies share-projects` のように呼び出すこともできます（`packages/share-cli` を参照）。
+
 ## 前提条件
 - Node.js 20 以上を利用することを想定しています（GitHub Actions では `actions/setup-node@v4` を使用）。
 - `ui-poc` ディレクトリで `npm install` を実行し、依存関係を解決しておきます。
