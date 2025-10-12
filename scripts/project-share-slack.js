@@ -19,6 +19,7 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
+const path = require('node:path');
 
 const args = process.argv.slice(2);
 
@@ -174,7 +175,7 @@ const applyDefaultsFromObject = (source) => {
   if (!source || typeof source !== 'object') {
     return;
   }
-  ['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter'].forEach((key) => {
+  ['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter', 'audit-log'].forEach((key) => {
     if (source[key] !== undefined && options[key] === undefined) {
       options[key] = source[key];
     }
@@ -209,7 +210,7 @@ if (templateName) {
   applyDefaultsFromObject(template);
 }
 
-['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter'].forEach(assignDefault);
+['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter', 'audit-log'].forEach(assignDefault);
 
 if (config.post !== undefined) {
   const configPosts = Array.isArray(config.post) ? config.post : [config.post];
@@ -259,6 +260,7 @@ options['retry-delay'] = options['retry-delay'] !== undefined ? String(options['
 options['retry-backoff'] = options['retry-backoff'] !== undefined ? String(options['retry-backoff']) : undefined;
 options['retry-max-delay'] = options['retry-max-delay'] !== undefined ? String(options['retry-max-delay']) : undefined;
 options['retry-jitter'] = options['retry-jitter'] !== undefined ? String(options['retry-jitter']) : undefined;
+options['audit-log'] = options['audit-log'] !== undefined ? String(options['audit-log']) : undefined;
 if (Array.isArray(options.post)) {
   options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
 }
@@ -401,6 +403,8 @@ const webhookTargets = Array.isArray(options.post)
   ? options.post.map((value) => String(value).trim()).filter((value) => value.length > 0)
   : [];
 const ensureOk = Boolean(options['ensure-ok']);
+const auditLogPath = typeof options['audit-log'] === 'string' ? options['audit-log'].trim() : '';
+const auditEvents = auditLogPath ? [] : null;
 const filters = {
   status: params.has('status') ? status : 'all',
   keyword: keyword ?? '',
@@ -478,21 +482,26 @@ function postToWebhook(url, text, ensureOkResponse) {
         });
         response.on('end', () => {
           const responseBody = Buffer.concat(chunks).toString('utf-8');
-          if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+          const statusCode = response.statusCode ?? null;
+          if (statusCode && statusCode >= 200 && statusCode < 300) {
             if (ensureOkResponse) {
               const normalized = responseBody.trim().toLowerCase();
               if (normalized !== 'ok') {
-                reject(new Error(`Unexpected webhook response body: ${responseBody.trim() || '(empty)'}`));
+                const error = new Error(`Unexpected webhook response body: ${responseBody.trim() || '(empty)'}`);
+                error.statusCode = statusCode;
+                error.responseBody = responseBody;
+                reject(error);
                 return;
               }
             }
-            resolve(responseBody);
+            resolve({ statusCode, responseBody });
           } else {
-            reject(
-              new Error(
-                `Failed to post to webhook (${response.statusCode ?? 'unknown'}): ${responseBody}`,
-              ),
+            const error = new Error(
+              `Failed to post to webhook (${statusCode ?? 'unknown'}): ${responseBody}`,
             );
+            error.statusCode = statusCode;
+            error.responseBody = responseBody;
+            reject(error);
           }
         });
       },
@@ -502,6 +511,7 @@ function postToWebhook(url, text, ensureOkResponse) {
       request.destroy(new Error(`Webhook request timed out after ${timeoutMs} ms`));
     });
     request.on('error', (error) => {
+      error.statusCode = null;
       reject(error);
     });
 
@@ -512,23 +522,45 @@ function postToWebhook(url, text, ensureOkResponse) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayMs, backoff, maxDelayMs, jitterMs) {
+async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayMs, backoff, maxDelayMs, jitterMs, events) {
   const maxDelayBound = maxDelayMs > 0 ? maxDelayMs : Number.MAX_SAFE_INTEGER;
   let attempt = 0;
   let currentDelay = initialDelayMs;
 
   while (true) {
+    const attemptStartedAt = Date.now();
     try {
-      await postToWebhook(url, text, ensureOkResponse);
+      const result = await postToWebhook(url, text, ensureOkResponse);
+      events?.push({
+        timestamp: new Date().toISOString(),
+        webhook: url,
+        attempt,
+        success: true,
+        statusCode: result.statusCode,
+        responseBody: result.responseBody,
+        elapsedMs: Date.now() - attemptStartedAt,
+      });
       return;
     } catch (error) {
+      const boundedDelay = Math.max(0, Math.min(maxDelayBound, currentDelay));
+      const jitter = jitterMs > 0 ? Math.floor(Math.random() * (jitterMs + 1)) : 0;
+      const waitMs = attempt >= retries ? 0 : Math.max(0, boundedDelay + jitter);
+      events?.push({
+        timestamp: new Date().toISOString(),
+        webhook: url,
+        attempt,
+        success: false,
+        statusCode: error?.statusCode ?? null,
+        responseBody: error?.responseBody,
+        error: error instanceof Error ? error.message : String(error),
+        elapsedMs: Date.now() - attemptStartedAt,
+        nextDelayMs: waitMs > 0 ? waitMs : null,
+      });
       if (attempt >= retries) {
         throw error;
       }
-      const boundedDelay = Math.max(0, Math.min(maxDelayBound, currentDelay));
-      if (boundedDelay > 0) {
-        const jitter = jitterMs > 0 ? Math.floor(Math.random() * (jitterMs + 1)) : 0;
-        await sleep(boundedDelay + jitter);
+      if (waitMs > 0) {
+        await sleep(waitMs);
       }
       attempt += 1;
       if (currentDelay > 0) {
@@ -558,8 +590,26 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
       console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs, retryBackoff, retryMaxDelayMs, retryJitterMs);
+    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs, retryBackoff, retryMaxDelayMs, retryJitterMs, auditEvents);
     console.error(`Posted share message to webhook: ${target}`);
+  }
+
+  if (auditLogPath) {
+    try {
+      const auditPayload = {
+        generatedAt: new Date().toISOString(),
+        title,
+        url: parsedUrl.toString(),
+        attempts: auditEvents,
+      };
+      const directory = path.dirname(auditLogPath);
+      if (directory && directory !== '.') {
+        fs.mkdirSync(directory, { recursive: true });
+      }
+      fs.writeFileSync(auditLogPath, `${JSON.stringify(auditPayload, null, 2)}\n`, 'utf-8');
+    } catch (error) {
+      console.error(`Failed to write audit log: ${error instanceof Error ? error.message : error}`);
+    }
   }
 })().catch((error) => {
   console.error(error instanceof Error ? error.message : error);

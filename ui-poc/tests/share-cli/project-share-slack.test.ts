@@ -429,4 +429,60 @@ describe("project-share-slack CLI", () => {
       });
     });
   });
+
+  test("writes audit log with retry details", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-audit-"));
+    const auditPath = path.join(tempDir, "audit.json");
+    let callCount = 0;
+    await new Promise<void>((resolve, reject) => {
+      const server = createServer((request, response) => {
+        callCount += 1;
+        if (callCount === 1) {
+          response.writeHead(500, { "Content-Type": "text/plain" });
+          response.end("server error");
+        } else {
+          response.writeHead(200, { "Content-Type": "text/plain" });
+          response.end("ok");
+        }
+      });
+
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as AddressInfo | null;
+        const webhookUrl = `http://127.0.0.1:${address?.port ?? 0}/audit`;
+        runScriptAsync([
+          "--format",
+          "json",
+          "--post",
+          webhookUrl,
+          "--retry",
+          "1",
+          "--retry-delay",
+          "5",
+          "--audit-log",
+          auditPath,
+          "--ensure-ok",
+        ])
+          .then((result) => {
+            server.close(() => {
+              try {
+                expect(result.status).toBe(0);
+                const auditContent = JSON.parse(readFileSync(auditPath, "utf-8"));
+                expect(Array.isArray(auditContent.attempts)).toBe(true);
+                expect(auditContent.attempts.length).toBe(2);
+                expect(auditContent.attempts[0].success).toBe(false);
+                expect(auditContent.attempts[1].success).toBe(true);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            });
+          })
+          .catch((error) => {
+            server.close(() => reject(error));
+          });
+      });
+    }).finally(() => {
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+  });
 });

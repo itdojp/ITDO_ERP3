@@ -95,7 +95,11 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 node scripts/project-share-slack.js --config share.config.json
 ```
 
-`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `retry` / `retry-delay` も同様に設定ファイルで既定値を定義できます。
+`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `retry` / `retry-delay` / `retry-backoff` / `retry-max-delay` / `retry-jitter` も同様に設定ファイルで既定値を定義できます。
+
+`templates` にプリセットを定義すると、`--template <name>` で適用できます。テンプレートで指定した値は CLI 引数に先立って設定されるため、雛形を用意した上で必要な部分だけ上書きするといった使い方ができます。
+
+`--audit-log <path>` を指定すると、Webhook 投稿の各試行（成功/失敗、ステータスコード、待機時間など）を JSON に記録します。リトライ設定と合わせて運用監査の材料にできます。
 
 テンプレートを定義した場合は `--template <name>` で呼び出せます。テンプレート内で指定した値は CLI 引数よりも前に適用されるため、雛形を決めてから一部のみ上書きできます。
 
