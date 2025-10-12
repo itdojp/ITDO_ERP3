@@ -331,6 +331,92 @@ describe("project-share-slack CLI", () => {
     }
   });
 
+  test("lists templates when --list-templates is provided", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-templates-"));
+    try {
+      const configPath = path.join(tempDir, "share.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            templates: {
+              weekly: { title: "Weekly", notes: "Weekly note" },
+              review: { title: "Exec" },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+      const result = runScriptRaw(["--config", configPath, "--list-templates"]);
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("Available templates:");
+      expect(result.stdout).toContain("- review");
+      expect(result.stdout).toContain("- weekly");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("removes template from config when --remove-template is used", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-remove-template-"));
+    try {
+      const configPath = path.join(tempDir, "share.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            templates: {
+              daily: { title: "Daily Update" },
+              review: { title: "Exec Review" },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+      const result = runScriptRaw(["--config", configPath, "--remove-template", "daily"]);
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("Removed template: daily");
+      const updated = JSON.parse(readFileSync(configPath, "utf-8"));
+      expect(updated.templates?.daily).toBeUndefined();
+      expect(updated.templates?.review).toBeTruthy();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("fails when removing unknown template", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-remove-missing-"));
+    try {
+      const configPath = path.join(tempDir, "share.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            templates: {
+              weekly: { title: "Weekly" },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+      const result = runScriptRaw(["--config", configPath, "--remove-template", "unknown"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Unknown template");
+      const updated = JSON.parse(readFileSync(configPath, "utf-8"));
+      expect(updated.templates?.weekly).toBeTruthy();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("fails when template name is unknown", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-template-missing-"));
     try {

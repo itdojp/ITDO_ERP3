@@ -124,6 +124,8 @@ Projects 一覧の共有メッセージは以下の CLI で生成できます。
 
 config に `templates` を定義すると、`--template <name>` で共通プリセットを呼び出しつつ CLI 引数で部分的に上書きできます。`--audit-log <path>` を指定すると Webhook 投稿の成功／失敗履歴を JSON で保存します。
 
+テンプレートの管理には `--list-templates` で定義済みテンプレートを一覧表示し、`--remove-template <name>` で特定テンプレートを削除できます（どちらも `--config` 指定が必要です）。
+
 GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
 
 ## 📝 ライセンス
