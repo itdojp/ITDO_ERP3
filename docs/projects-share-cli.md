@@ -101,6 +101,8 @@ node scripts/project-share-slack.js --config share.config.json
 
 `--audit-log <path>` を指定すると、Webhook 投稿の各試行（成功/失敗、ステータスコード、待機時間など）を JSON に記録します。リトライ設定と合わせて運用監査の材料にできます。
 
+テンプレートを定義した場合は `--template <name>` で呼び出せます。テンプレート内で指定した値は CLI 引数よりも前に適用されるため、雛形を決めてから一部のみ上書きできます。
+
 ## CI への組み込み例
 `.github/workflows/projects-share-template.yml` では CLI を定期実行して体裁崩れを検知しています。JSON 出力を検証する際は `jq` で値をチェックすると安全です。
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -18,6 +18,11 @@ const baseArgs = [
 
 const runScript = (extraArgs: string[] = []) =>
   spawnSync(process.execPath, [scriptPath, ...baseArgs, ...extraArgs], {
+    encoding: "utf-8",
+  });
+
+const runScriptRaw = (args: string[] = []) =>
+  spawnSync(process.execPath, [scriptPath, ...args], {
     encoding: "utf-8",
   });
 
@@ -161,6 +166,94 @@ describe("project-share-slack CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Invalid retry-jitter value");
+  });
+
+  test("load defaults from config", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-config-"));
+    try {
+      const configPath = path.join(tempDir, "config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            url: "https://example.com/projects?status=planned&manager=Suzuki",
+            title: "Config Title",
+            notes: "Config Notes",
+            format: "json",
+            count: 7,
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const result = runScriptRaw(["--config", configPath]);
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      validateSharePayload(payload);
+      expect(payload.title).toBe("Config Title");
+      expect(payload.notes).toBe("Config Notes");
+      expect(payload.filters.status).toBe("planned");
+      expect(payload.filters.manager).toBe("Suzuki");
+      expect(payload.projectCount).toBe(7);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("loads template defaults from config", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-template-"));
+    try {
+      const configPath = path.join(tempDir, "config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            templates: {
+              daily: {
+                title: "Daily Template",
+                notes: "Template notes",
+                format: "json",
+                count: 3,
+              },
+            },
+            url: "https://example.com/projects?status=planned",
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const result = runScriptRaw(["--config", configPath, "--template", "daily"]);
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      expect(payload.title).toBe("Daily Template");
+      expect(payload.notes).toBe("Template notes");
+      expect(payload.filters.status).toBe("planned");
+      expect(payload.projectCount).toBe(3);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("fails when template name is unknown", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-template-missing-"));
+    try {
+      const configPath = path.join(tempDir, "config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({ templates: { daily: { title: "Daily" } } }, null, 2),
+        "utf-8",
+      );
+
+      const result = runScriptRaw(["--config", configPath, "--template", "weekly"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Unknown template: weekly");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("posts to one or more webhooks when --post provided", async () => {
