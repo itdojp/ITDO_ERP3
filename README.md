@@ -146,3 +146,6 @@ GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を
 ---
 
 *最終更新: 2025年8月23日*
+
+## Services
+- [Project API (NestJS)](services/project-api/README.md)
