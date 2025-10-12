@@ -115,6 +115,26 @@ Projects API の接続情報は `projectsApi` セクションで管理します�
 
 CLI から明示的に `--projects-api-base` などを渡さない場合、このセクションの値が既定として使われます。トークンやテナント ID は環境変数 `PROJECTS_API_TOKEN` / `PROJECTS_API_TENANT` からも読み取れるため、CI ではシークレットを環境変数として注入する運用が推奨です。
 
+Webhook ごとに異なるリトライ設定を適用したい場合は、`post` 配列にオブジェクト形式で URL と上書き値を定義します。
+
+```json
+{
+  "post": [
+    {
+      "url": "https://hooks.example.com/services/AAA/BBB/CCC",
+      "retry": 2,
+      "retryDelay": 1000,
+      "retryBackoff": 1.5,
+      "retryMaxDelay": 5000,
+      "retryJitter": 250,
+      "ensure-ok": false
+    }
+  ]
+}
+```
+
+このように記述すると、特定の Webhook だけ異なる再送回数や遅延、`ensure-ok` の有無などを個別に設定できます。配列内では文字列 URL とオブジェクト設定を混在させることも可能です。
+
 `templates` にプリセットを定義すると、`--template <name>` で適用できます。テンプレートで指定した値は CLI 引数に先立って設定されるため、雛形を用意した上で必要な部分だけ上書きするといった使い方ができます。
 
 `--audit-log <path>` を指定すると、Webhook 投稿の各試行（成功/失敗、ステータスコード、待機時間など）を JSON に記録します。リトライ設定と合わせて運用監査の材料にできます。

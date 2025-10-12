@@ -233,6 +233,78 @@ const assignDefault = (key) => {
   }
 };
 
+const appendPostOption = (value) => {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(options.post)) {
+    options.post = options.post !== undefined ? [options.post] : [];
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      options.post.push(trimmed);
+    }
+    return;
+  }
+  if (typeof value === 'object') {
+    const urlCandidate = value.url ?? value.href ?? value.target;
+    if (urlCandidate === undefined || urlCandidate === null) {
+      return;
+    }
+    const trimmedUrl = String(urlCandidate).trim();
+    if (trimmedUrl.length === 0) {
+      return;
+    }
+    const entry = { ...value, url: trimmedUrl };
+    options.post.push(entry);
+    return;
+  }
+  const coerced = String(value).trim();
+  if (coerced.length > 0) {
+    options.post.push(coerced);
+  }
+};
+
+const coerceBooleanOption = (value) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+    return undefined;
+  }
+  return Boolean(value);
+};
+
+const coerceNumberOption = (value, field, context, { min = 0, allowFloat = false } = {}) => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    console.error(`Invalid ${field} value for ${context}: ${value}`);
+    process.exit(1);
+  }
+  if (numeric < min) {
+    console.error(`Invalid ${field} value for ${context}: ${value}`);
+    process.exit(1);
+  }
+  if (allowFloat) {
+    return numeric;
+  }
+  return Math.floor(numeric);
+};
+
 const applyDefaultsFromObject = (source) => {
   if (!source || typeof source !== 'object') {
     return;
@@ -263,14 +335,9 @@ const applyDefaultsFromObject = (source) => {
 
   if (source.post !== undefined) {
     const posts = Array.isArray(source.post) ? source.post : [source.post];
-    posts
-      .filter((value) => value !== undefined && value !== null && String(value).trim().length > 0)
-      .forEach((value) => {
-        if (!Array.isArray(options.post)) {
-          options.post = options.post ? [options.post] : [];
-        }
-        options.post.push(String(value));
-      });
+    posts.forEach((value) => {
+      appendPostOption(value);
+    });
   }
 
   const ensureValue = source['ensure-ok'] ?? source.ensureOk;
@@ -377,14 +444,9 @@ if (templateName) {
 
 if (config.post !== undefined) {
   const configPosts = Array.isArray(config.post) ? config.post : [config.post];
-  configPosts
-    .filter((value) => value !== undefined && value !== null && String(value).trim().length > 0)
-    .forEach((value) => {
-      if (!Array.isArray(options.post)) {
-        options.post = options.post ? [options.post] : [];
-      }
-      options.post.push(String(value));
-    });
+  configPosts.forEach((value) => {
+    appendPostOption(value);
+  });
 }
 
 const configEnsureValue = config['ensure-ok'] ?? config.ensureOk;
@@ -472,10 +534,6 @@ if (typeof options['fetch-metrics'] === 'string') {
 } else {
   options['fetch-metrics'] = Boolean(options['fetch-metrics']);
 }
-if (Array.isArray(options.post)) {
-  options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
-}
-
 let retryCount = 0;
 if (options.retry !== undefined) {
   const parsedRetry = Number(options.retry);
@@ -586,10 +644,84 @@ const generatedAt = new Date();
 
 const format = (options.format ?? 'text').toLowerCase();
 const outPath = typeof options.out === 'string' ? options.out.trim() : '';
-const webhookTargets = Array.isArray(options.post)
-  ? options.post.map((value) => String(value).trim()).filter((value) => value.length > 0)
-  : [];
-const ensureOk = Boolean(options['ensure-ok']);
+const rawWebhookInputs = Array.isArray(options.post)
+  ? options.post
+  : options.post !== undefined
+    ? [options.post]
+    : [];
+const webhookTargets = rawWebhookInputs
+  .map((entry) => {
+    if (typeof entry === 'string') {
+      const trimmed = entry.trim();
+      if (trimmed.length === 0) {
+        return null;
+      }
+      return { url: trimmed };
+    }
+    if (entry && typeof entry === 'object') {
+      const urlCandidate = entry.url ?? entry.href ?? entry.target;
+      if (urlCandidate === undefined || urlCandidate === null) {
+        return null;
+      }
+      const trimmedUrl = String(urlCandidate).trim();
+      if (trimmedUrl.length === 0) {
+        return null;
+      }
+      const target = { url: trimmedUrl };
+      const ensureOverride = coerceBooleanOption(entry['ensure-ok'] ?? entry.ensureOk);
+      if (ensureOverride !== undefined) {
+        target.ensureOk = ensureOverride;
+      }
+      const retryOverride = coerceNumberOption(entry.retry, 'retry', trimmedUrl, { min: 0 });
+      if (retryOverride !== undefined) {
+        target.retry = retryOverride;
+      }
+      const retryDelayOverride = coerceNumberOption(
+        entry.retryDelay ?? entry.retryDelayMs,
+        'retry-delay',
+        trimmedUrl,
+        { min: 0 },
+      );
+      if (retryDelayOverride !== undefined) {
+        target.retryDelay = retryDelayOverride;
+      }
+      const retryBackoffOverride = coerceNumberOption(
+        entry.retryBackoff,
+        'retry-backoff',
+        trimmedUrl,
+        { min: 1, allowFloat: true },
+      );
+      if (retryBackoffOverride !== undefined) {
+        target.retryBackoff = retryBackoffOverride;
+      }
+      const retryMaxDelayOverride = coerceNumberOption(
+        entry.retryMaxDelay ?? entry.retryMaxDelayMs,
+        'retry-max-delay',
+        trimmedUrl,
+        { min: 0 },
+      );
+      if (retryMaxDelayOverride !== undefined) {
+        target.retryMaxDelay = retryMaxDelayOverride;
+      }
+      const retryJitterOverride = coerceNumberOption(
+        entry.retryJitter ?? entry.retryJitterMs,
+        'retry-jitter',
+        trimmedUrl,
+        { min: 0 },
+      );
+      if (retryJitterOverride !== undefined) {
+        target.retryJitter = retryJitterOverride;
+      }
+      return target;
+    }
+    const coerced = String(entry).trim();
+    if (coerced.length === 0) {
+      return null;
+    }
+    return { url: coerced };
+  })
+  .filter((entry) => entry && typeof entry.url === 'string' && entry.url.length > 0);
+const ensureOkDefault = Boolean(options['ensure-ok']);
 const auditLogPath = typeof options['audit-log'] === 'string' ? options['audit-log'].trim() : '';
 const auditEvents = auditLogPath ? [] : null;
 const shareFilters = {
@@ -957,23 +1089,35 @@ async function postWithRetry(
   }
 
   for (const target of webhookTargets) {
-    if (!/^https?:\/\//i.test(target)) {
-      console.error(`Invalid webhook URL: ${target}`);
+    const targetUrl = target.url;
+    if (!/^https?:\/\//i.test(targetUrl)) {
+      console.error(`Invalid webhook URL: ${targetUrl}`);
       process.exit(1);
     }
+    const targetEnsureOk = target.ensureOk !== undefined ? target.ensureOk : ensureOkDefault;
+    let targetRetryCount = target.retry !== undefined ? target.retry : retryCount;
+    let targetRetryDelayMs = target.retryDelay !== undefined ? target.retryDelay : retryDelayMs;
+    const targetRetryBackoff = target.retryBackoff !== undefined ? target.retryBackoff : retryBackoff;
+    let targetRetryMaxDelayMs = target.retryMaxDelay !== undefined ? target.retryMaxDelay : retryMaxDelayMs;
+    const targetRetryJitterMs = target.retryJitter !== undefined ? target.retryJitter : retryJitterMs;
+
+    if (targetRetryDelayMs > targetRetryMaxDelayMs && targetRetryMaxDelayMs > 0) {
+      targetRetryDelayMs = targetRetryMaxDelayMs;
+    }
+
     await postWithRetry(
-      target,
+      targetUrl,
       shareTemplate.payload.message,
-      ensureOk,
-      retryCount,
-      retryDelayMs,
-      retryBackoff,
-      retryMaxDelayMs,
-      retryJitterMs,
+      targetEnsureOk,
+      targetRetryCount,
+      targetRetryDelayMs,
+      targetRetryBackoff,
+      targetRetryMaxDelayMs,
+      targetRetryJitterMs,
       auditEvents,
       options['respect-retry-after'],
     );
-    console.error(`Posted share message to webhook: ${target}`);
+    console.error(`Posted share message to webhook: ${targetUrl}`);
   }
 
   if (auditLogPath) {
