@@ -34,6 +34,7 @@ const optionAliases = new Map([
   ['-C', 'config'],
   ['-T', 'template'],
   ['-E', 'ensure-ok'],
+  ['-R', 'respect-retry-after'],
   ['-r', 'retry'],
   ['-d', 'retry-delay'],
   ['-b', 'retry-backoff'],
@@ -54,6 +55,11 @@ for (let index = 0; index < args.length;) {
     }
     if (key === 'ensure-ok') {
       options['ensure-ok'] = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'respect-retry-after') {
+      options['respect-retry-after'] = true;
       index += 1;
       continue;
     }
@@ -90,6 +96,11 @@ for (let index = 0; index < args.length;) {
     }
     if (alias === 'ensure-ok') {
       options['ensure-ok'] = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'respect-retry-after') {
+      options['respect-retry-after'] = true;
       index += 1;
       continue;
     }
@@ -141,6 +152,7 @@ Options:
   --retry-backoff <value> Optional. 再試行ごとの遅延乗数（既定: 2）。
   --retry-max-delay <ms> Optional. 再試行遅延の上限ミリ秒（既定: 60000）。
   --retry-jitter <ms> Optional. 再試行遅延に加算する最大ジッタ。
+  --respect-retry-after Optional. Webhook 応答の Retry-After ヘッダーがあれば待機時間に反映します。
   --help            このヘルプを表示します。
 `;
 
@@ -229,6 +241,11 @@ if (options['ensure-ok'] === undefined && configEnsureValue !== undefined) {
   options['ensure-ok'] = Boolean(configEnsureValue);
 }
 
+const configRespectRetryAfter = config['respect-retry-after'] ?? config.respectRetryAfter;
+if (options['respect-retry-after'] === undefined && configRespectRetryAfter !== undefined) {
+  options['respect-retry-after'] = Boolean(configRespectRetryAfter);
+}
+
 if (options['retry-delay'] === undefined && config.retryDelay !== undefined) {
   options['retry-delay'] = config.retryDelay;
 }
@@ -261,6 +278,7 @@ options['retry-backoff'] = options['retry-backoff'] !== undefined ? String(optio
 options['retry-max-delay'] = options['retry-max-delay'] !== undefined ? String(options['retry-max-delay']) : undefined;
 options['retry-jitter'] = options['retry-jitter'] !== undefined ? String(options['retry-jitter']) : undefined;
 options['audit-log'] = options['audit-log'] !== undefined ? String(options['audit-log']) : undefined;
+options['respect-retry-after'] = Boolean(options['respect-retry-after']);
 if (Array.isArray(options.post)) {
   options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
 }
@@ -483,6 +501,7 @@ function postToWebhook(url, text, ensureOkResponse) {
         response.on('end', () => {
           const responseBody = Buffer.concat(chunks).toString('utf-8');
           const statusCode = response.statusCode ?? null;
+          const retryAfterMs = parseRetryAfterMs(response.headers);
           if (statusCode && statusCode >= 200 && statusCode < 300) {
             if (ensureOkResponse) {
               const normalized = responseBody.trim().toLowerCase();
@@ -490,17 +509,19 @@ function postToWebhook(url, text, ensureOkResponse) {
                 const error = new Error(`Unexpected webhook response body: ${responseBody.trim() || '(empty)'}`);
                 error.statusCode = statusCode;
                 error.responseBody = responseBody;
+                error.retryAfterMs = retryAfterMs ?? null;
                 reject(error);
                 return;
               }
             }
-            resolve({ statusCode, responseBody });
+            resolve({ statusCode, responseBody, retryAfterMs });
           } else {
             const error = new Error(
               `Failed to post to webhook (${statusCode ?? 'unknown'}): ${responseBody}`,
             );
             error.statusCode = statusCode;
             error.responseBody = responseBody;
+            error.retryAfterMs = retryAfterMs ?? null;
             reject(error);
           }
         });
@@ -512,6 +533,7 @@ function postToWebhook(url, text, ensureOkResponse) {
     });
     request.on('error', (error) => {
       error.statusCode = null;
+      error.retryAfterMs = null;
       reject(error);
     });
 
@@ -522,7 +544,44 @@ function postToWebhook(url, text, ensureOkResponse) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayMs, backoff, maxDelayMs, jitterMs, events) {
+function parseRetryAfterMs(headers) {
+  if (!headers) {
+    return null;
+  }
+  const candidate = headers['retry-after'];
+  const value = Array.isArray(candidate) ? candidate[0] : candidate;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return null;
+  }
+  const asNumber = Number(trimmed);
+  if (Number.isFinite(asNumber) && asNumber >= 0) {
+    const numericMs = asNumber * 1000;
+    return numericMs >= 0 ? Math.floor(numericMs) : null;
+  }
+  const parsedDate = Date.parse(trimmed);
+  if (!Number.isNaN(parsedDate)) {
+    const diff = parsedDate - Date.now();
+    return diff > 0 ? Math.floor(diff) : 0;
+  }
+  return null;
+}
+
+async function postWithRetry(
+  url,
+  text,
+  ensureOkResponse,
+  retries,
+  initialDelayMs,
+  backoff,
+  maxDelayMs,
+  jitterMs,
+  events,
+  respectRetryAfter,
+) {
   const maxDelayBound = maxDelayMs > 0 ? maxDelayMs : Number.MAX_SAFE_INTEGER;
   let attempt = 0;
   let currentDelay = initialDelayMs;
@@ -539,12 +598,20 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
         statusCode: result.statusCode,
         responseBody: result.responseBody,
         elapsedMs: Date.now() - attemptStartedAt,
+        retryAfterMs: result.retryAfterMs ?? null,
       });
       return;
     } catch (error) {
+      const retryAfterMs =
+        typeof error?.retryAfterMs === 'number' && Number.isFinite(error.retryAfterMs) && error.retryAfterMs >= 0
+          ? Math.floor(error.retryAfterMs)
+          : null;
       const boundedDelay = Math.max(0, Math.min(maxDelayBound, currentDelay));
       const jitter = jitterMs > 0 ? Math.floor(Math.random() * (jitterMs + 1)) : 0;
-      const waitMs = attempt >= retries ? 0 : Math.max(0, boundedDelay + jitter);
+      let waitMs = attempt >= retries ? 0 : Math.max(0, boundedDelay + jitter);
+      if (respectRetryAfter && attempt < retries && retryAfterMs !== null) {
+        waitMs = Math.max(waitMs, retryAfterMs);
+      }
       events?.push({
         timestamp: new Date().toISOString(),
         webhook: url,
@@ -555,6 +622,7 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
         error: error instanceof Error ? error.message : String(error),
         elapsedMs: Date.now() - attemptStartedAt,
         nextDelayMs: waitMs > 0 ? waitMs : null,
+        retryAfterMs,
       });
       if (attempt >= retries) {
         throw error;
@@ -590,7 +658,18 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
       console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs, retryBackoff, retryMaxDelayMs, retryJitterMs, auditEvents);
+    await postWithRetry(
+      target,
+      payload.message,
+      ensureOk,
+      retryCount,
+      retryDelayMs,
+      retryBackoff,
+      retryMaxDelayMs,
+      retryJitterMs,
+      auditEvents,
+      options['respect-retry-after'],
+    );
     console.error(`Posted share message to webhook: ${target}`);
   }
 
