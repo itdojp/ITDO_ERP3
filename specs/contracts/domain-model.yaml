@@ -1,0 +1,74 @@
+version: 1
+context: contract-billing
+entities:
+  Contract:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: code, type: string }
+      - { name: title, type: string }
+      - { name: status, type: enum(ContractStatus) }
+      - { name: customerId, type: uuid }
+      - { name: startDate, type: date }
+      - { name: endDate, type: date }
+      - { name: totalValue, type: decimal }
+      - { name: billingCycle, type: enum(Monthly, Quarterly, Milestone) }
+    relations:
+      - { type: hasMany, target: ContractAmendment, via: contractId }
+      - { type: hasMany, target: Invoice, via: contractId }
+      - { type: hasMany, target: ContractEvent, via: contractId }
+  ContractAmendment:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: contractId, type: uuid }
+      - { name: version, type: integer }
+      - { name: effectiveDate, type: date }
+      - { name: changes, type: json }
+  ContractEvent:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: contractId, type: uuid }
+      - { name: type, type: enum(ISSUED, SIGNED, ACTIVATED, RENEWED, TERMINATED) }
+      - { name: triggeredBy, type: uuid }
+      - { name: occurredAt, type: datetime }
+      - { name: payload, type: json }
+  Timesheet:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: projectId, type: uuid }
+      - { name: contractId, type: uuid }
+      - { name: employeeId, type: uuid }
+      - { name: workDate, type: date }
+      - { name: hours, type: decimal }
+      - { name: rate, type: decimal }
+      - { name: approvalStatus, type: enum(PENDING, APPROVED, REJECTED) }
+  CostEntry:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: contractId, type: uuid }
+      - { name: timesheetId, type: uuid }
+      - { name: amount, type: decimal }
+      - { name: createdAt, type: datetime }
+  Invoice:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: contractId, type: uuid }
+      - { name: invoiceNumber, type: string }
+      - { name: billedAmount, type: decimal }
+      - { name: currency, type: string }
+      - { name: status, type: enum(DRAFT, ISSUED, PAID, VOID) }
+      - { name: issuedAt, type: datetime }
+      - { name: dueAt, type: datetime }
+      - { name: pdfPath, type: string }
+    relations:
+      - { type: hasMany, target: InvoiceLine, via: invoiceId }
+  InvoiceLine:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: invoiceId, type: uuid }
+      - { name: description, type: string }
+      - { name: quantity, type: decimal }
+      - { name: unitPrice, type: decimal }
+      - { name: amount, type: decimal }
+valueObjects:
+  ContractStatus:
+    values: [draft, pendingSignature, active, expired, terminated]

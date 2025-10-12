@@ -1,0 +1,32 @@
+<mjml>
+  <mj-body background-color="#f7fafc">
+    <mj-section padding="16px">
+      <mj-column>
+        <mj-text font-size="20px" font-weight="bold">Invoice {{invoiceNumber}}</mj-text>
+        <mj-text>Contract: {{contractCode}}</mj-text>
+        <mj-text>Billing Period: {{billingPeriod}}</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section>
+      <mj-column>
+        <mj-table>
+          <tr style="background:#edf2f7">
+            <th align="left">Description</th>
+            <th align="right">Qty</th>
+            <th align="right">Unit Price</th>
+            <th align="right">Amount</th>
+          </tr>
+          {{#each lines}}
+          <tr>
+            <td>{{description}}</td>
+            <td align="right">{{quantity}}</td>
+            <td align="right">{{unitPrice}}</td>
+            <td align="right">{{amount}}</td>
+          </tr>
+          {{/each}}
+        </mj-table>
+        <mj-text align="right" font-size="16px" font-weight="bold">Total: {{total}}</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
