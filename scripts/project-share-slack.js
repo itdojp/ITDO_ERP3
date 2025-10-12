@@ -34,6 +34,9 @@ const optionAliases = new Map([
   ['-E', 'ensure-ok'],
   ['-r', 'retry'],
   ['-d', 'retry-delay'],
+  ['-b', 'retry-backoff'],
+  ['-m', 'retry-max-delay'],
+  ['-j', 'retry-jitter'],
   ['-h', 'help'],
 ]);
 
@@ -130,6 +133,11 @@ Options:
   --post <value>    Optional. Slack Incoming Webhook URL に投稿します。複数指定可。
   --config <path>   Optional. 上記オプションの既定値を含む JSON を読み込みます。
   --ensure-ok       Optional. Webhook 応答が "ok" でなければエラーにします。
+  --retry <value>   Optional. 投稿失敗時の再試行回数。
+  --retry-delay <ms> Optional. 最初の再試行までの待機ミリ秒（既定: 1000）。
+  --retry-backoff <value> Optional. 再試行ごとの遅延乗数（既定: 2）。
+  --retry-max-delay <ms> Optional. 再試行遅延の上限ミリ秒（既定: 60000）。
+  --retry-jitter <ms> Optional. 再試行遅延に加算する最大ジッタ。
   --help            このヘルプを表示します。
 `;
 
@@ -160,7 +168,7 @@ const assignDefault = (key) => {
   }
 };
 
-['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay'].forEach(assignDefault);
+['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter'].forEach(assignDefault);
 
 if (config.post !== undefined) {
   const configPosts = Array.isArray(config.post) ? config.post : [config.post];
@@ -183,6 +191,18 @@ if (options['retry-delay'] === undefined && config.retryDelay !== undefined) {
   options['retry-delay'] = config.retryDelay;
 }
 
+if (options['retry-backoff'] === undefined && config.retryBackoff !== undefined) {
+  options['retry-backoff'] = config.retryBackoff;
+}
+
+if (options['retry-max-delay'] === undefined && config.retryMaxDelay !== undefined) {
+  options['retry-max-delay'] = config.retryMaxDelay;
+}
+
+if (options['retry-jitter'] === undefined && config.retryJitter !== undefined) {
+  options['retry-jitter'] = config.retryJitter;
+}
+
 if (!options.url) {
   console.log(USAGE_TEXT);
   process.exit(1);
@@ -195,6 +215,9 @@ options.format = options.format !== undefined ? String(options.format) : undefin
 options.out = options.out !== undefined ? String(options.out) : undefined;
 options.retry = options.retry !== undefined ? String(options.retry) : undefined;
 options['retry-delay'] = options['retry-delay'] !== undefined ? String(options['retry-delay']) : undefined;
+options['retry-backoff'] = options['retry-backoff'] !== undefined ? String(options['retry-backoff']) : undefined;
+options['retry-max-delay'] = options['retry-max-delay'] !== undefined ? String(options['retry-max-delay']) : undefined;
+options['retry-jitter'] = options['retry-jitter'] !== undefined ? String(options['retry-jitter']) : undefined;
 if (Array.isArray(options.post)) {
   options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
 }
@@ -219,6 +242,40 @@ if (options['retry-delay'] !== undefined) {
   retryDelayMs = Math.floor(parsedDelay);
 } else if (retryCount === 0) {
   retryDelayMs = 0;
+}
+
+let retryBackoff = 2;
+if (options['retry-backoff'] !== undefined) {
+  const parsedBackoff = Number(options['retry-backoff']);
+  if (!Number.isFinite(parsedBackoff) || parsedBackoff < 1) {
+    console.error(`Invalid retry-backoff value: ${options['retry-backoff']}`);
+    process.exit(1);
+  }
+  retryBackoff = parsedBackoff;
+}
+
+let retryMaxDelayMs = 60000;
+if (options['retry-max-delay'] !== undefined) {
+  const parsedMaxDelay = Number(options['retry-max-delay']);
+  if (!Number.isFinite(parsedMaxDelay) || parsedMaxDelay < 0) {
+    console.error(`Invalid retry-max-delay value: ${options['retry-max-delay']}`);
+    process.exit(1);
+  }
+  retryMaxDelayMs = Math.floor(parsedMaxDelay);
+}
+
+let retryJitterMs = 0;
+if (options['retry-jitter'] !== undefined) {
+  const parsedJitter = Number(options['retry-jitter']);
+  if (!Number.isFinite(parsedJitter) || parsedJitter < 0) {
+    console.error(`Invalid retry-jitter value: ${options['retry-jitter']}`);
+    process.exit(1);
+  }
+  retryJitterMs = Math.floor(parsedJitter);
+}
+
+if (retryDelayMs > retryMaxDelayMs && retryMaxDelayMs > 0) {
+  retryDelayMs = retryMaxDelayMs;
 }
 
 let parsedUrl;
@@ -414,8 +471,11 @@ function postToWebhook(url, text, ensureOkResponse) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function postWithRetry(url, text, ensureOkResponse, retries, delayMs) {
+async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayMs, backoff, maxDelayMs, jitterMs) {
+  const maxDelayBound = maxDelayMs > 0 ? maxDelayMs : Number.MAX_SAFE_INTEGER;
   let attempt = 0;
+  let currentDelay = initialDelayMs;
+
   while (true) {
     try {
       await postToWebhook(url, text, ensureOkResponse);
@@ -424,9 +484,17 @@ async function postWithRetry(url, text, ensureOkResponse, retries, delayMs) {
       if (attempt >= retries) {
         throw error;
       }
+      const boundedDelay = Math.max(0, Math.min(maxDelayBound, currentDelay));
+      if (boundedDelay > 0) {
+        const jitter = jitterMs > 0 ? Math.floor(Math.random() * (jitterMs + 1)) : 0;
+        await sleep(boundedDelay + jitter);
+      }
       attempt += 1;
-      if (delayMs > 0) {
-        await sleep(delayMs);
+      if (currentDelay > 0) {
+        const nextDelay = Math.min(maxDelayBound, Math.max(0, Math.floor(currentDelay * backoff)));
+        currentDelay = nextDelay > 0 ? nextDelay : currentDelay;
+      } else {
+        currentDelay = initialDelayMs;
       }
     }
   }
@@ -449,7 +517,7 @@ async function postWithRetry(url, text, ensureOkResponse, retries, delayMs) {
       console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs);
+    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs, retryBackoff, retryMaxDelayMs, retryJitterMs);
     console.error(`Posted share message to webhook: ${target}`);
   }
 })().catch((error) => {
