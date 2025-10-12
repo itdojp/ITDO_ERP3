@@ -1,0 +1,14 @@
+{
+  "name": "@itdo/share-projects",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Projects share CLI for Slack notifications",
+  "bin": {
+    "share-projects": "./bin/share-projects.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "license": "MIT"
+}
