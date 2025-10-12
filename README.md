@@ -34,6 +34,8 @@ ITDO_ERP3/
 
 ### AI ロードマップ / フロー
 - [AI支援型開発ロードマップ](docs/ai-roadmap.md)
+- [AI開発ワークフロー仕様](docs/ai-devflow.md)
+- [Codex CLI テンプレート利用ガイド](docs/codex-templates.md)
 
 ### 統合仕様書（integrated-specs/）
 

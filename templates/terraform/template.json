@@ -1,0 +1,11 @@
+{
+  "files": {
+    "iac/terraform/{{moduleNameKebab}}/main.tf": "terraform {\n  required_version = \">= 1.7.0\"\n}\n\nprovider \\\"aws\\\" {\n  region = var.region\n}\n\nmodule \\\"tags\\\" {\n  source = \\\"../../modules/tags\\\"\n  environment = var.environment\n}\n",
+    "iac/terraform/{{moduleNameKebab}}/variables.tf": "variable \\\"environment\\\" {\n  type = string\n}\n\nvariable \\\"region\\\" {\n  type    = string\n  default = \\\"ap-northeast-1\\\"\n}\n",
+    "iac/terraform/{{moduleNameKebab}}/outputs.tf": "output \\\"module_name\\\" {\n  value = \\\"{{moduleName}}\\\"\n}\n",
+    "iac/terraform/{{moduleNameKebab}}/backend.tf": "terraform {\n  backend \\\"s3\\\" {\n    bucket         = \\\"{{stateBucket}}\\\"\n    key            = \\\"{{stateKeyPrefix}}{{moduleNameKebab}}/terraform.tfstate\"\n    region         = \\\"{{stateRegion}}\\\"\n    dynamodb_table = \\\"{{stateDynamoTable}}\\\"\n  }\n}\n"
+  },
+  "helpers": {
+    "moduleNameKebab": "{{ moduleName | kebab }}"
+  }
+}
