@@ -21,6 +21,7 @@ const http = require('node:http');
 const https = require('node:https');
 const path = require('node:path');
 const { buildShareTemplate } = require('../shared/cjs/share-template');
+const { validateShareConfig } = require('./lib/share-config-validator');
 
 const DEFAULT_PROJECTS_URL = 'https://example.com/projects';
 
@@ -251,6 +252,18 @@ if (options.config) {
     console.error(`Failed to load config file: ${error instanceof Error ? error.message : error}`);
     process.exit(1);
   }
+}
+
+let configSummary = { templates: 0, posts: 0, urls: 0 };
+if (Object.keys(config).length > 0) {
+  const validationResult = validateShareConfig(config);
+  if (validationResult.errors.length > 0) {
+    validationResult.errors.forEach((message) => {
+      console.error(`Config validation error: ${message}`);
+    });
+    process.exit(1);
+  }
+  configSummary = validationResult.summary;
 }
 
 const assignDefault = (key) => {
@@ -784,7 +797,9 @@ const shareFilters = {
 };
 
 if (validateOnly) {
-  console.log('Config validation succeeded.');
+  console.log(
+    `Config validation succeeded (templates: ${configSummary.templates}, post entries: ${configSummary.posts}).`,
+  );
   if (webhookTargets.length === 0) {
     console.warn('No webhook targets defined in config.');
   }

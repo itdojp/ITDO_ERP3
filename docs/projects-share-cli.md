@@ -78,6 +78,8 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 - `--fetch-metrics` を有効にすると、Projects API から集計指標（件数 / リスク件数 / 警戒件数）を取得して JSON 出力に含めます。API の接続情報は `--projects-api-base` / `--projects-api-token` / `--projects-api-tenant` / `--projects-api-timeout` で上書きできます。
 - `--validate-config --config <path>` を実行すると、設定ファイルを読み込んで妥当性を検証した上で終了コード 0/1 を返します。CI での事前検証に便利です。
 
+`--config` で読み込んだ設定は CLI 実行時にも自動検証され、不正な値が含まれている場合はエラーとして停止します。`--validate-config` では検証結果と併せて、検査したテンプレート数や post エントリ数を出力します。
+
 ## 設定ファイルの利用
 繰り返し利用する設定は JSON ファイルにまとめておくのがおすすめです。`--config <path>` を指定すると、ファイル内の値を既定値として読み込み、CLI 引数で上書きできます。
 
