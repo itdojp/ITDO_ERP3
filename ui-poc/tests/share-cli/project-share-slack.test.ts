@@ -238,6 +238,99 @@ describe("project-share-slack CLI", () => {
     }
   });
 
+  test("includes metrics in json output when --fetch-metrics is enabled", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-metrics-"));
+    const apiDir = mkdtempSync(path.join(tmpdir(), "share-cli-metrics-api-"));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const server = createServer((request, response) => {
+          const url = new URL(request.url ?? "", `http://${request.headers.host}`);
+          const health = url.searchParams.get("health");
+          const total = health === "red" ? 2 : health === "yellow" ? 4 : 10;
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ items: [], meta: { total } }));
+        });
+
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address() as AddressInfo | null;
+          if (!address || typeof address === "string") {
+            server.close();
+            reject(new Error("Failed to start metrics test server"));
+            return;
+          }
+          const apiBase = `http://127.0.0.1:${address.port}`;
+          const configPath = path.join(tempDir, "config.json");
+          writeFileSync(
+            configPath,
+            JSON.stringify(
+              {
+                url: "https://example.com/projects?status=active&manager=Yamada",
+                title: "Metrics Test",
+                notes: "with metrics",
+                format: "json",
+                count: 5,
+                post: [],
+              "fetch-metrics": true,
+              projectsApi: {
+                baseUrl: apiBase,
+                timeoutMs: 2000,
+              },
+              },
+              null,
+              2,
+            ),
+            "utf-8",
+          );
+
+          const args = [
+            "--config",
+            configPath,
+            "--format",
+            "json",
+          ];
+          const child = spawn(process.execPath, [scriptPath, ...args], {
+            env: process.env,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+
+          let stdout = "";
+          let stderr = "";
+          child.stdout.setEncoding("utf-8");
+          child.stderr.setEncoding("utf-8");
+          child.stdout.on("data", (chunk) => {
+            stdout += chunk;
+          });
+          child.stderr.on("data", (chunk) => {
+            stderr += chunk;
+          });
+          child.on("error", (error) => {
+            server.close(() => reject(error));
+          });
+          child.on("close", (code) => {
+            server.close(() => {
+              try {
+                expect(code).toBe(0);
+                const payload = JSON.parse(stdout);
+                expect(payload.metrics.totalProjects).toBe(10);
+                expect(payload.metrics.riskProjects).toBe(2);
+                expect(payload.metrics.warningProjects).toBe(4);
+                expect(payload.message).toContain("• API 件数: 10");
+                resolve();
+              } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error(stderr);
+                reject(error);
+              }
+            });
+          });
+        });
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(apiDir, { recursive: true, force: true });
+    }
+  });
+
   test("fails when template name is unknown", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-template-missing-"));
     try {
@@ -340,6 +433,80 @@ describe("project-share-slack CLI", () => {
           });
       });
     });
+  });
+
+  test("includes metrics in json output when --fetch-metrics is enabled", async () => {
+    const requests: Array<{ path: string; auth: string | undefined; tenant: string | undefined }> = [];
+    await new Promise<void>((resolve, reject) => {
+      const server = createServer((request, response) => {
+        const requestUrl = new URL(request.url ?? "", `http://${request.headers.host}`);
+        requests.push({
+          path: requestUrl.toString(),
+          auth: request.headers.authorization,
+          tenant: request.headers["x-tenant-id"] as string | undefined,
+        });
+        const health = requestUrl.searchParams.get("health");
+        const total =
+          health === "red" ? 2 : health === "yellow" ? 4 : requestUrl.searchParams.get("status") === "active" ? 10 : 0;
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ items: [], meta: { total } }));
+      });
+
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as AddressInfo | null;
+        if (!address || typeof address === "string") {
+          server.close();
+          reject(new Error("Failed to determine metrics test server address"));
+          return;
+        }
+        const apiBase = `http://127.0.0.1:${address.port}`;
+        runScriptAsync([
+          "--format",
+          "json",
+          "--fetch-metrics",
+          "--projects-api-base",
+          apiBase,
+          "--projects-api-token",
+          "token-123",
+          "--projects-api-tenant",
+          "example-tenant",
+        ])
+          .then((result) => {
+            server.close(() => {
+              try {
+                expect(result.status).toBe(0);
+                const payload = JSON.parse(result.stdout);
+                expect(payload.metrics).toBeTruthy();
+                expect(payload.metrics.totalProjects).toBe(10);
+                expect(payload.metrics.riskProjects).toBe(2);
+                expect(payload.metrics.warningProjects).toBe(4);
+                expect(Array.isArray(payload.metrics.requests)).toBe(true);
+                expect(payload.metrics.requests).toHaveLength(3);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            });
+          })
+          .catch((error) => {
+            server.close(() => reject(error));
+          });
+      });
+    });
+
+    expect(requests).toHaveLength(3);
+    requests.forEach((entry) => {
+      expect(entry.auth).toBe("Bearer token-123");
+      expect(entry.tenant).toBe("example-tenant");
+      expect(entry.path).toContain("/api/v1/projects?");
+      const url = new URL(entry.path);
+      expect(url.searchParams.get("first")).toBe("1");
+      expect(url.searchParams.get("status")).toBe("active");
+      expect(url.searchParams.get("manager")).toBe("Yamada");
+      expect(url.searchParams.getAll("tags").join(",")).toContain("DX");
+    });
+    const healthParameters = requests.map((entry) => new URL(entry.path).searchParams.get("health"));
+    expect(new Set(healthParameters)).toEqual(new Set([null, "red", "yellow"]));
   });
 
   test("retries webhook posting when --retry is specified", async () => {
