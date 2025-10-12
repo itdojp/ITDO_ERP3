@@ -115,6 +115,26 @@ Projects API の接続情報は `projectsApi` セクションで管理します�
 
 CLI から明示的に `--projects-api-base` などを渡さない場合、このセクションの値が既定として使われます。トークンやテナント ID は環境変数 `PROJECTS_API_TOKEN` / `PROJECTS_API_TENANT` からも読み取れるため、CI ではシークレットを環境変数として注入する運用が推奨です。
 
+Webhook ごとに異なるリトライ設定を利用したい場合は、`post` 配列にオブジェクト形式で URL と上書き値を記述します。
+
+```json
+{
+  "post": [
+    {
+      "url": "https://hooks.example.com/services/AAA/BBB/CCC",
+      "retry": 2,
+      "retryDelay": 1000,
+      "retryBackoff": 1.5,
+      "retryMaxDelay": 5000,
+      "retryJitter": 250,
+      "ensure-ok": false
+    }
+  ]
+}
+```
+
+上記のように定義すると、対象 Webhook だけグローバル設定とは別のリトライ回数やディレイ、`ensure-ok` の有無を適用できます。配列内で文字列とオブジェクトを混在させることも可能です。
+
 `templates` にプリセットを定義すると、`--template <name>` で適用できます。テンプレートで指定した値は CLI 引数に先立って設定されるため、雛形を用意した上で必要な部分だけ上書きするといった使い方ができます。
 
 テンプレート一覧は `--list-templates` で確認でき、特定のテンプレートを削除したい場合は `--remove-template <name>` を指定します（`--config` で対象ファイルを渡す必要があります）。CLI がテンプレート削除後の JSON を上書き保存するため、削除前に Git 管理やバックアップを取っておくと安全です。

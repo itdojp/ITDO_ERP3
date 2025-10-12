@@ -126,7 +126,7 @@ Projects 一覧の共有メッセージは以下の CLI で生成できます。
 
 config に `templates` を定義すると、`--template <name>` で共通プリセットを呼び出しつつ CLI 引数で部分的に上書きできます。`--audit-log <path>` を指定すると Webhook 投稿の成功／失敗履歴を JSON で保存します。
 
-config に `templates` を定義しておくと、`--template <name>` で共通プリセットを呼び出しつつ CLI 引数で上書きできます。
+config の `post` 配列にオブジェクトを記述すると、URL ごとに `retry` / `retryDelay` / `retryBackoff` / `retryMaxDelay` / `retryJitter` / `ensure-ok` などの値を上書きでき、複数 Webhook へ異なるリトライポリシーを適用できます。
 
 GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
 
