@@ -32,6 +32,9 @@ ITDO_ERP3/
 
 ## 📚 主要ドキュメント
 
+### AI ロードマップ / フロー
+- [AI支援型開発ロードマップ](docs/ai-roadmap.md)
+
 ### 統合仕様書（integrated-specs/）
 
 | カテゴリ | ドキュメント | 説明 |
