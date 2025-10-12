@@ -4,10 +4,9 @@
   "private": false,
   "description": "Projects share CLI for Slack notifications",
   "bin": {
-    "share-projects": "./bin/share-projects.js"
+    "share-projects": "./src/project-share-slack.js"
   },
   "files": [
-    "bin",
     "src"
   ],
   "license": "MIT"

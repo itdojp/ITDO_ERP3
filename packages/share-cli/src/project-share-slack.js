@@ -4,7 +4,7 @@
  * Generate a Slack message template for sharing the Projects view.
  *
  * Usage:
- *   node scripts/project-share-slack.js --url https://example.com/projects?status=active --title "今週の Projects 共有" --notes "17件をフォロー中"
+ *   share-projects --url https://example.com/projects?status=active --title "今週の Projects 共有" --notes "17件をフォロー中"
  *
  * Options:
  *   --url <value>     Required. Projects 共有リンク (absolute URL)。
@@ -167,7 +167,7 @@ for (let index = 0; index < args.length;) {
 }
 
 const USAGE_TEXT = `Usage:
-  node scripts/project-share-slack.js --url <projects-share-url> [--title <title>] [--notes <notes>] [--config <path>]
+  share-projects --url <projects-share-url> [--title <title>] [--notes <notes>] [--config <path>]
 
 Options:
   --url <value>     Required. Projects の共有リンク (絶対 URL)。
