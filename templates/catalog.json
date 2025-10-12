@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "nest-api",
+      "name": "NestJS API Module",
+      "description": "Scaffold a NestJS module with CRUD service, resolver, and OpenAPI/GraphQL spec hooks.",
+      "path": "nest-api",
+      "tags": ["backend", "nestjs", "api"],
+      "inputs": {
+        "moduleName": {
+          "type": "string",
+          "description": "PascalCase module name (e.g. Project)",
+          "required": true
+        },
+        "route": {
+          "type": "string",
+          "description": "Base route path (e.g. projects)",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "react-ui",
+      "name": "React Feature Panel",
+      "description": "Create a React feature folder with state hooks and storybook stub.",
+      "path": "react-ui",
+      "tags": ["frontend", "react", "ui"],
+      "inputs": {
+        "featureName": {
+          "type": "string",
+          "description": "PascalCase feature name (e.g. ProjectTimeline)",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "github-action",
+      "name": "GitHub Actions Workflow",
+      "description": "Set up reusable workflow for lint/test/build with matrix support.",
+      "path": "github-action",
+      "tags": ["ci", "github-actions"],
+      "inputs": {
+        "workflowName": {
+          "type": "string",
+          "description": "Workflow display name",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "terraform-module",
+      "name": "Terraform AWS Module",
+      "description": "Bootstrap Terraform module with remote state and variables.",
+      "path": "terraform",
+      "tags": ["iac", "terraform"],
+      "inputs": {
+        "moduleName": {
+          "type": "string",
+          "description": "Terraform module folder name",
+          "required": true
+        }
+      }
+    }
+  ]
+}
