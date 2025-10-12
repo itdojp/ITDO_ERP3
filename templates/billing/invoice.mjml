@@ -16,14 +16,7 @@
             <th align="right">Unit Price</th>
             <th align="right">Amount</th>
           </tr>
-          {{#each lines}}
-          <tr>
-            <td>{{description}}</td>
-            <td align="right">{{quantity}}</td>
-            <td align="right">{{unitPrice}}</td>
-            <td align="right">{{amount}}</td>
-          </tr>
-          {{/each}}
+{{lineRows}}
         </mj-table>
         <mj-text align="right" font-size="16px" font-weight="bold">Total: {{total}}</mj-text>
       </mj-column>
