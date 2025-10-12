@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Prepare artifacts directory
+        run: mkdir -p artifacts
+
       - name: Share via primary webhook
         id: share_primary
         continue-on-error: true
