@@ -874,40 +874,53 @@ describe("project-share-slack CLI", () => {
   });
 
   test("skips webhook posting when --dry-run is provided", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-dry-run-"));
+    const auditPath = path.join(tempDir, "audit.json");
     let callCount = 0;
-    await new Promise<void>((resolve, reject) => {
-      const server = createServer((request, response) => {
-        callCount += 1;
-        response.writeHead(200, { "Content-Type": "text/plain" });
-        response.end("ok");
-      });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const server = createServer((request, response) => {
+          callCount += 1;
+          response.writeHead(200, { "Content-Type": "text/plain" });
+          response.end("ok");
+        });
 
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address() as AddressInfo | null;
-        if (!address || typeof address === "string") {
-          server.close();
-          reject(new Error("Failed to start dry-run server"));
-          return;
-        }
-        const webhookUrl = `http://127.0.0.1:${address.port}/dry-run`;
-        runScriptAsync(["--post", webhookUrl, "--dry-run", "--format", "json"])
-          .then((result) => {
-            server.close(() => {
-              try {
-                expect(result.status).toBe(0);
-                expect(callCount).toBe(0);
-                expect(result.stderr).toContain("[DRY RUN] Skipped posting to webhook");
-                resolve();
-              } catch (error) {
-                reject(error);
-              }
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address() as AddressInfo | null;
+          if (!address || typeof address === "string") {
+            server.close();
+            reject(new Error("Failed to start dry-run server"));
+            return;
+          }
+          const webhookUrl = `http://127.0.0.1:${address.port}/dry-run`;
+          runScriptAsync(["--post", webhookUrl, "--dry-run", "--format", "json", "--audit-log", auditPath])
+            .then((result) => {
+              server.close(() => {
+                try {
+                  expect(result.status).toBe(0);
+                  expect(callCount).toBe(0);
+                  expect(result.stderr).toContain("[DRY RUN] Skipped posting to webhook");
+                  const stored = JSON.parse(readFileSync(auditPath, "utf-8"));
+                  expect(Array.isArray(stored.attempts)).toBe(true);
+                  expect(stored.attempts).toHaveLength(1);
+                  const attempt = stored.attempts[0];
+                  expect(attempt.dryRun).toBe(true);
+                  expect(attempt.success).toBe(true);
+                  expect(attempt.statusCode).toBeNull();
+                  resolve();
+                } catch (error) {
+                  reject(error);
+                }
+              });
+            })
+            .catch((error) => {
+              server.close(() => reject(error));
             });
-          })
-          .catch((error) => {
-            server.close(() => reject(error));
-          });
+        });
       });
-    });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("webhook override can enable respect-retry-after", async () => {

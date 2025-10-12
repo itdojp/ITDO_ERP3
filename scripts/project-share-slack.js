@@ -22,6 +22,8 @@ const https = require('node:https');
 const path = require('node:path');
 const { buildShareTemplate } = require('../shared/cjs/share-template');
 
+const DEFAULT_PROJECTS_URL = 'https://example.com/projects';
+
 const args = process.argv.slice(2);
 
 const optionAliases = new Map([
@@ -531,7 +533,7 @@ if (options['retry-jitter'] === undefined && config.retryJitter !== undefined) {
 
 if (!options.url) {
   if (validateOnly) {
-    const fallbackUrl = config.url ?? 'https://example.com/projects';
+    const fallbackUrl = config.url ?? DEFAULT_PROJECTS_URL;
     options.url = String(fallbackUrl);
   } else {
     console.log(USAGE_TEXT);
@@ -1171,25 +1173,28 @@ async function postWithRetry(
         webhook: targetUrl,
         attempt: 0,
         success: true,
+        statusCode: null,
+        responseBody: '(dry-run)',
+        elapsedMs: 0,
+        retryAfterMs: null,
         dryRun: true,
       });
       console.error(`[DRY RUN] Skipped posting to webhook: ${targetUrl}`);
-      continue;
+    } else {
+      await postWithRetry(
+        targetUrl,
+        shareTemplate.payload.message,
+        targetEnsureOk,
+        targetRetryCount,
+        targetRetryDelayMs,
+        targetRetryBackoff,
+        targetRetryMaxDelayMs,
+        targetRetryJitterMs,
+        auditEvents,
+        targetRespectRetryAfter,
+      );
+      console.error(`Posted share message to webhook: ${targetUrl}`);
     }
-
-    await postWithRetry(
-      targetUrl,
-      shareTemplate.payload.message,
-      targetEnsureOk,
-      targetRetryCount,
-      targetRetryDelayMs,
-      targetRetryBackoff,
-      targetRetryMaxDelayMs,
-      targetRetryJitterMs,
-      auditEvents,
-      targetRespectRetryAfter,
-    );
-    console.error(`Posted share message to webhook: ${targetUrl}`);
   }
 
   if (auditLogPath) {
