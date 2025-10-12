@@ -38,6 +38,8 @@ const optionAliases = new Map([
   ['-X', 'remove-template'],
   ['-E', 'ensure-ok'],
   ['-R', 'respect-retry-after'],
+  ['-D', 'dry-run'],
+  ['-V', 'validate-config'],
   ['-r', 'retry'],
   ['-d', 'retry-delay'],
   ['-b', 'retry-backoff'],
@@ -63,6 +65,16 @@ for (let index = 0; index < args.length;) {
     }
     if (key === 'respect-retry-after') {
       options['respect-retry-after'] = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'dry-run') {
+      options['dry-run'] = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'validate-config') {
+      options['validate-config'] = true;
       index += 1;
       continue;
     }
@@ -127,6 +139,16 @@ for (let index = 0; index < args.length;) {
     }
     if (alias === 'respect-retry-after') {
       options['respect-retry-after'] = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'dry-run') {
+      options['dry-run'] = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'validate-config') {
+      options['validate-config'] = true;
       index += 1;
       continue;
     }
@@ -196,12 +218,14 @@ Options:
   --retry-backoff <value> Optional. 再試行ごとの遅延乗数（既定: 2）。
   --retry-max-delay <ms> Optional. 再試行遅延の上限ミリ秒（既定: 60000）。
   --retry-jitter <ms> Optional. 再試行遅延に加算する最大ジッタ。
+  --dry-run         Optional. Webhook 投稿を行わず出力のみを確認します。
   --respect-retry-after Optional. Webhook 応答の Retry-After ヘッダーがあれば待機時間に反映します。
   --fetch-metrics   Optional. Projects API から KPI を取得し JSON 出力へ含めます。
   --projects-api-base <url> Optional. Projects API のベース URL（省略時は共有リンクのオリジン）。
   --projects-api-token <value> Optional. Projects API への Bearer トークン。
   --projects-api-tenant <value> Optional. Projects API 呼び出し時の X-Tenant-ID。
   --projects-api-timeout <ms> Optional. Projects API 呼び出しのタイムアウト（既定: 10000）。
+  --validate-config Optional. 設定ファイルを検証して終了します（--config が必要）。
   --help            このヘルプを表示します。
 `;
 
@@ -478,6 +502,12 @@ if (config.projectsApi && typeof config.projectsApi === 'object') {
   }
 }
 
+const validateOnly = Boolean(options['validate-config']);
+if (validateOnly && !configPath) {
+  console.error('Using --validate-config requires --config <path>');
+  process.exit(1);
+}
+
 const configRespectRetryAfter = config['respect-retry-after'] ?? config.respectRetryAfter;
 if (options['respect-retry-after'] === undefined && configRespectRetryAfter !== undefined) {
   options['respect-retry-after'] = Boolean(configRespectRetryAfter);
@@ -500,8 +530,13 @@ if (options['retry-jitter'] === undefined && config.retryJitter !== undefined) {
 }
 
 if (!options.url) {
-  console.log(USAGE_TEXT);
-  process.exit(1);
+  if (validateOnly) {
+    const fallbackUrl = config.url ?? 'https://example.com/projects';
+    options.url = String(fallbackUrl);
+  } else {
+    console.log(USAGE_TEXT);
+    process.exit(1);
+  }
 }
 
 options.url = String(options.url).trim();
@@ -732,6 +767,7 @@ const webhookTargets = rawWebhookInputs
   })
   .filter((entry) => entry && typeof entry.url === 'string' && entry.url.length > 0);
 const ensureOkDefault = Boolean(options['ensure-ok']);
+const dryRun = Boolean(options['dry-run']);
 const respectRetryAfterDefault = Boolean(options['respect-retry-after']);
 const auditLogPath = typeof options['audit-log'] === 'string' ? options['audit-log'].trim() : '';
 const auditEvents = auditLogPath ? [] : null;
@@ -744,6 +780,14 @@ const shareFilters = {
   tags: tagList,
   count: projectCount,
 };
+
+if (validateOnly) {
+  console.log('Config validation succeeded.');
+  if (webhookTargets.length === 0) {
+    console.warn('No webhook targets defined in config.');
+  }
+  process.exit(0);
+}
 
 function postToWebhook(url, text, ensureOkResponse) {
   const target = new URL(url);
@@ -1119,6 +1163,18 @@ async function postWithRetry(
         `[WARN] retryDelay (${targetRetryDelayMs}) for webhook ${targetUrl} exceeds retryMaxDelay (${targetRetryMaxDelayMs}). Capping retryDelay to retryMaxDelay.`,
       );
       targetRetryDelayMs = targetRetryMaxDelayMs;
+    }
+
+    if (dryRun) {
+      auditEvents?.push({
+        timestamp: new Date().toISOString(),
+        webhook: targetUrl,
+        attempt: 0,
+        success: true,
+        dryRun: true,
+      });
+      console.error(`[DRY RUN] Skipped posting to webhook: ${targetUrl}`);
+      continue;
     }
 
     await postWithRetry(
