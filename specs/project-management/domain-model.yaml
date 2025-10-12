@@ -1,0 +1,78 @@
+version: 1
+context: project-management
+entities:
+  Project:
+    description: プロジェクトのトップレベル情報。EVM 指標計算とチャット統合のハブ。
+    attributes:
+      - { name: id, type: uuid, description: PK }
+      - { name: code, type: string, description: 社内一意コード }
+      - { name: name, type: string }
+      - { name: description, type: text }
+      - { name: status, type: enum(ProjectStatus) }
+      - { name: startDate, type: date }
+      - { name: endDate, type: date }
+      - { name: baselineCost, type: decimal }
+      - { name: chatWorkspaceId, type: string, description: Slack/Teams チャネルID }
+    relations:
+      - { type: hasMany, target: Phase, via: projectId }
+      - { type: hasMany, target: Task, via: projectId }
+      - { type: hasMany, target: Risk, via: projectId }
+  Phase:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: projectId, type: uuid }
+      - { name: name, type: string }
+      - { name: startDate, type: date }
+      - { name: endDate, type: date }
+      - { name: plannedValue, type: decimal }
+      - { name: earnedValue, type: decimal }
+      - { name: actualCost, type: decimal }
+  Task:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: projectId, type: uuid }
+      - { name: phaseId, type: uuid, nullable: true }
+      - { name: name, type: string }
+      - { name: assigneeId, type: uuid }
+      - { name: plannedHours, type: decimal }
+      - { name: actualHours, type: decimal }
+      - { name: status, type: enum(TaskStatus) }
+      - { name: dependencyIds, type: uuid[], description: Task -> Task の依存 }
+  Dependency:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: predecessorId, type: uuid }
+      - { name: successorId, type: uuid }
+      - { name: type, type: enum(FinishStart, FinishFinish, StartStart) }
+  Risk:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: projectId, type: uuid }
+      - { name: probability, type: integer }
+      - { name: impact, type: integer }
+      - { name: status, type: enum(RiskStatus) }
+      - { name: mitigationPlan, type: text }
+  ChatThread:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: projectId, type: uuid }
+      - { name: externalThreadId, type: string }
+      - { name: provider, type: enum(Slack, Teams) }
+      - { name: summaryEmbedding, type: vector(1536) }
+      - { name: lastSummarizedAt, type: datetime }
+    relations:
+      - { type: hasMany, target: ChatMessage, via: threadId }
+  ChatMessage:
+    attributes:
+      - { name: id, type: uuid }
+      - { name: threadId, type: uuid }
+      - { name: authorId, type: uuid }
+      - { name: content, type: text }
+      - { name: postedAt, type: datetime }
+valueObjects:
+  ProjectStatus:
+    values: [draft, active, onHold, completed, cancelled]
+  TaskStatus:
+    values: [todo, inProgress, review, done, blocked]
+  RiskStatus:
+    values: [identified, mitigated, closed]

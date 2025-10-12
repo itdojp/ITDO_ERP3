@@ -9,23 +9,27 @@
     "lint": "next lint",
     "share:projects": "node ../scripts/project-share-slack.js",
     "share:projects:sample": "npm run --silent share:projects -- --url ${PROJECTS_URL:-https://example.com/projects?status=active} --title \"${PROJECTS_TITLE:-CI Slack Share}\" --notes \"${PROJECTS_NOTES:-sample verification}\"",
-    "test:unit": "vitest run src/features/telemetry/__tests__/link-utilities.test.ts tests/share-cli/project-share-slack.test.ts",
+    "test:unit": "vitest run src/features/telemetry/__tests__/link-utilities.test.ts tests/share-cli/project-share-slack.test.ts tests/project-timeline-panel.test.tsx tests/metrics/evm.test.ts tests/ai/chat-summary.test.ts",
     "test:share-cli": "vitest run tests/share-cli/project-share-slack.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:live": "E2E_EXPECT_API=true playwright test"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.56.0",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.1",
+    "@testing-library/jest-dom": "^6.4.3",
+    "@testing-library/react": "^14.2.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.2.5",
+    "jsdom": "^27.0.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
