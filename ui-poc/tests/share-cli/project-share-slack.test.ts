@@ -755,6 +755,224 @@ describe("project-share-slack CLI", () => {
     }
   });
 
+  test("applies per-webhook retry overrides from config", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-webhook-override-"));
+    try {
+      let callCount = 0;
+      await new Promise<void>((resolve, reject) => {
+        const server = createServer((request, response) => {
+          callCount += 1;
+          if (callCount === 1) {
+            response.writeHead(500, { "Content-Type": "text/plain" });
+            response.end("error");
+          } else {
+            response.writeHead(200, { "Content-Type": "text/plain" });
+            response.end("ok");
+          }
+        });
+
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address() as AddressInfo | null;
+          if (!address || typeof address === "string") {
+            server.close();
+            reject(new Error("Failed to start webhook override server"));
+            return;
+          }
+          const webhookUrl = `http://127.0.0.1:${address.port}/retry-override`;
+          const configPath = path.join(tempDir, "share.config.json");
+          writeFileSync(
+            configPath,
+            JSON.stringify(
+              {
+                post: [
+                  {
+                    url: webhookUrl,
+                    retry: 1,
+                    retryDelay: 5,
+                    retryBackoff: 1,
+                    retryMaxDelay: 5,
+                    retryJitter: 0,
+                  },
+                ],
+              },
+              null,
+              2,
+            ),
+            "utf-8",
+          );
+          const configData = JSON.parse(readFileSync(configPath, "utf-8"));
+          expect(typeof configData.post[0].url).toBe("string");
+          runScriptAsync(["--config", configPath, "--retry", "0", "--format", "json"])
+            .then((result) => {
+              server.close(() => {
+                try {
+                  expect(result.status).toBe(0);
+                  resolve();
+                } catch (error) {
+                  reject(error);
+                }
+              });
+            })
+            .catch((error) => {
+              server.close(() => reject(error));
+            });
+        });
+      });
+      expect(callCount).toBe(2);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("webhook override can disable global retries", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-webhook-disable-"));
+    try {
+      let callCount = 0;
+      await new Promise<void>((resolve) => {
+        const server = createServer((request, response) => {
+          callCount += 1;
+          response.writeHead(500, { "Content-Type": "text/plain" });
+          response.end("still failing");
+        });
+
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address() as AddressInfo | null;
+          const webhookUrl = `http://127.0.0.1:${address?.port ?? 0}/disable-retry`;
+          const configPath = path.join(tempDir, "share.config.json");
+          writeFileSync(
+            configPath,
+            JSON.stringify(
+              {
+                post: [
+                  {
+                    url: webhookUrl,
+                    retry: 0,
+                  },
+                ],
+              },
+              null,
+              2,
+            ),
+            "utf-8",
+          );
+          runScriptAsync(["--config", configPath, "--retry", "2", "--format", "json"])
+            .then((result) => {
+              server.close(() => {
+                expect(result.status).toBe(1);
+                resolve();
+              });
+            })
+            .catch(() => {
+              server.close(() => resolve());
+            });
+        });
+      });
+      expect(callCount).toBe(1);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("webhook override can enable respect-retry-after", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-webhook-respect-"));
+    const auditPath = path.join(tempDir, "audit.json");
+    let callCount = 0;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const server = createServer((request, response) => {
+          callCount += 1;
+          if (callCount === 1) {
+            response.statusCode = 429;
+            response.setHeader("Retry-After", "0.05");
+            response.setHeader("Content-Type", "text/plain");
+            response.end("rate limited");
+          } else {
+            response.writeHead(200, { "Content-Type": "text/plain" });
+            response.end("ok");
+          }
+        });
+
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address() as AddressInfo | null;
+          if (!address || typeof address === "string") {
+            server.close();
+            reject(new Error("Failed to start respect override server"));
+            return;
+          }
+          const webhookUrl = `http://127.0.0.1:${address.port}/respect-override`;
+          const configPath = path.join(tempDir, "share.config.json");
+          writeFileSync(
+            configPath,
+            JSON.stringify(
+              {
+                post: [
+                  {
+                    url: webhookUrl,
+                    retry: 1,
+                    retryDelay: 1,
+                    retryBackoff: 1.5,
+                    retryMaxDelay: 50,
+                    retryJitter: 0,
+                    respectRetryAfter: true,
+                  },
+                ],
+              },
+              null,
+              2,
+            ),
+            "utf-8",
+          );
+          runScriptAsync([
+            "--config",
+            configPath,
+            "--format",
+            "json",
+            "--retry",
+            "0",
+            "--retry-delay",
+            "5",
+            "--retry-backoff",
+            "2",
+            "--retry-max-delay",
+            "100",
+            "--retry-jitter",
+            "0",
+            "--audit-log",
+            auditPath,
+            "--ensure-ok",
+          ])
+            .then((result) => {
+              server.close(() => {
+                try {
+                  expect(result.status).toBe(0);
+                  resolve();
+                } catch (error) {
+                  reject(error);
+                }
+              });
+            })
+            .catch((error) => {
+              server.close(() => reject(error));
+            });
+        });
+      });
+
+      expect(callCount).toBe(2);
+      const auditContent = JSON.parse(readFileSync(auditPath, "utf-8"));
+      expect(Array.isArray(auditContent.attempts)).toBe(true);
+      expect(auditContent.attempts.length).toBe(2);
+      const firstAttempt = auditContent.attempts[0];
+      expect(firstAttempt.success).toBe(false);
+      expect(typeof firstAttempt.retryAfterMs).toBe("number");
+      expect(firstAttempt.retryAfterMs).toBeGreaterThanOrEqual(50);
+      expect(firstAttempt.nextDelayMs).toBeGreaterThanOrEqual(firstAttempt.retryAfterMs);
+      const secondAttempt = auditContent.attempts[1];
+      expect(secondAttempt.success).toBe(true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("writes audit log with retry details", async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "share-cli-audit-"));
     const auditPath = path.join(tempDir, "audit.json");
