@@ -120,7 +120,7 @@ Projects 一覧の共有メッセージは以下の CLI で生成できます。
 
 `PROJECTS_URL` / `PROJECTS_TITLE` / `PROJECTS_NOTES` の各環境変数を上書きすることでサンプルスクリプトの出力を変更できます。
 
-`--format markdown` / `--format json` を指定すると、それぞれ Markdown 形式・JSON 形式で出力できます。`--count <number>` で対象件数を bullet に追加し、`--out <path>` で生成結果をファイル保存できます。`--post <webhook-url>` を併用すると Slack Incoming Webhook へメッセージを直接送信します（複数指定可）。`--config share.config.json` を指定すると、URL やタイトルなどの既定値を JSON ファイルから読み込めます。Slack 送信時には `--ensure-ok` で応答本文が `ok` か検証でき、`--retry <count>` / `--retry-delay <ms>` / `--retry-backoff <value>` / `--retry-max-delay <ms>` / `--retry-jitter <ms>` を指定すると失敗時の再送挙動を細かく制御できます。
+`--format markdown` / `--format json` を指定すると、それぞれ Markdown 形式・JSON 形式で出力できます。`--count <number>` で対象件数を bullet に追加し、`--out <path>` で生成結果をファイル保存できます。`--post <webhook-url>` を併用すると Slack Incoming Webhook へメッセージを直接送信します（複数指定可）。`--config share.config.json` を指定すると、URL やタイトルなどの既定値を JSON ファイルから読み込めます。Slack 送信時には `--ensure-ok` で応答本文が `ok` か検証でき、`--retry <count>` / `--retry-delay <ms>` / `--retry-backoff <value>` / `--retry-max-delay <ms>` / `--retry-jitter <ms>` / `--respect-retry-after` を指定すると失敗時の再送挙動を細かく制御できます。`--fetch-metrics` を併用すると Projects API から KPI を取得し、JSON 出力やメッセージへ件数サマリを付与できます（`--projects-api-base` / `--projects-api-token` / `--projects-api-tenant` / `--projects-api-timeout` で接続情報を上書き可能）。
 
 config に `templates` を定義すると、`--template <name>` で共通プリセットを呼び出しつつ CLI 引数で部分的に上書きできます。`--audit-log <path>` を指定すると Webhook 投稿の成功／失敗履歴を JSON で保存します。
 

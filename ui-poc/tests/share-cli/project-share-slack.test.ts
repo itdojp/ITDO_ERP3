@@ -249,6 +249,80 @@ describe("project-share-slack CLI", () => {
     });
   });
 
+  test("includes metrics in json output when --fetch-metrics is enabled", async () => {
+    const requests: Array<{ path: string; auth: string | undefined; tenant: string | undefined }> = [];
+    await new Promise<void>((resolve, reject) => {
+      const server = createServer((request, response) => {
+        const requestUrl = new URL(request.url ?? "", `http://${request.headers.host}`);
+        requests.push({
+          path: requestUrl.toString(),
+          auth: request.headers.authorization,
+          tenant: request.headers["x-tenant-id"] as string | undefined,
+        });
+        const health = requestUrl.searchParams.get("health");
+        const total =
+          health === "red" ? 2 : health === "yellow" ? 4 : requestUrl.searchParams.get("status") === "active" ? 10 : 0;
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ items: [], meta: { total } }));
+      });
+
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as AddressInfo | null;
+        if (!address || typeof address === "string") {
+          server.close();
+          reject(new Error("Failed to determine metrics test server address"));
+          return;
+        }
+        const apiBase = `http://127.0.0.1:${address.port}`;
+        runScriptAsync([
+          "--format",
+          "json",
+          "--fetch-metrics",
+          "--projects-api-base",
+          apiBase,
+          "--projects-api-token",
+          "token-123",
+          "--projects-api-tenant",
+          "example-tenant",
+        ])
+          .then((result) => {
+            server.close(() => {
+              try {
+                expect(result.status).toBe(0);
+                const payload = JSON.parse(result.stdout);
+                expect(payload.metrics).toBeTruthy();
+                expect(payload.metrics.totalProjects).toBe(10);
+                expect(payload.metrics.riskProjects).toBe(2);
+                expect(payload.metrics.warningProjects).toBe(4);
+                expect(Array.isArray(payload.metrics.requests)).toBe(true);
+                expect(payload.metrics.requests).toHaveLength(3);
+                resolve();
+              } catch (error) {
+                reject(error);
+              }
+            });
+          })
+          .catch((error) => {
+            server.close(() => reject(error));
+          });
+      });
+    });
+
+    expect(requests).toHaveLength(3);
+    requests.forEach((entry) => {
+      expect(entry.auth).toBe("Bearer token-123");
+      expect(entry.tenant).toBe("example-tenant");
+      expect(entry.path).toContain("/api/v1/projects?");
+      const url = new URL(entry.path);
+      expect(url.searchParams.get("first")).toBe("1");
+      expect(url.searchParams.get("status")).toBe("active");
+      expect(url.searchParams.get("manager")).toBe("Yamada");
+      expect(url.searchParams.getAll("tags").join(",")).toContain("DX");
+    });
+    const healthParameters = requests.map((entry) => new URL(entry.path).searchParams.get("health"));
+    expect(new Set(healthParameters)).toEqual(new Set([null, "red", "yellow"]));
+  });
+
   test("retries webhook posting when --retry is specified", async () => {
     let callCount = 0;
     await new Promise<void>((resolve, reject) => {

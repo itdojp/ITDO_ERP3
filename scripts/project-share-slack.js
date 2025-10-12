@@ -69,6 +69,11 @@ for (let index = 0; index < args.length;) {
       index += 2;
       continue;
     }
+    if (key === 'fetch-metrics') {
+      options['fetch-metrics'] = true;
+      index += 1;
+      continue;
+    }
     const next = args[index + 1];
     if (!next || next.startsWith('-')) {
       console.error(`Option --${key} requires a value`);
@@ -139,6 +144,11 @@ Options:
   --retry-backoff <value> Optional. 再試行ごとの遅延乗数（既定: 2）。
   --retry-max-delay <ms> Optional. 再試行遅延の上限ミリ秒（既定: 60000）。
   --retry-jitter <ms> Optional. 再試行遅延に加算する最大ジッタ。
+  --fetch-metrics   Optional. Projects API から KPI を取得し JSON 出力へ含めます。
+  --projects-api-base <url> Optional. Projects API のベース URL（省略時は共有リンクのオリジン）。
+  --projects-api-token <value> Optional. Projects API への Bearer トークン。
+  --projects-api-tenant <value> Optional. Projects API 呼び出し時の X-Tenant-ID。
+  --projects-api-timeout <ms> Optional. Projects API 呼び出しのタイムアウト（既定: 10000）。
   --help            このヘルプを表示します。
 `;
 
@@ -169,7 +179,7 @@ const assignDefault = (key) => {
   }
 };
 
-['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter', 'audit-log'].forEach(assignDefault);
+['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter', 'audit-log', 'fetch-metrics', 'projects-api-base', 'projects-api-token', 'projects-api-tenant', 'projects-api-timeout'].forEach(assignDefault);
 
 if (config.post !== undefined) {
   const configPosts = Array.isArray(config.post) ? config.post : [config.post];
@@ -186,6 +196,26 @@ if (config.post !== undefined) {
 const configEnsureValue = config['ensure-ok'] ?? config.ensureOk;
 if (options['ensure-ok'] === undefined && configEnsureValue !== undefined) {
   options['ensure-ok'] = Boolean(configEnsureValue);
+}
+
+if (config.projectsApi && typeof config.projectsApi === 'object') {
+  const projectsApi = config.projectsApi;
+  if (options['projects-api-base'] === undefined && typeof projectsApi.baseUrl === 'string') {
+    options['projects-api-base'] = projectsApi.baseUrl;
+  }
+  if (options['projects-api-token'] === undefined && typeof projectsApi.token === 'string') {
+    options['projects-api-token'] = projectsApi.token;
+  }
+  if (options['projects-api-tenant'] === undefined && typeof projectsApi.tenant === 'string') {
+    options['projects-api-tenant'] = projectsApi.tenant;
+  }
+  const timeoutCandidate = projectsApi.timeoutMs ?? projectsApi.timeout;
+  if (options['projects-api-timeout'] === undefined && timeoutCandidate !== undefined) {
+    options['projects-api-timeout'] = timeoutCandidate;
+  }
+  if (options['fetch-metrics'] === undefined && typeof projectsApi.fetchMetrics === 'boolean') {
+    options['fetch-metrics'] = projectsApi.fetchMetrics;
+  }
 }
 
 if (options['retry-delay'] === undefined && config.retryDelay !== undefined) {
@@ -220,6 +250,28 @@ options['retry-backoff'] = options['retry-backoff'] !== undefined ? String(optio
 options['retry-max-delay'] = options['retry-max-delay'] !== undefined ? String(options['retry-max-delay']) : undefined;
 options['retry-jitter'] = options['retry-jitter'] !== undefined ? String(options['retry-jitter']) : undefined;
 options['audit-log'] = options['audit-log'] !== undefined ? String(options['audit-log']) : undefined;
+options['projects-api-base'] = options['projects-api-base'] !== undefined ? String(options['projects-api-base']) : undefined;
+options['projects-api-token'] = options['projects-api-token'] !== undefined ? String(options['projects-api-token']) : undefined;
+options['projects-api-tenant'] = options['projects-api-tenant'] !== undefined ? String(options['projects-api-tenant']) : undefined;
+options['projects-api-timeout'] = options['projects-api-timeout'] !== undefined ? String(options['projects-api-timeout']) : undefined;
+if (typeof options['fetch-metrics'] === 'string') {
+  const normalizedFetchValue = options['fetch-metrics'].trim().toLowerCase();
+  options['fetch-metrics'] = ['1', 'true', 'yes', 'on'].includes(normalizedFetchValue);
+} else {
+  options['fetch-metrics'] = Boolean(options['fetch-metrics']);
+}
+if (options['projects-api-base'] === undefined && typeof process.env.PROJECTS_API_BASE === 'string') {
+  options['projects-api-base'] = process.env.PROJECTS_API_BASE;
+}
+if (options['projects-api-token'] === undefined && typeof process.env.PROJECTS_API_TOKEN === 'string') {
+  options['projects-api-token'] = process.env.PROJECTS_API_TOKEN;
+}
+if (options['projects-api-tenant'] === undefined && typeof process.env.PROJECTS_API_TENANT === 'string') {
+  options['projects-api-tenant'] = process.env.PROJECTS_API_TENANT;
+}
+if (options['projects-api-timeout'] === undefined && typeof process.env.PROJECTS_API_TIMEOUT === 'string') {
+  options['projects-api-timeout'] = process.env.PROJECTS_API_TIMEOUT;
+}
 if (Array.isArray(options.post)) {
   options.post = options.post.map((value) => String(value).trim()).filter((value) => value.length > 0);
 }
@@ -278,6 +330,16 @@ if (options['retry-jitter'] !== undefined) {
 
 if (retryDelayMs > retryMaxDelayMs && retryMaxDelayMs > 0) {
   retryDelayMs = retryMaxDelayMs;
+}
+
+let projectsApiTimeoutMs = 10000;
+if (options['projects-api-timeout'] !== undefined) {
+  const parsedTimeout = Number(options['projects-api-timeout']);
+  if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+    console.error(`Invalid projects-api-timeout value: ${options['projects-api-timeout']}`);
+    process.exit(1);
+  }
+  projectsApiTimeoutMs = Math.floor(parsedTimeout);
 }
 
 let parsedUrl;
@@ -349,13 +411,6 @@ const title = options.title ?? 'Projects 共有リンク';
 const generatedAt = new Date();
 const timestamp = generatedAt.toLocaleString('ja-JP', { hour12: false, timeZone: 'Asia/Tokyo' });
 
-const message = [
-  `:clipboard: *${title}* _(${timestamp})_`,
-  parsedUrl.toString(),
-  '',
-  ...bulletLines,
-].join('\n');
-
 const format = (options.format ?? 'text').toLowerCase();
 const outPath = typeof options.out === 'string' ? options.out.trim() : '';
 const webhookTargets = Array.isArray(options.post)
@@ -373,40 +428,40 @@ const filters = {
   count: projectCount,
 };
 
-const markdown = [
-  `**${title}** (_${timestamp}_)`,
-  parsedUrl.toString(),
-  '',
-  ...bulletLines.map((line) => line.replace(/^• /, '- ')),
-].join('\n');
+const buildShareOutputs = (lines, metrics) => {
+  const normalizedLines = Array.isArray(lines) ? lines : [];
+  const message = [
+    `:clipboard: *${title}* _(${timestamp})_`,
+    parsedUrl.toString(),
+    '',
+    ...normalizedLines,
+  ].join('\n');
 
-const payload = {
-  title,
-  url: parsedUrl.toString(),
-  generatedAt: generatedAt.toISOString(),
-  filters,
-  notes: trimmedNotes,
-  message,
-  projectCount,
+  const markdown = [
+    `**${title}** (_${timestamp}_)`,
+    parsedUrl.toString(),
+    '',
+    ...normalizedLines.map((line) => line.replace(/^• /, '- ')),
+  ].join('\n');
+
+  const payload = {
+    title,
+    url: parsedUrl.toString(),
+    generatedAt: generatedAt.toISOString(),
+    filters,
+    notes: trimmedNotes,
+    message,
+    projectCount,
+  };
+
+  if (metrics && typeof metrics === 'object') {
+    payload.metrics = metrics;
+  }
+
+  const jsonOutput = JSON.stringify(payload, null, 2);
+
+  return { message, markdown, jsonOutput, payload };
 };
-
-const jsonOutput = JSON.stringify(payload, null, 2);
-
-const allowedFormats = new Set(['text', 'markdown', 'json']);
-if (!allowedFormats.has(format)) {
-  console.error(`Unknown format: ${format}. Use text | markdown | json.`);
-  process.exit(1);
-}
-
-let renderedOutput = '';
-
-if (format === 'markdown') {
-  renderedOutput = markdown;
-} else if (format === 'json') {
-  renderedOutput = jsonOutput;
-} else {
-  renderedOutput = message;
-}
 
 function postToWebhook(url, text, ensureOkResponse) {
   const target = new URL(url);
@@ -481,6 +536,142 @@ function postToWebhook(url, text, ensureOkResponse) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function fetchShareMetrics({ baseUrl, token, tenant, timeoutMs }) {
+  if (typeof fetch !== 'function') {
+    throw new Error('fetch API is not available in this runtime');
+  }
+
+  const resolvedBase = baseUrl ? baseUrl.trim() : '';
+  const apiBaseUrl = resolvedBase.length > 0 ? resolvedBase : parsedUrl.origin;
+  let apiBase;
+  try {
+    apiBase = new URL(apiBaseUrl);
+  } catch (error) {
+    throw new Error(`Invalid projects API base URL: ${apiBaseUrl}`);
+  }
+
+  const forwardKeys = ['status', 'keyword', 'manager', 'tag', 'tags', 'health'];
+  const buildSearchParams = (overrides = {}) => {
+    const search = new URLSearchParams();
+    for (const key of forwardKeys) {
+      const values = parsedUrl.searchParams.getAll(key);
+      if (values.length === 0) {
+        continue;
+      }
+      if (values.length === 1) {
+        const value = values[0]?.trim();
+        if (value) {
+          search.set(key, value);
+        }
+      } else {
+        values
+          .map((value) => value?.trim())
+          .filter((value) => value && value.length > 0)
+          .forEach((value) => {
+            search.append(key, value);
+          });
+      }
+    }
+
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value === null || value === undefined || value === '') {
+        search.delete(key);
+      } else {
+        search.set(key, String(value));
+      }
+    }
+
+    if (!search.has('first')) {
+      search.set('first', '1');
+    }
+
+    return search;
+  };
+
+  const headers = {
+    Accept: 'application/json',
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (tenant) {
+    headers['X-Tenant-ID'] = tenant;
+  }
+
+  const requestLog = [];
+  const executeRequest = async (label, overrides) => {
+    const url = new URL('/api/v1/projects', apiBase);
+    url.search = buildSearchParams(overrides).toString();
+    const controller = new AbortController();
+    const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+      const response = await fetch(url, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`Projects API returned ${response.status}`);
+      }
+      const data = await response.json();
+      requestLog.push({
+        label,
+        url: url.toString(),
+        status: response.status,
+        total: data?.meta?.total ?? null,
+      });
+      return data;
+    } catch (error) {
+      if (error && typeof error === 'object' && error.name === 'AbortError') {
+        throw new Error(`Projects API request timed out after ${timeoutMs} ms (${url.toString()})`);
+      }
+      throw error;
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  };
+
+  const totalsResponse = await executeRequest('total', {});
+  const totalProjects = Number(totalsResponse?.meta?.total ?? 0);
+
+  const riskResponse = await executeRequest('risk', { health: 'red' });
+  const riskProjects = Number(riskResponse?.meta?.total ?? 0);
+
+  const warningResponse = await executeRequest('warning', { health: 'yellow' });
+  const warningProjects = Number(warningResponse?.meta?.total ?? 0);
+
+  const metrics = {
+    fetchedAt: new Date().toISOString(),
+    apiBaseUrl: apiBase.origin,
+    totalProjects: Number.isFinite(totalProjects) ? totalProjects : null,
+    riskProjects: Number.isFinite(riskProjects) ? riskProjects : null,
+    warningProjects: Number.isFinite(warningProjects) ? warningProjects : null,
+    forwardedFilters: forwardKeys.reduce((accumulator, key) => {
+      const values = parsedUrl.searchParams.getAll(key);
+      if (values.length === 0) {
+        return accumulator;
+      }
+      accumulator[key] = values.length === 1 ? values[0] : values;
+      return accumulator;
+    }, {}),
+    requests: requestLog,
+  };
+
+  const metricLines = [];
+  if (metrics.totalProjects !== null) {
+    metricLines.push(`• API 件数: ${metrics.totalProjects}`);
+  }
+  if (metrics.riskProjects !== null) {
+    metricLines.push(`• リスク件数: ${metrics.riskProjects}`);
+  }
+  if (metrics.warningProjects !== null) {
+    metricLines.push(`• 警戒件数: ${metrics.warningProjects}`);
+  }
+
+  return { metrics, metricLines };
+}
+
 async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayMs, backoff, maxDelayMs, jitterMs, events) {
   const maxDelayBound = maxDelayMs > 0 ? maxDelayMs : Number.MAX_SAFE_INTEGER;
   let attempt = 0;
@@ -533,6 +724,46 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
 }
 
 (async () => {
+  let metricsResult = null;
+  if (options['fetch-metrics']) {
+    try {
+      metricsResult = await fetchShareMetrics({
+        baseUrl: options['projects-api-base'],
+        token: options['projects-api-token'],
+        tenant: options['projects-api-tenant'],
+        timeoutMs: projectsApiTimeoutMs,
+      });
+    } catch (error) {
+      console.error(`Failed to fetch metrics: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+  }
+
+  const linesForOutput =
+    metricsResult && Array.isArray(metricsResult.metricLines) && metricsResult.metricLines.length > 0
+      ? [...bulletLines, ...metricsResult.metricLines]
+      : bulletLines;
+
+  const { message, markdown, jsonOutput, payload } = buildShareOutputs(
+    linesForOutput,
+    metricsResult ? metricsResult.metrics : undefined,
+  );
+
+  const allowedFormats = new Set(['text', 'markdown', 'json']);
+  if (!allowedFormats.has(format)) {
+    console.error(`Unknown format: ${format}. Use text | markdown | json.`);
+    process.exit(1);
+  }
+
+  let renderedOutput = '';
+  if (format === 'markdown') {
+    renderedOutput = markdown;
+  } else if (format === 'json') {
+    renderedOutput = jsonOutput;
+  } else {
+    renderedOutput = message;
+  }
+
   console.log(renderedOutput);
 
   if (outPath) {
@@ -549,7 +780,17 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
       console.error(`Invalid webhook URL: ${target}`);
       process.exit(1);
     }
-    await postWithRetry(target, payload.message, ensureOk, retryCount, retryDelayMs, retryBackoff, retryMaxDelayMs, retryJitterMs, auditEvents);
+    await postWithRetry(
+      target,
+      payload.message,
+      ensureOk,
+      retryCount,
+      retryDelayMs,
+      retryBackoff,
+      retryMaxDelayMs,
+      retryJitterMs,
+      auditEvents,
+    );
     console.error(`Posted share message to webhook: ${target}`);
   }
 
@@ -561,6 +802,9 @@ async function postWithRetry(url, text, ensureOkResponse, retries, initialDelayM
         url: parsedUrl.toString(),
         attempts: auditEvents,
       };
+      if (metricsResult?.metrics) {
+        auditPayload.metrics = metricsResult.metrics;
+      }
       const directory = path.dirname(auditLogPath);
       if (directory && directory !== '.') {
         fs.mkdirSync(directory, { recursive: true });

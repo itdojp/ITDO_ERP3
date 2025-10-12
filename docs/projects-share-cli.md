@@ -73,6 +73,8 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 - `--retry-backoff` で遅延時間に乗算する係数（既定 2）を調整できます。
 - `--retry-max-delay` で遅延時間の上限をミリ秒単位で指定できます（既定 60000）。
 - `--retry-jitter` で各再試行に加算する 0〜指定値ミリ秒のジッタを追加できます。
+- `--respect-retry-after` を付けると、Slack から返される `Retry-After` ヘッダー（秒/日時）に応じて次回再試行までの待機時間を自動で延長します。
+- `--fetch-metrics` を有効にすると、Projects API から集計指標（件数 / リスク件数 / 警戒件数）を取得して JSON 出力に含めます。API の接続情報は `--projects-api-base` / `--projects-api-token` / `--projects-api-tenant` / `--projects-api-timeout` で上書きできます。
 
 ## 設定ファイルの利用
 繰り返し利用する設定は JSON ファイルにまとめておくのがおすすめです。`--config <path>` を指定すると、ファイル内の値を既定値として読み込み、CLI 引数で上書きできます。
@@ -95,7 +97,23 @@ Webhook 呼び出しに失敗すると終了コード 1 で落ちるため、CI 
 node scripts/project-share-slack.js --config share.config.json
 ```
 
-`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `retry` / `retry-delay` / `retry-backoff` / `retry-max-delay` / `retry-jitter` も同様に設定ファイルで既定値を定義できます。
+`post` は文字列または配列を指定でき、CLI 側で `--post` を複数回指定した場合はすべての Webhook に送信されます。`ensure-ok` / `respect-retry-after` / `fetch-metrics` / `retry` / `retry-delay` / `retry-backoff` / `retry-max-delay` / `retry-jitter` も同様に設定ファイルで既定値を定義できます。
+
+Projects API の接続情報は `projectsApi` セクションで管理します。
+
+```json
+{
+  "projectsApi": {
+    "baseUrl": "https://api.example.com",
+    "token": "${PROJECTS_API_TOKEN}",
+    "tenant": "example",
+    "timeoutMs": 15000,
+    "fetchMetrics": true
+  }
+}
+```
+
+CLI から明示的に `--projects-api-base` などを渡さない場合、このセクションの値が既定として使われます。トークンやテナント ID は環境変数 `PROJECTS_API_TOKEN` / `PROJECTS_API_TENANT` からも読み取れるため、CI ではシークレットを環境変数として注入する運用が推奨です。
 
 `templates` にプリセットを定義すると、`--template <name>` で適用できます。テンプレートで指定した値は CLI 引数に先立って設定されるため、雛形を用意した上で必要な部分だけ上書きするといった使い方ができます。
 
