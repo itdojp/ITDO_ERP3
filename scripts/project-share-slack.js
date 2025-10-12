@@ -31,6 +31,7 @@ const optionAliases = new Map([
   ['-o', 'out'],
   ['-p', 'post'],
   ['-C', 'config'],
+  ['-T', 'template'],
   ['-E', 'ensure-ok'],
   ['-r', 'retry'],
   ['-d', 'retry-delay'],
@@ -132,6 +133,7 @@ Options:
   --out <value>     Optional. 出力内容をファイルへ保存します。
   --post <value>    Optional. Slack Incoming Webhook URL に投稿します。複数指定可。
   --config <path>   Optional. 上記オプションの既定値を含む JSON を読み込みます。
+  --template <value> Optional. config に定義したテンプレート名を適用します。
   --ensure-ok       Optional. Webhook 応答が "ok" でなければエラーにします。
   --retry <value>   Optional. 投稿失敗時の再試行回数。
   --retry-delay <ms> Optional. 最初の再試行までの待機ミリ秒（既定: 1000）。
@@ -167,6 +169,45 @@ const assignDefault = (key) => {
     options[key] = config[key];
   }
 };
+
+const applyDefaultsFromObject = (source) => {
+  if (!source || typeof source !== 'object') {
+    return;
+  }
+  ['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter'].forEach((key) => {
+    if (source[key] !== undefined && options[key] === undefined) {
+      options[key] = source[key];
+    }
+  });
+
+  if (source.post !== undefined) {
+    const posts = Array.isArray(source.post) ? source.post : [source.post];
+    posts
+      .filter((value) => value !== undefined && value !== null && String(value).trim().length > 0)
+      .forEach((value) => {
+        if (!Array.isArray(options.post)) {
+          options.post = options.post ? [options.post] : [];
+        }
+        options.post.push(String(value));
+      });
+  }
+
+  const ensureValue = source['ensure-ok'] ?? source.ensureOk;
+  if (options['ensure-ok'] === undefined && ensureValue !== undefined) {
+    options['ensure-ok'] = Boolean(ensureValue);
+  }
+};
+
+const templates = config.templates && typeof config.templates === 'object' ? config.templates : undefined;
+const templateName = options.template ?? config.template ?? config.defaultTemplate ?? config['default-template'];
+if (templateName) {
+  const template = templates?.[templateName];
+  if (!template) {
+    console.error(`Unknown template: ${templateName}`);
+    process.exit(1);
+  }
+  applyDefaultsFromObject(template);
+}
 
 ['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter'].forEach(assignDefault);
 
