@@ -20,6 +20,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const path = require('node:path');
+const { buildShareTemplate } = require('../shared/cjs/share-template');
 
 const args = process.argv.slice(2);
 
@@ -463,6 +464,9 @@ const health = params.get('health');
 
 const trimmedNotes = options.notes?.trim() ?? '';
 const tagList = [tag?.trim(), ...(tags ? tags.split(',').map((value) => value.trim()) : [])].filter(Boolean);
+const trimmedKeyword = keyword?.trim() ?? '';
+const trimmedManager = manager?.trim() ?? '';
+const trimmedHealth = health?.trim() ?? '';
 
 let projectCount = null;
 if (typeof options.count !== 'undefined') {
@@ -474,37 +478,7 @@ if (typeof options.count !== 'undefined') {
   projectCount = Math.floor(parsedCount);
 }
 
-const bulletLines = [];
-
-if (params.has('status') && status !== 'all') {
-  const label = statusLabels.get(status) ?? status;
-  bulletLines.push(`• ステータス: *${label}*`);
-}
-if (projectCount !== null) {
-  bulletLines.push(`• 件数: ${projectCount}`);
-}
-if (keyword) {
-  bulletLines.push(`• キーワード: \`${keyword}\``);
-}
-if (manager) {
-  bulletLines.push(`• マネージャ: ${manager}`);
-}
-if (health) {
-  bulletLines.push(`• ヘルス: ${health}`);
-}
-if (tagList.length > 0) {
-  bulletLines.push(`• タグ: ${tagList.join(', ')}`);
-}
-if (trimmedNotes) {
-  bulletLines.push(`• メモ: ${trimmedNotes}`);
-}
-if (bulletLines.length === 0) {
-  bulletLines.push('• フィルタ: 指定なし');
-}
-
-const title = options.title ?? 'Projects 共有リンク';
 const generatedAt = new Date();
-const timestamp = generatedAt.toLocaleString('ja-JP', { hour12: false, timeZone: 'Asia/Tokyo' });
 
 const format = (options.format ?? 'text').toLowerCase();
 const outPath = typeof options.out === 'string' ? options.out.trim() : '';
@@ -514,48 +488,14 @@ const webhookTargets = Array.isArray(options.post)
 const ensureOk = Boolean(options['ensure-ok']);
 const auditLogPath = typeof options['audit-log'] === 'string' ? options['audit-log'].trim() : '';
 const auditEvents = auditLogPath ? [] : null;
-const filters = {
+const shareFilters = {
   status: params.has('status') ? status : 'all',
-  keyword: keyword ?? '',
-  manager: manager ?? '',
-  health: health ?? '',
+  statusLabel: statusLabels.get(status) ?? status,
+  keyword: trimmedKeyword,
+  manager: trimmedManager,
+  health: trimmedHealth,
   tags: tagList,
   count: projectCount,
-};
-
-const buildShareOutputs = (lines, metrics) => {
-  const normalizedLines = Array.isArray(lines) ? lines : [];
-  const message = [
-    `:clipboard: *${title}* _(${timestamp})_`,
-    parsedUrl.toString(),
-    '',
-    ...normalizedLines,
-  ].join('\n');
-
-  const markdown = [
-    `**${title}** (_${timestamp}_)`,
-    parsedUrl.toString(),
-    '',
-    ...normalizedLines.map((line) => line.replace(/^• /, '- ')),
-  ].join('\n');
-
-  const payload = {
-    title,
-    url: parsedUrl.toString(),
-    generatedAt: generatedAt.toISOString(),
-    filters,
-    notes: trimmedNotes,
-    message,
-    projectCount,
-  };
-
-  if (metrics && typeof metrics === 'object') {
-    payload.metrics = metrics;
-  }
-
-  const jsonOutput = JSON.stringify(payload, null, 2);
-
-  return { message, markdown, jsonOutput, payload };
 };
 
 function postToWebhook(url, text, ensureOkResponse) {
@@ -779,18 +719,7 @@ async function fetchShareMetrics({ baseUrl, token, tenant, timeoutMs }) {
     requests: requestLog,
   };
 
-  const metricLines = [];
-  if (metrics.totalProjects !== null) {
-    metricLines.push(`• API 件数: ${metrics.totalProjects}`);
-  }
-  if (metrics.riskProjects !== null) {
-    metricLines.push(`• リスク件数: ${metrics.riskProjects}`);
-  }
-  if (metrics.warningProjects !== null) {
-    metricLines.push(`• 警戒件数: ${metrics.warningProjects}`);
-  }
-
-  return { metrics, metricLines };
+  return metrics;
 }
 
 async function postWithRetry(
@@ -866,10 +795,10 @@ async function postWithRetry(
 }
 
 (async () => {
-  let metricsResult = null;
+  let metricsPayload = null;
   if (options['fetch-metrics']) {
     try {
-      metricsResult = await fetchShareMetrics({
+      metricsPayload = await fetchShareMetrics({
         baseUrl: options['projects-api-base'],
         token: options['projects-api-token'],
         tenant: options['projects-api-tenant'],
@@ -881,15 +810,21 @@ async function postWithRetry(
     }
   }
 
-  const linesForOutput =
-    metricsResult && Array.isArray(metricsResult.metricLines) && metricsResult.metricLines.length > 0
-      ? [...bulletLines, ...metricsResult.metricLines]
-      : bulletLines;
-
-  const { message, markdown, jsonOutput, payload } = buildShareOutputs(
-    linesForOutput,
-    metricsResult ? metricsResult.metrics : undefined,
-  );
+  let shareTemplate;
+  try {
+    shareTemplate = buildShareTemplate({
+      title: options.title,
+      url: parsedUrl.toString(),
+      notes: trimmedNotes,
+      filters: shareFilters,
+      generatedAt,
+      timezone: 'Asia/Tokyo',
+      metrics: metricsPayload ?? undefined,
+    });
+  } catch (error) {
+    console.error(`Failed to build share template: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
 
   const allowedFormats = new Set(['text', 'markdown', 'json']);
   if (!allowedFormats.has(format)) {
@@ -899,11 +834,11 @@ async function postWithRetry(
 
   let renderedOutput = '';
   if (format === 'markdown') {
-    renderedOutput = markdown;
+    renderedOutput = shareTemplate.markdown;
   } else if (format === 'json') {
-    renderedOutput = jsonOutput;
+    renderedOutput = shareTemplate.json;
   } else {
-    renderedOutput = message;
+    renderedOutput = shareTemplate.text;
   }
 
   console.log(renderedOutput);
@@ -924,7 +859,7 @@ async function postWithRetry(
     }
     await postWithRetry(
       target,
-      payload.message,
+      shareTemplate.payload.message,
       ensureOk,
       retryCount,
       retryDelayMs,
@@ -941,12 +876,12 @@ async function postWithRetry(
     try {
       const auditPayload = {
         generatedAt: new Date().toISOString(),
-        title,
-        url: parsedUrl.toString(),
+        title: shareTemplate.payload.title,
+        url: shareTemplate.payload.url,
         attempts: auditEvents,
       };
-      if (metricsResult?.metrics) {
-        auditPayload.metrics = metricsResult.metrics;
+      if (metricsPayload) {
+        auditPayload.metrics = metricsPayload;
       }
       const directory = path.dirname(auditLogPath);
       if (directory && directory !== '.') {
