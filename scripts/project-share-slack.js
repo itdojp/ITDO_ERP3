@@ -33,6 +33,9 @@ const optionAliases = new Map([
   ['-o', 'out'],
   ['-p', 'post'],
   ['-C', 'config'],
+  ['-T', 'template'],
+  ['-L', 'list-templates'],
+  ['-X', 'remove-template'],
   ['-E', 'ensure-ok'],
   ['-r', 'retry'],
   ['-d', 'retry-delay'],
@@ -55,6 +58,24 @@ for (let index = 0; index < args.length;) {
     if (key === 'ensure-ok') {
       options['ensure-ok'] = true;
       index += 1;
+      continue;
+    }
+    if (key === 'list-templates') {
+      options['list-templates'] = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'remove-template') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error('Option --remove-template requires a value');
+        process.exit(1);
+      }
+      if (!Array.isArray(options['remove-template'])) {
+        options['remove-template'] = [];
+      }
+      options['remove-template'].push(next);
+      index += 2;
       continue;
     }
     if (key === 'post') {
@@ -98,6 +119,24 @@ for (let index = 0; index < args.length;) {
       index += 1;
       continue;
     }
+    if (alias === 'list-templates') {
+      options['list-templates'] = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'remove-template') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error(`Option ${token} requires a value`);
+        process.exit(1);
+      }
+      if (!Array.isArray(options['remove-template'])) {
+        options['remove-template'] = [];
+      }
+      options['remove-template'].push(next);
+      index += 2;
+      continue;
+    }
     if (alias === 'post') {
       const next = args[index + 1];
       if (!next || next.startsWith('-')) {
@@ -139,6 +178,9 @@ Options:
   --out <value>     Optional. 出力内容をファイルへ保存します。
   --post <value>    Optional. Slack Incoming Webhook URL に投稿します。複数指定可。
   --config <path>   Optional. 上記オプションの既定値を含む JSON を読み込みます。
+  --template <value> Optional. config に定義したテンプレート名を適用します。
+  --list-templates Optional. 保存済みテンプレートを一覧表示して終了します。
+  --remove-template <name> Optional. 指定テンプレートを削除します（--config と併用）。
   --ensure-ok       Optional. Webhook 応答が "ok" でなければエラーにします。
   --retry <value>   Optional. 投稿失敗時の再試行回数。
   --retry-delay <ms> Optional. 最初の再試行までの待機ミリ秒（既定: 1000）。
@@ -159,8 +201,9 @@ if (options.help) {
 }
 
 let config = {};
+let configPath = null;
 if (options.config) {
-  const configPath = String(options.config).trim();
+  configPath = String(options.config).trim();
   try {
     const rawConfig = fs.readFileSync(configPath, 'utf-8');
     const parsedConfig = JSON.parse(rawConfig);
@@ -180,7 +223,150 @@ const assignDefault = (key) => {
   }
 };
 
-['url', 'title', 'notes', 'format', 'count', 'out', 'retry', 'retry-delay', 'retry-backoff', 'retry-max-delay', 'retry-jitter', 'audit-log', 'fetch-metrics', 'projects-api-base', 'projects-api-token', 'projects-api-tenant', 'projects-api-timeout'].forEach(assignDefault);
+const applyDefaultsFromObject = (source) => {
+  if (!source || typeof source !== 'object') {
+    return;
+  }
+  const transferableKeys = [
+    'url',
+    'title',
+    'notes',
+    'format',
+    'count',
+    'out',
+    'retry',
+    'retry-delay',
+    'retry-backoff',
+    'retry-max-delay',
+    'retry-jitter',
+    'audit-log',
+    'fetch-metrics',
+    'projects-api-base',
+    'projects-api-token',
+    'projects-api-tenant',
+    'projects-api-timeout',
+  ];
+  transferableKeys.forEach((key) => {
+    if (source[key] !== undefined && options[key] === undefined) {
+      options[key] = source[key];
+    }
+  });
+
+  if (source.post !== undefined) {
+    const posts = Array.isArray(source.post) ? source.post : [source.post];
+    posts
+      .filter((value) => value !== undefined && value !== null && String(value).trim().length > 0)
+      .forEach((value) => {
+        if (!Array.isArray(options.post)) {
+          options.post = options.post ? [options.post] : [];
+        }
+        options.post.push(String(value));
+      });
+  }
+
+  const ensureValue = source['ensure-ok'] ?? source.ensureOk;
+  if (options['ensure-ok'] === undefined && ensureValue !== undefined) {
+    options['ensure-ok'] = Boolean(ensureValue);
+  }
+};
+
+let templates = config.templates && typeof config.templates === 'object' ? config.templates : undefined;
+
+const removalTargets = Array.isArray(options['remove-template'])
+  ? options['remove-template']
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0)
+  : [];
+
+let managementPerformed = false;
+
+if (removalTargets.length > 0) {
+  if (!configPath) {
+    console.error('Using --remove-template requires --config <path>');
+    process.exit(1);
+  }
+  if (!templates || Object.keys(templates).length === 0) {
+    console.error('No templates defined in the provided config.');
+    process.exit(1);
+  }
+  const missing = removalTargets.filter((name) => !Object.prototype.hasOwnProperty.call(templates, name));
+  if (missing.length > 0) {
+    missing.forEach((name) => {
+      console.error(`Unknown template: ${name}`);
+    });
+    process.exit(1);
+  }
+  removalTargets.forEach((name) => {
+    delete templates[name];
+    console.log(`Removed template: ${name}`);
+  });
+  if (Object.keys(templates).length === 0) {
+    delete config.templates;
+    templates = undefined;
+  }
+  try {
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  } catch (error) {
+    console.error(`Failed to update config file: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
+  templates = config.templates && typeof config.templates === 'object' ? config.templates : undefined;
+  managementPerformed = true;
+}
+
+if (options['list-templates']) {
+  const entries = templates ? Object.entries(templates) : [];
+  if (entries.length === 0) {
+    console.log('No templates defined.');
+  } else {
+    console.log('Available templates:');
+    entries
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([name, template]) => {
+        const title = template && typeof template === 'object' && template.title ? String(template.title) : '';
+        if (title) {
+          console.log(`- ${name} (title: ${title})`);
+        } else {
+          console.log(`- ${name}`);
+        }
+      });
+  }
+  managementPerformed = true;
+}
+
+if (managementPerformed) {
+  process.exit(0);
+}
+
+const templateName = options.template ?? config.template ?? config.defaultTemplate ?? config['default-template'];
+if (templateName) {
+  const template = templates?.[templateName];
+  if (!template) {
+    console.error(`Unknown template: ${templateName}`);
+    process.exit(1);
+  }
+  applyDefaultsFromObject(template);
+}
+
+[
+  'url',
+  'title',
+  'notes',
+  'format',
+  'count',
+  'out',
+  'retry',
+  'retry-delay',
+  'retry-backoff',
+  'retry-max-delay',
+  'retry-jitter',
+  'audit-log',
+  'fetch-metrics',
+  'projects-api-base',
+  'projects-api-token',
+  'projects-api-tenant',
+  'projects-api-timeout',
+].forEach(assignDefault);
 
 if (config.post !== undefined) {
   const configPosts = Array.isArray(config.post) ? config.post : [config.post];
