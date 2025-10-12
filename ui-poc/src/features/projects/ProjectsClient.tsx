@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { buildShareTemplate } from "../../../../../shared/share-template";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import { PROJECTS_PAGE_SIZE } from "./constants";
@@ -331,70 +332,34 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
       if (!baseUrl) {
         return null;
       }
-      const timestamp = new Date();
-      const formattedTimestamp = timestamp.toLocaleString("ja-JP", { hour12: false });
-      const trimmedKeyword = appliedKeyword.trim();
-      const trimmedManager = appliedManager.trim();
-      const trimmedHealth = appliedHealth.trim();
       const tagValues = [appliedTag, ...appliedSelectedTags].map((value) => value.trim()).filter(Boolean);
-      const trimmedNotes = (notes ?? "").trim();
-      const bulletLines: string[] = [];
-      if (filter !== "all") {
-        const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
-        bulletLines.push(`• ステータス: *${statusLabel}*`);
+      const statusLabel = statusFilters.find((item) => item.value === filter)?.label ?? "All";
+      try {
+        const result = buildShareTemplate({
+          title,
+          url: baseUrl,
+          notes,
+          filters: {
+            status: filter,
+            statusLabel,
+            keyword: appliedKeyword,
+            manager: appliedManager,
+            health: appliedHealth,
+            tags: tagValues,
+          },
+          generatedAt: new Date(),
+          formatTimestamp: (date) => date.toLocaleString("ja-JP", { hour12: false }),
+        });
+        return {
+          text: result.text,
+          markdown: result.markdown,
+          json: result.json,
+          payload: result.payload,
+        };
+      } catch (error) {
+        console.warn("[projects] failed to compose share template", error);
+        return null;
       }
-      if (trimmedKeyword.length > 0) {
-        bulletLines.push(`• キーワード: \`${trimmedKeyword}\``);
-      }
-      if (trimmedManager.length > 0) {
-        bulletLines.push(`• マネージャ: ${trimmedManager}`);
-      }
-      if (trimmedHealth.length > 0) {
-        bulletLines.push(`• ヘルス: ${trimmedHealth}`);
-      }
-      if (tagValues.length > 0) {
-        bulletLines.push(`• タグ: ${tagValues.join(", ")}`);
-      }
-      if (trimmedNotes) {
-        bulletLines.push(`• メモ: ${trimmedNotes}`);
-      }
-      if (bulletLines.length === 0) {
-        bulletLines.push("• フィルタ: 指定なし");
-      }
-      const effectiveTitle = title.trim().length > 0 ? title.trim() : "Projects 共有リンク";
-      const message = [
-        `:clipboard: *${effectiveTitle}* _(${formattedTimestamp})_`,
-        baseUrl,
-        "",
-        ...bulletLines,
-      ].join("\n");
-      const markdown = [
-        `**${effectiveTitle}** (_${formattedTimestamp}_)`,
-        baseUrl,
-        "",
-        ...bulletLines.map((line) => line.replace(/^• /, "- ")),
-      ].join("\n");
-      const filtersPayload = {
-        status: filter,
-        keyword: trimmedKeyword,
-        manager: trimmedManager,
-        health: trimmedHealth,
-        tags: tagValues,
-      };
-      const payload = {
-        title: effectiveTitle,
-        url: baseUrl,
-        generatedAt: timestamp.toISOString(),
-        filters: filtersPayload,
-        notes: trimmedNotes,
-        message,
-      };
-      return {
-        text: message,
-        markdown,
-        json: JSON.stringify(payload, null, 2),
-        payload,
-      };
     },
     [shareUrl, filter, appliedKeyword, appliedManager, appliedHealth, appliedTag, appliedSelectedTags],
   );
