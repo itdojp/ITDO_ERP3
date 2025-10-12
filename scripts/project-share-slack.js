@@ -716,6 +716,12 @@ const webhookTargets = rawWebhookInputs
       if (retryJitterOverride !== undefined) {
         target.retryJitter = retryJitterOverride;
       }
+      const respectRetryAfterOverride = coerceBooleanOption(
+        entry['respect-retry-after'] ?? entry.respectRetryAfter,
+      );
+      if (respectRetryAfterOverride !== undefined) {
+        target.respectRetryAfter = respectRetryAfterOverride;
+      }
       return target;
     }
     const coerced = String(entry).trim();
@@ -726,6 +732,7 @@ const webhookTargets = rawWebhookInputs
   })
   .filter((entry) => entry && typeof entry.url === 'string' && entry.url.length > 0);
 const ensureOkDefault = Boolean(options['ensure-ok']);
+const respectRetryAfterDefault = Boolean(options['respect-retry-after']);
 const auditLogPath = typeof options['audit-log'] === 'string' ? options['audit-log'].trim() : '';
 const auditEvents = auditLogPath ? [] : null;
 const shareFilters = {
@@ -1104,6 +1111,8 @@ async function postWithRetry(
     const targetRetryBackoff = target.retryBackoff !== undefined ? target.retryBackoff : retryBackoff;
     let targetRetryMaxDelayMs = target.retryMaxDelay !== undefined ? target.retryMaxDelay : retryMaxDelayMs;
     const targetRetryJitterMs = target.retryJitter !== undefined ? target.retryJitter : retryJitterMs;
+    const targetRespectRetryAfter =
+      target.respectRetryAfter !== undefined ? target.respectRetryAfter : respectRetryAfterDefault;
 
     if (targetRetryDelayMs > targetRetryMaxDelayMs && targetRetryMaxDelayMs > 0) {
       console.warn(
@@ -1122,7 +1131,7 @@ async function postWithRetry(
       targetRetryMaxDelayMs,
       targetRetryJitterMs,
       auditEvents,
-      options['respect-retry-after'],
+      targetRespectRetryAfter,
     );
     console.error(`Posted share message to webhook: ${targetUrl}`);
   }
