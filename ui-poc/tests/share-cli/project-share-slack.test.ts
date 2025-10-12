@@ -142,6 +142,27 @@ describe("project-share-slack CLI", () => {
     expect(result.stderr).toContain("Invalid count provided");
   });
 
+  test("returns error for invalid retry-backoff", () => {
+    const result = runScript(["--retry-backoff", "0.5"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Invalid retry-backoff value");
+  });
+
+  test("returns error for invalid retry-max-delay", () => {
+    const result = runScript(["--retry-max-delay", "abc"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Invalid retry-max-delay value");
+  });
+
+  test("returns error for invalid retry-jitter", () => {
+    const result = runScript(["--retry-jitter", "xyz"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Invalid retry-jitter value");
+  });
+
   test("posts to one or more webhooks when --post provided", async () => {
     const received: Array<{ text: string; path: string | undefined }> = [];
     await new Promise<void>((resolve, reject) => {
@@ -254,6 +275,12 @@ describe("project-share-slack CLI", () => {
           "1",
           "--retry-delay",
           "10",
+          "--retry-backoff",
+          "2",
+          "--retry-max-delay",
+          "15",
+          "--retry-jitter",
+          "0",
           "--ensure-ok",
         ])
           .then((result) => {
