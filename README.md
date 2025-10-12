@@ -128,6 +128,8 @@ config に `templates` を定義すると、`--template <name>` で共通プリ�
 
 config の `post` 配列にオブジェクトを記述すると、URL ごとに `retry` / `retryDelay` / `retryBackoff` / `retryMaxDelay` / `retryJitter` / `ensure-ok` などの値を上書きでき、複数 Webhook へ異なるリトライポリシーを適用できます。
 
+ワンライナーで CLI を実行したい場合は `npx github:itdojp/ITDO_ERP3#feature/share-cli-webhook-policies share-projects --url <URL> --title <TITLE> --post <WEBHOOK>` のように GitHub 参照で利用できます（`packages/share-cli` 内の `bin/share-projects.js` がエントリポイントです）。
+
 GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
 
 ## 📝 ライセンス
