@@ -34,6 +34,8 @@ const optionAliases = new Map([
   ['-p', 'post'],
   ['-C', 'config'],
   ['-T', 'template'],
+  ['-L', 'list-templates'],
+  ['-X', 'remove-template'],
   ['-E', 'ensure-ok'],
   ['-R', 'respect-retry-after'],
   ['-r', 'retry'],
@@ -62,6 +64,24 @@ for (let index = 0; index < args.length;) {
     if (key === 'respect-retry-after') {
       options['respect-retry-after'] = true;
       index += 1;
+      continue;
+    }
+    if (key === 'list-templates') {
+      options['list-templates'] = true;
+      index += 1;
+      continue;
+    }
+    if (key === 'remove-template') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error('Option --remove-template requires a value');
+        process.exit(1);
+      }
+      if (!Array.isArray(options['remove-template'])) {
+        options['remove-template'] = [];
+      }
+      options['remove-template'].push(next);
+      index += 2;
       continue;
     }
     if (key === 'post') {
@@ -108,6 +128,24 @@ for (let index = 0; index < args.length;) {
     if (alias === 'respect-retry-after') {
       options['respect-retry-after'] = true;
       index += 1;
+      continue;
+    }
+    if (alias === 'list-templates') {
+      options['list-templates'] = true;
+      index += 1;
+      continue;
+    }
+    if (alias === 'remove-template') {
+      const next = args[index + 1];
+      if (!next || next.startsWith('-')) {
+        console.error(`Option ${token} requires a value`);
+        process.exit(1);
+      }
+      if (!Array.isArray(options['remove-template'])) {
+        options['remove-template'] = [];
+      }
+      options['remove-template'].push(next);
+      index += 2;
       continue;
     }
     if (alias === 'post') {
@@ -173,8 +211,9 @@ if (options.help) {
 }
 
 let config = {};
+let configPath = null;
 if (options.config) {
-  const configPath = String(options.config).trim();
+  configPath = String(options.config).trim();
   try {
     const rawConfig = fs.readFileSync(configPath, 'utf-8');
     const parsedConfig = JSON.parse(rawConfig);
@@ -241,6 +280,71 @@ const applyDefaultsFromObject = (source) => {
 };
 
 const templates = config.templates && typeof config.templates === 'object' ? config.templates : undefined;
+
+const removalTargets = Array.isArray(options['remove-template'])
+  ? options['remove-template']
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0)
+  : [];
+
+let managementPerformed = false;
+
+if (removalTargets.length > 0) {
+  if (!configPath) {
+    console.error('Using --remove-template requires --config <path>');
+    process.exit(1);
+  }
+  if (!templates || Object.keys(templates).length === 0) {
+    console.error('No templates defined in the provided config.');
+    process.exit(1);
+  }
+  const missing = removalTargets.filter((name) => !Object.prototype.hasOwnProperty.call(templates, name));
+  if (missing.length > 0) {
+    missing.forEach((name) => {
+      console.error(`Unknown template: ${name}`);
+    });
+    process.exit(1);
+  }
+  removalTargets.forEach((name) => {
+    delete templates[name];
+    console.log(`Removed template: ${name}`);
+  });
+  if (Object.keys(templates).length === 0) {
+    delete config.templates;
+  }
+  try {
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  } catch (error) {
+    console.error(`Failed to update config file: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
+  managementPerformed = true;
+}
+
+if (options['list-templates']) {
+  const entries = templates ? Object.entries(templates) : [];
+  if (entries.length === 0) {
+    console.log('No templates defined.');
+  } else {
+    console.log('Available templates:');
+    entries
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([name, template]) => {
+        const title = template && typeof template === 'object' && template.title ? String(template.title) : '';
+        if (title) {
+          console.log(`- ${name} (title: ${title})`);
+        } else {
+          console.log(`- ${name}`);
+        }
+      });
+  }
+  managementPerformed = true;
+}
+
+if (managementPerformed) {
+  process.exit(0);
+}
+
 const templateName = options.template ?? config.template ?? config.defaultTemplate ?? config['default-template'];
 if (templateName) {
   const template = templates?.[templateName];
