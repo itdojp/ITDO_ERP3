@@ -1,0 +1,144 @@
+version: 1
+metadata:
+  owner: ai-platform-team
+  source: docs/ai-devflow.md
+  description: >-
+    End-to-end workflow for AI-assisted development in the ITDO_ERP3 project.
+    Each stage defines triggers, responsibilities, tools, and expected artifacts.
+stages:
+  - id: spec_authoring
+    name: Spec Authoring
+    trigger:
+      type: manual
+      description: Product Owner creates or updates specifications in Markdown/YAML.
+    responsibilities:
+      human: Product Owner, Domain Experts
+      ai: ChatGPT Enterprise for outline suggestions
+    inputs:
+      - docs/ai-roadmap.md
+      - integrated-specs/**/*
+    outputs:
+      - specs/*.md
+      - issues/*
+    tools:
+      - Codex CLI (spec templates)
+      - GitHub Issues / Projects
+    quality_gates:
+      - description: Spec lint (markdownlint)
+        type: automated
+      - description: Domain review approval
+        type: manual
+  - id: code_generation
+    name: Code Generation & Scaffolding
+    trigger:
+      type: automated
+      description: Spec merged to main and `codex plan` workflow invoked.
+    responsibilities:
+      human: Lead Engineer (review prompts)
+      ai: Codex CLI for scaffolding, Agent Builder for blueprinting
+    inputs:
+      - specs/*.md
+      - templates/*
+    outputs:
+      - src/**
+      - tests/**
+    tools:
+      - Codex CLI (`codex generate`)
+      - Templates from `templates/`
+      - GitHub Codespaces
+    quality_gates:
+      - description: ESLint / TypeScript / NestJS lint
+        type: automated
+      - description: Code owner approval (2 eyes)
+        type: manual
+  - id: test_and_review
+    name: Automated Test & AI Review
+    trigger:
+      type: automated
+      description: Pull Request opened or updated.
+    responsibilities:
+      human: Reviewer (domain + QA)
+      ai: Copilot PR Reviewer, LangGraph Verify
+    inputs:
+      - src/**
+      - tests/**
+    outputs:
+      - test-reports/
+      - review-comments/
+    tools:
+      - GitHub Actions (`ci-test`, `lint`, `docs`)
+      - Playwright / Vitest / Jest
+      - LangGraph Verify
+    quality_gates:
+      - description: Unit / Integration Test success
+        type: automated
+      - description: PR template checklist completed
+        type: manual
+  - id: documentation
+    name: Documentation & Knowledge Share
+    trigger:
+      type: automated
+      description: PR merged to main.
+    responsibilities:
+      human: Tech Writer, Module Owner
+      ai: ChatGPT Enterprise for summary drafts
+    inputs:
+      - docs/**
+      - CHANGELOG.md
+    outputs:
+      - docs/releases/*.md
+      - docs/changelogs/*.md
+    tools:
+      - Codex CLI (`codex doc`)
+      - GitHub Wiki / Notion export
+    quality_gates:
+      - description: Docs lint (vale, markdownlint)
+        type: automated
+      - description: Release notes ack by PM
+        type: manual
+  - id: deployment
+    name: Deployment & Observability
+    trigger:
+      type: automated
+      description: Tagged release or scheduled deployment window.
+    responsibilities:
+      human: SRE / DevOps Engineer
+      ai: Predictive alerting via AI Ops (future)
+    inputs:
+      - helm/**
+      - terraform/**
+      - manifests/**
+    outputs:
+      - Deployed workloads on AWS EKS/RDS
+      - Observability dashboards snapshots
+    tools:
+      - GitHub Actions (`release`, `build-image`)
+      - ArgoCD
+      - Terraform / Ansible
+      - Datadog / Prometheus
+    quality_gates:
+      - description: Terraform plan approval
+        type: manual
+      - description: Post-deploy smoke tests (Playwright / API)
+        type: automated
+monitoring:
+  dashboards:
+    - name: CI Pipeline Health
+      source: GitHub Actions Insights
+    - name: Deployment Success
+      source: ArgoCD + Datadog
+  alerts:
+    - name: CI Failure Rate
+      condition: >-
+        Failure rate for `ci-test` exceeds 10% over 24h
+      action: Notify #dev-platform channel
+    - name: Deployment Smoke Failure
+      condition: Post-deploy tests fail in production namespace
+      action: Rollback via ArgoCD and page SRE
+change_management:
+  review_cycle: quarterly
+  owner: engineering-manager
+  process:
+    - Collect feedback from squads and AI agents
+    - Update ai-devflow.yaml with approved adjustments
+    - Announce changes in #ai-devflow-updates

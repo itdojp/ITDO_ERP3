@@ -2,6 +2,7 @@
 
 ## AI Roadmap
 - [AI支援型開発ロードマップ](ai-roadmap.md)
+- [AI開発ワークフロー仕様](ai-devflow.md)
 
 ## Live Testing
 - [Live Testing Guide](live-testing.md)
