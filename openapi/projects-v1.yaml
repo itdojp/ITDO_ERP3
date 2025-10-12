@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: Project & Chat Integration API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com
+paths:
+  /api/v1/projects:
+    get:
+      summary: List projects with EVM summary
+      operationId: listProjects
+      parameters:
+        - $ref: '#/components/parameters/status'
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectCollection'
+    post:
+      summary: Create project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+  /api/v1/projects/{id}/timeline:
+    get:
+      summary: Get schedule timeline
+      operationId: getProjectTimeline
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Timeline'
+  /api/v1/projects/{id}/metrics:
+    get:
+      summary: Get project metrics (EVM, burn-down)
+      operationId: getProjectMetrics
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMetrics'
+  /api/v1/projects/{id}/chat/threads:
+    post:
+      summary: Provision chat workspace thread
+      operationId: createProjectThread
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatThreadCreate'
+      responses:
+        '201':
+          description: thread provisioned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatThread'
+components:
+  parameters:
+    projectId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    status:
+      in: query
+      name: status
+      schema:
+        $ref: '#/components/schemas/ProjectStatus'
+  schemas:
+    ProjectCollection:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
+        evm:
+          $ref: '#/components/schemas/EVM'
+    ProjectCreate:
+      type: object
+      required: [code, name, startDate]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+    ProjectMetrics:
+      type: object
+      properties:
+        projectId: { type: string }
+        evm:
+          $ref: '#/components/schemas/EVM'
+        burndown:
+          $ref: '#/components/schemas/BurndownSeries'
+        risks:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSummary'
+    ChatThread:
+      type: object
+      properties:
+        id: { type: string }
+        provider: { type: string, enum: [Slack, Teams] }
+        externalThreadId: { type: string }
+        summaryEmbedding: { type: array, items: { type: number } }
+    ChatThreadCreate:
+      type: object
+      required: [provider]
+      properties:
+        provider: { type: string, enum: [Slack, Teams] }
+        channelName: { type: string }
+    EVM:
+      type: object
+      properties:
+        plannedValue: { type: number }
+        earnedValue: { type: number }
+        actualCost: { type: number }
+        costVariance: { type: number }
+        scheduleVariance: { type: number }
+        spi: { type: number }
+        cpi: { type: number }
+    BurndownSeries:
+      type: object
+      properties:
+        labels:
+          type: array
+          items: { type: string }
+        planned:
+          type: array
+          items: { type: number }
+        actual:
+          type: array
+          items: { type: number }
+    Timeline:
+      type: object
+      properties:
+        projectId: { type: string }
+        tasks:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              startDate: { type: string, format: date }
+              endDate: { type: string, format: date }
+              status: { $ref: '#/components/schemas/TaskStatus' }
+        metrics:
+          $ref: '#/components/schemas/EVM'
+        chatSummary: { type: string }
+    RiskSummary:
+      type: object
+      properties:
+        id: { type: string }
+        probability: { type: integer }
+        impact: { type: integer }
+        status: { type: string }
+    ProjectStatus:
+      type: string
+      enum: [draft, active, onHold, completed, cancelled]
+    TaskStatus:
+      type: string
+      enum: [todo, inProgress, review, done, blocked]

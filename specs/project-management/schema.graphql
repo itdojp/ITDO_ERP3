@@ -1,0 +1,122 @@
+"""GraphQL schema for Project & Chat integration MVP"""
+
+type Project {
+  id: ID!
+  code: String!
+  name: String!
+  description: String
+  status: ProjectStatus!
+  startDate: Date
+  endDate: Date
+  baselineCost: Float
+  evm: EVM!
+  phases: [Phase!]!
+  tasks: [Task!]!
+  risks: [Risk!]!
+  chatThreads: [ChatThread!]!
+}
+
+type Phase {
+  id: ID!
+  name: String!
+  startDate: Date
+  endDate: Date
+  plannedValue: Float
+  earnedValue: Float
+  actualCost: Float
+  tasks: [Task!]!
+}
+
+type Task {
+  id: ID!
+  name: String!
+  assigneeId: ID
+  plannedHours: Float
+  actualHours: Float
+  status: TaskStatus!
+  dependencies: [Dependency!]!
+}
+
+type Dependency {
+  id: ID!
+  predecessorId: ID!
+  successorId: ID!
+  type: DependencyType!
+}
+
+type Risk {
+  id: ID!
+  probability: Int!
+  impact: Int!
+  status: RiskStatus!
+  mitigationPlan: String
+}
+
+type ChatThread {
+  id: ID!
+  provider: ChatProvider!
+  externalThreadId: String!
+  summaryEmbedding: [Float!]
+  lastSummarizedAt: DateTime
+  messages(limit: Int = 50): [ChatMessage!]!
+}
+
+type ChatMessage {
+  id: ID!
+  authorId: ID!
+  content: String!
+  postedAt: DateTime!
+}
+
+type EVM {
+  plannedValue: Float!
+  earnedValue: Float!
+  actualCost: Float!
+  costVariance: Float!
+  scheduleVariance: Float!
+  spi: Float!
+  cpi: Float!
+}
+
+type ProjectMetrics {
+  projectId: ID!
+  evm: EVM!
+  burndown: BurndownSeries!
+  summary: String!
+}
+
+type BurndownSeries {
+  labels: [String!]!
+  planned: [Float!]!
+  actual: [Float!]!
+}
+
+type Query {
+  projects(status: ProjectStatus): [Project!]!
+  project(id: ID!): Project
+  projectMetrics(id: ID!): ProjectMetrics!
+}
+
+type Mutation {
+  createProject(input: ProjectInput!): Project!
+  provisionProjectThread(projectId: ID!, provider: ChatProvider!): ChatThread!
+  addChatMessage(threadId: ID!, content: String!): ChatMessage!
+}
+
+enum ProjectStatus { DRAFT ACTIVE ON_HOLD COMPLETED CANCELLED }
+enum TaskStatus { TODO IN_PROGRESS REVIEW DONE BLOCKED }
+enum DependencyType { FINISH_START FINISH_FINISH START_START }
+enum RiskStatus { IDENTIFIED MITIGATED CLOSED }
+enum ChatProvider { SLACK TEAMS }
+
+input ProjectInput {
+  code: String!
+  name: String!
+  description: String
+  startDate: Date
+  endDate: Date
+  baselineCost: Float
+}
+
+scalar Date
+scalar DateTime
