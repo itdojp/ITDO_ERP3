@@ -1046,7 +1046,7 @@ describe("project-share-slack CLI", () => {
       );
       const result = runScriptRaw(["--config", configPath, "--validate-config"]);
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("Config validation succeeded.");
+      expect(result.stdout).toContain("Config validation succeeded (templates: 0, post entries: 1).");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
