@@ -46,14 +46,47 @@ codex templates generate --template github-action --set workflowName="Web CI"
 ```
 
 ## 5. チェックリスト
-- [ ] catalog.json にテンプレ追加後、`codex templates list` で参照できる
-- [ ] 生成ファイルに ESLint/Prettier などプロジェクト既定のルールを反映
+- [x] catalog.json にテンプレ追加後、`codex templates list` で参照できる
+- [x] 生成ファイルに ESLint/Prettier などプロジェクト既定のルールを反映
 - [ ] 新テンプレート導入時は README とこのガイドに追記
+
+## 6. プロンプトと適用フロー
+
+最近の開発では、Codex CLI を使って NestJS / React の双方を同じストリームで生成し、生成直後に Prisma schema や UI の状態管理を差し込むワークフローを採用しています。プロンプト例と実際の整備手順は下記の通りです。
+
+1. NestJS モジュール生成と初期調整
+   ```bash
+   codex templates generate \
+     --catalog templates/catalog.json \
+     --template nest-api \
+     --set moduleName=Project \
+     --set route=projects \
+     --set includePrisma=true
+   ```
+   - 生成直後に `prisma/schema.prisma` を拡張し、必要な enum / relation を追加する。
+   - `src/app.module.ts` へ PrismaModule / ConfigModule を組み込み、`npm run db:setup` でマイグレーション＋シードを実行。
+
+2. React Feature 生成とカスタマイズ
+   ```bash
+   codex templates generate \
+     --catalog templates/catalog.json \
+     --template react-ui \
+     --set featureName=ProjectTimeline \
+     --set withTests=true
+   ```
+   - 生成された `ProjectTimelinePanel.tsx` を基点に、`@tanstack/react-query` で REST/GraphQL を両方呼び出す実装へと拡張。
+   - UI 側はステータス / フェーズフィルタや詳細カードを追加し、Vitest でカバレッジを確保。
+
+3. 生成後の共通タスク
+   - `npm run lint && npm run test` をサービス / UI 両方で実行し、生成コードが既存ルールに抵触しないか確認する。
+   - ドキュメント（README, docs/codex-templates.md 等）に差分を追記し、Issue のチェックリストを更新。
+
+このフローに沿うことで、Issue #265/#266 のようなサーバ / クライアント複合タスクを 1 スプリントでまとめて着地させやすくなります。
 
 ---
 最終更新: 2025-10-12 / Maintainer: AI Platform Engineering
 
-## 6. 実装適用例
+## 7. 実装適用例
 - `services/project-api` で `nest-api` テンプレから生成した骨子をベースに NestJS モジュールを構築しています。
 - `ui-poc/src/features/project-timeline` では `react-ui` テンプレを起点にタイムラインパネルを拡張しています。
 - 詳細な適用手順は Issue #265 および #266 を参照してください。

@@ -16,6 +16,7 @@
 
 ## UI Feedback
 - [UI PoC フィードバック・バックログ](ui-poc-feedback-backlog.md)
+- Project Timeline Panel フィルタ/詳細カード解説は `ui-poc/README.md` を参照
 
 ## CLI ユーティリティ
 - [Projects Slack 共有 CLI ガイド](projects-share-cli.md)

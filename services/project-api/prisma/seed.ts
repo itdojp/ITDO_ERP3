@@ -25,12 +25,14 @@ async function seed() {
       phases: {
         create: [
           {
+            id: 'phase-alpha-init',
             name: 'Initiation',
             sortOrder: 1,
             startDate: new Date('2025-01-15'),
             endDate: new Date('2025-01-31'),
           },
           {
+            id: 'phase-alpha-exec',
             name: 'Execution',
             sortOrder: 2,
             startDate: new Date('2025-02-01'),
@@ -42,6 +44,7 @@ async function seed() {
         create: [
           {
             name: 'Kickoff & Alignment',
+            phaseId: 'phase-alpha-init',
             status: 'done',
             startDate: new Date('2025-01-15'),
             endDate: new Date('2025-01-22'),
@@ -50,6 +53,7 @@ async function seed() {
           },
           {
             name: 'Finance Module Integration',
+            phaseId: 'phase-alpha-exec',
             status: 'inProgress',
             startDate: new Date('2025-01-25'),
             endDate: new Date('2025-03-15'),
@@ -58,6 +62,7 @@ async function seed() {
           },
           {
             name: 'User Acceptance Testing',
+            phaseId: 'phase-alpha-exec',
             status: 'todo',
             startDate: new Date('2025-03-20'),
             endDate: new Date('2025-05-15'),
@@ -122,12 +127,14 @@ async function seed() {
       phases: {
         create: [
           {
+            id: 'phase-beta-discovery',
             name: 'Discovery',
             sortOrder: 1,
             startDate: new Date('2024-10-01'),
             endDate: new Date('2024-11-10'),
           },
           {
+            id: 'phase-beta-design',
             name: 'Design',
             sortOrder: 2,
             startDate: new Date('2024-11-11'),
@@ -139,6 +146,7 @@ async function seed() {
         create: [
           {
             name: 'Requirement Refinement',
+            phaseId: 'phase-beta-discovery',
             status: 'done',
             startDate: new Date('2024-10-03'),
             endDate: new Date('2024-11-15'),
@@ -147,6 +155,7 @@ async function seed() {
           },
           {
             name: 'UI/UX Prototype',
+            phaseId: 'phase-beta-design',
             status: 'review',
             startDate: new Date('2024-11-18'),
             endDate: new Date('2025-01-31'),
@@ -155,6 +164,7 @@ async function seed() {
           },
           {
             name: 'Chatbot Integration',
+            phaseId: 'phase-beta-design',
             status: 'blocked',
             startDate: new Date('2025-02-05'),
             endDate: new Date('2025-04-15'),
@@ -214,12 +224,14 @@ async function seed() {
       phases: {
         create: [
           {
+            id: 'phase-gamma-audit',
             name: 'Audit',
             sortOrder: 1,
             startDate: new Date('2024-03-01'),
             endDate: new Date('2024-04-15'),
           },
           {
+            id: 'phase-gamma-stabilize',
             name: 'Stabilization',
             sortOrder: 2,
             startDate: new Date('2024-04-16'),
@@ -231,6 +243,7 @@ async function seed() {
         create: [
           {
             name: 'Pipeline Audit',
+            phaseId: 'phase-gamma-audit',
             status: 'done',
             startDate: new Date('2024-03-05'),
             endDate: new Date('2024-04-15'),
@@ -239,6 +252,7 @@ async function seed() {
           },
           {
             name: 'Data Quality Initiative',
+            phaseId: 'phase-gamma-stabilize',
             status: 'done',
             startDate: new Date('2024-04-20'),
             endDate: new Date('2024-09-30'),
@@ -247,6 +261,7 @@ async function seed() {
           },
           {
             name: 'Executive Reporting Enablement',
+            phaseId: 'phase-gamma-stabilize',
             status: 'done',
             startDate: new Date('2024-10-05'),
             endDate: new Date('2024-12-10'),

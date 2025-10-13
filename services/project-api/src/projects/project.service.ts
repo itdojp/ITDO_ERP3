@@ -19,6 +19,7 @@ type ProjectWithRelations = ProjectEntity & {
   tasks: {
     id: string;
     name: string;
+    phaseId: string | null;
     status: string;
     startDate: Date;
     endDate: Date;
@@ -37,6 +38,11 @@ type ProjectWithRelations = ProjectEntity & {
     impact: number;
     status: string;
     summary: string | null;
+  }[];
+  phases: {
+    id: string;
+    name: string;
+    sortOrder: number;
   }[];
 };
 
@@ -124,6 +130,7 @@ export class ProjectService {
       .map((task) => ({
         id: task.id,
         name: task.name,
+        phase: this.resolvePhaseName(project, task.phaseId),
         startDate: task.startDate.toISOString().slice(0, 10),
         endDate: task.endDate.toISOString().slice(0, 10),
         status: this.mapTaskStatus(task.status),
@@ -134,6 +141,9 @@ export class ProjectService {
     return {
       projectId,
       tasks,
+      phases: project.phases
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((phase) => ({ id: phase.id, name: phase.name, sortOrder: phase.sortOrder })),
       metrics,
       chatSummary: chatSummary ?? undefined,
     };
@@ -197,6 +207,7 @@ export class ProjectService {
       where: { id: projectId },
       include: {
         tasks: true,
+        phases: true,
         chatThreads: {
           include: {
             messages: {
@@ -320,5 +331,13 @@ export class ProjectService {
 
   private mapProvider(value: string): ChatProvider {
     return chatProviderMap[value] ?? ChatProvider.Slack;
+  }
+
+  private resolvePhaseName(project: ProjectWithRelations, phaseId: string | null): string | undefined {
+    if (!phaseId) {
+      return undefined;
+    }
+    const phase = project.phases.find((item) => item.id === phaseId);
+    return phase?.name;
   }
 }
