@@ -83,10 +83,14 @@ codex templates generate --template github-action --set workflowName="Web CI"
 
 このフローに沿うことで、Issue #265/#266 のようなサーバ / クライアント複合タスクを 1 スプリントでまとめて着地させやすくなります。
 
+## 7. CI での自動検証
+- `.github/workflows/codex-template-smoke.yml` では、テンプレート更新や Pull Request 時に `scripts/ci/run-codex-template-smoke.sh` を実行し、`nest-api` / `react-ui` / `github-action` の各テンプレートが `npx codex templates generate` で再生成できるかを検証します。
+- 生成物に `package.json` が含まれる場合は `npm install`・`npm run lint`・`npm run test` まで実行して破損を早期検知します。テンプレート編集時はローカルでも同スクリプトを実行してから PR を作成してください。
+
 ---
 最終更新: 2025-10-12 / Maintainer: AI Platform Engineering
 
-## 7. 実装適用例
+## 8. 実装適用例
 - `services/project-api` で `nest-api` テンプレから生成した骨子をベースに NestJS モジュールを構築しています。
 - `ui-poc/src/features/project-timeline` では `react-ui` テンプレを起点にタイムラインパネルを拡張しています。
-- 詳細な適用手順は Issue #265 および #266 を参照してください。
+- 詳細な適用手順は Issue #265 / #266 / #269 を参照してください。

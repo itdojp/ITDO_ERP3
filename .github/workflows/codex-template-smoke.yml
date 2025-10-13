@@ -1,0 +1,28 @@
+name: Codex Template Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'templates/**'
+      - 'scripts/ci/run-codex-template-smoke.sh'
+      - '.github/workflows/codex-template-smoke.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'templates/**'
+      - 'scripts/ci/run-codex-template-smoke.sh'
+      - '.github/workflows/codex-template-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Run Codex template smoke test
+        run: scripts/ci/run-codex-template-smoke.sh
