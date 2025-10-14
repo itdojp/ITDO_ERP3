@@ -102,6 +102,9 @@ export class TimelineTaskModel {
   @Field()
   name!: string;
 
+  @Field({ nullable: true })
+  phase?: string;
+
   @Field()
   startDate!: string;
 
@@ -113,12 +116,27 @@ export class TimelineTaskModel {
 }
 
 @ObjectType()
+export class ProjectPhaseModel {
+  @Field(() => ID)
+  id!: string;
+
+  @Field()
+  name!: string;
+
+  @Field(() => Int)
+  sortOrder!: number;
+}
+
+@ObjectType()
 export class TimelineModel {
   @Field(() => ID)
   projectId!: string;
 
   @Field(() => [TimelineTaskModel])
   tasks!: TimelineTaskModel[];
+
+  @Field(() => [ProjectPhaseModel])
+  phases!: ProjectPhaseModel[];
 
   @Field(() => EvmModel)
   metrics!: EvmModel;

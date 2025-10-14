@@ -82,6 +82,28 @@ describe('ProjectService', () => {
         summary: 'Integration readiness',
       },
     ],
+    phases: [
+      {
+        id: 'phase-alpha-init',
+        projectId: baseProject.id,
+        name: 'Initiation',
+        sortOrder: 1,
+        startDate: new Date('2025-01-15'),
+        endDate: new Date('2025-01-31'),
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-01T00:00:00Z'),
+      },
+      {
+        id: 'phase-alpha-exec',
+        projectId: baseProject.id,
+        name: 'Execution',
+        sortOrder: 2,
+        startDate: new Date('2025-02-01'),
+        endDate: new Date('2025-06-30'),
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-01T00:00:00Z'),
+      },
+    ],
   };
 
   let prismaMock: {

@@ -69,6 +69,10 @@ pkill -f "next dev --hostname 0.0.0.0 --port $UI_PORT"
 - `src/features` … 画面単位のモジュール（型定義・モックデータ・UIロジック）
 - `src/lib/api-client.ts` … API呼び出し用の簡易ラッパ
 
+### ProjectTimelinePanel 拡張ポイント
+- `/src/features/project-timeline/ProjectTimelinePanel.tsx` は `services/project-api` の REST/GraphQL を同時に参照し、ステータス・フェーズごとのフィルタリングとタスク詳細カードを提供します。
+- `npm run test:unit`（Vitest）でフィルタ動作やチャット要約の描画を検証しています。UI レベルで追加シナリオを検討する際は、`tests/project-timeline-panel.test.tsx` をベースにケースを追記してください。
+
 ## 今後の予定（Issue #82 を参照）
 - 実データ/モックデータの表示やUIパターンの実装
 - Podman スタックとの結合テスト強化
