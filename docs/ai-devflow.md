@@ -27,23 +27,30 @@ graph TD
 ```yaml
 version: 1
 metadata:
-  owner: ai-dev-team
+  owner: ai-platform-team
+  source: docs/ai-devflow.md
 stages:
   - id: spec_authoring
-    actors:
-      - role: product_owner
-        responsibilities:
-          - approve scope
-    gates:
-      - type: review
-        reviewer: domain_lead
+    name: Spec Authoring
+    responsibilities:
+      human: Product Owner
+      ai: ChatGPT Enterprise
+    quality_gates:
+      - description: Domain review approval
+        type: manual
+      - description: Markdown lint
+        type: automated
 ```
-`stages[].gates` に品質ゲートを追加することで、自動チェックや AI レビューのオプションを柔軟に拡張できます。
+`stages[].quality_gates` に品質ゲートを追加することで、自動チェックや AI レビューのオプションを柔軟に拡張できます。
 
 ## 3. 運用ガイド
 - `ai-devflow.yaml` の更新は四半期ごとに見直し、変更時は #ai-devflow-updates で告知します。
 - 仕様→コード生成パイプラインは GitHub Actions から参照されることを前提に命名規則を統一します。
 - AIエージェントが参照する入出力スキーマは YAML 内 `stages[].inputs` / `outputs` をベースに整備してください。
 
+## 4. Dry-run とフィードバック
+- `scripts/ci/run-codex-template-smoke.sh` で Codex テンプレート生成を自動検証し、`ai-devflow.yaml` の `code_generation` ステージと整合性を確認済みです。
+- `features/project-api` を例に、Spec → コード生成 → PR レビュー → ドキュメント生成の流れをリハーサルし、品質ゲート定義に不足がないことを確認しました。
+
 ---
-最終更新: 2025-10-12 / メンテナ担当: AI 開発推進チーム
+最終更新: 2025-10-14 / メンテナ担当: AI 開発推進チーム
