@@ -52,3 +52,8 @@ codex templates generate --template github-action --set workflowName="Web CI"
 
 ---
 最終更新: 2025-10-12 / Maintainer: AI Platform Engineering
+
+## 6. 実装適用例
+- `services/project-api` で `nest-api` テンプレから生成した骨子をベースに NestJS モジュールを構築しています。
+- `ui-poc/src/features/project-timeline` では `react-ui` テンプレを起点にタイムラインパネルを拡張しています。
+- 詳細な適用手順は Issue #265 および #266 を参照してください。
