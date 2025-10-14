@@ -5,9 +5,29 @@ S3 Object Lock + KMS + DynamoDB を利用した電子帳簿法（WORM）準拠�
 
 ## 手順概要
 1. `iac/stacks/electronic-ledger/backend.tf.example` と `backend.hcl.example` をコピーし、S3 バケット / DynamoDB テーブルを設定
-2. `terraform init -backend-config=backend.hcl` を実行して初期化
-3. `terraform plan` で差分を確認
-4. `terraform apply` で本番 / QA 環境へデプロイ
+2. `terraform.tfvars` に環境変数を定義（例を後述）
+3. `terraform init -backend-config=backend.hcl` を実行して初期化
+4. `terraform plan` で差分を確認（`make ledger-plan` で Dry-run 可）
+5. `terraform apply` で本番 / QA 環境へデプロイ
+
+### `terraform.tfvars` サンプル
+```hcl
+aws_region             = "ap-northeast-1"
+ledger_bucket_name     = "prod-electronic-ledger"
+aws_account_id         = "123456789012"
+account_admin_arn      = "arn:aws:iam::123456789012:role/SecurityAdmin"
+alarm_topics           = ["arn:aws:sns:ap-northeast-1:123456789012:security-alerts"]
+tags = {
+  Owner       = "compliance-team"
+  CostCenter  = "FIN-OPS"
+}
+```
+
+### Dry-run
+```
+make ledger-plan
+```
+CI と同じ `skip_credentials_validation=true` の設定で `terraform plan` が実行されます。
 
 ## バケット構成
 - バージョニング + Object Lock (COMPLIANCE モード)

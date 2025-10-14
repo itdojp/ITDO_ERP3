@@ -1,0 +1,93 @@
+{
+  "widgets": [
+    {
+      "definition": {
+        "title": "Chat Summarizer Success vs Failure",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "horizontal",
+        "legend_columns": ["avg", "last", "min", "max"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "sum:chat_summarizer.success{*} by {environment}",
+            "display_type": "line",
+            "name": "Success"
+          },
+          {
+            "q": "sum:chat_summarizer.failure{*} by {environment}",
+            "display_type": "line",
+            "name": "Failure"
+          }
+        ],
+        "yaxis": {
+          "scale": "linear"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 47,
+        "height": 16
+      }
+    },
+    {
+      "definition": {
+        "title": "Retry Attempts",
+        "type": "query_value",
+        "requests": [
+          {
+            "q": "sum:chat_summarizer.retry_exhausted{*} by {environment}",
+            "aggregator": "sum"
+          }
+        ],
+        "autoscale": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 16,
+        "width": 23,
+        "height": 8
+      }
+    },
+    {
+      "definition": {
+        "title": "Average Duration (ms)",
+        "type": "query_value",
+        "requests": [
+          {
+            "q": "avg:chat_summarizer.duration_ms{*} by {environment}",
+            "aggregator": "avg"
+          }
+        ],
+        "autoscale": true
+      },
+      "layout": {
+        "x": 24,
+        "y": 16,
+        "width": 23,
+        "height": 8
+      }
+    },
+    {
+      "definition": {
+        "title": "Search Success Rate",
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "100 * sum:chat_summarizer.search.success{*} / (sum:chat_summarizer.search.success{*} + sum:chat_summarizer.search.error{*})",
+            "display_type": "line",
+            "name": "Search Success %"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 24,
+        "width": 47,
+        "height": 12
+      }
+    }
+  ]
+}

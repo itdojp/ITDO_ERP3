@@ -1,0 +1,37 @@
+name: UI PoC E2E
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  e2e-mock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ui-poc
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: ui-poc
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests (mock mode)
+        env:
+          E2E_EXPECT_API: 'false'
+        working-directory: ui-poc
+        run: npx playwright test --reporter=dot
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-poc-e2e-report
+          path: ui-poc/playwright-report

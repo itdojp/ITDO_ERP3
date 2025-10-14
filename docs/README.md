@@ -21,10 +21,10 @@
 ## CLI ユーティリティ
 - [Projects Slack 共有 CLI ガイド](projects-share-cli.md)
 - `scripts/notifications/send-summary.js` — 要約検索結果を Slack へ通知する CLI（Runbook 参照）
-<<<<<<< HEAD
-=======
 - `scripts/billing/replay-invoice.js` — 請求書生成ジョブを再実行する CLI
->>>>>>> origin/main
+
+## UI Testing
+- GitHub Actions: `UI PoC E2E`（mock モード Playwright を夜間実行）
 
 ## API Examples
 - [Projects 一覧のページネーション例](api-projects-pagination.md)
