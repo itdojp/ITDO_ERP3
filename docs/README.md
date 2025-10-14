@@ -4,6 +4,7 @@
 - [AI支援型開発ロードマップ](ai-roadmap.md)
 - [AI開発ワークフロー仕様](ai-devflow.md)
 - [Codex CLI テンプレート利用ガイド](codex-templates.md)
+- [Phase2 モジュール計画](phase2/module-planning.md)
 
 ## Live Testing
 - [Live Testing Guide](live-testing.md)
