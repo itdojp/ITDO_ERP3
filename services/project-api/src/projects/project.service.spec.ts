@@ -171,6 +171,8 @@ describe('ProjectService', () => {
             channelName: 'alpha-daily-sync',
             summary: 'Daily standup summary',
             summaryEmbedding: JSON.stringify([0.1, 0.2]),
+            summaryLanguage: 'ja',
+            summaryUsage: JSON.stringify({ totalTokens: 10, promptTokens: 7, completionTokens: 3 }),
             createdAt: new Date('2025-01-01T00:00:00Z'),
             updatedAt: new Date('2025-01-01T00:00:00Z'),
             messages: [],
@@ -184,6 +186,8 @@ describe('ProjectService', () => {
       summarize: jest.fn().mockResolvedValue({
         summary: 'Aggregated chat summary',
         embedding: [0.42, 0.73],
+        language: 'ja',
+        usage: { totalTokens: 120, promptTokens: 80, completionTokens: 40 },
       }),
     } as unknown as jest.Mocked<ChatSummaryService>;
 
@@ -217,23 +221,32 @@ describe('ProjectService', () => {
   it('returns project timeline and computes chat summary on demand', async () => {
     const timeline = await service.getTimeline(baseProject.id);
 
-    expect(chatSummaryMock.summarize).toHaveBeenCalledWith([
+    expect(chatSummaryMock.summarize).toHaveBeenCalledWith(
+      [
+        {
+          author: 'PM',
+          content: 'Finance integration is on track.',
+          postedAt: '2025-02-10T09:00:00.000Z',
+        },
+      ],
       {
-        author: 'PM',
-        content: 'Finance integration is on track.',
-        postedAt: '2025-02-10T09:00:00.000Z',
+        projectId: baseProject.id,
+        threadId: 'thread-1',
       },
-    ]);
+    );
     expect(prismaMock.chatThread.update).toHaveBeenCalledWith({
       where: { id: 'thread-1' },
       data: {
         summary: 'Aggregated chat summary',
         summaryEmbedding: JSON.stringify([0.42, 0.73]),
+        summaryLanguage: 'ja',
+        summaryUsage: JSON.stringify({ totalTokens: 120, promptTokens: 80, completionTokens: 40 }),
       },
     });
     expect(timeline.projectId).toBe(baseProject.id);
     expect(timeline.tasks[0].status).toBe(TaskStatus.Done);
     expect(timeline.chatSummary).toBe('Aggregated chat summary');
+    expect(timeline.chatSummaryLanguage).toBe('ja');
   });
 
   it('provides burndown metrics with risks', async () => {

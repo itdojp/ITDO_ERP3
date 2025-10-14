@@ -77,6 +77,18 @@ export class RiskSummaryModel {
 }
 
 @ObjectType()
+export class SummaryUsageModel {
+  @Field(() => Int)
+  totalTokens!: number;
+
+  @Field(() => Int)
+  promptTokens!: number;
+
+  @Field(() => Int)
+  completionTokens!: number;
+}
+
+@ObjectType()
 export class ChatThreadModel {
   @Field(() => ID)
   id!: string;
@@ -92,6 +104,12 @@ export class ChatThreadModel {
 
   @Field(() => [Float])
   summaryEmbedding!: number[];
+
+  @Field({ nullable: true })
+  summaryLanguage?: string;
+
+  @Field(() => SummaryUsageModel, { nullable: true })
+  summaryUsage?: SummaryUsageModel;
 }
 
 @ObjectType()
@@ -143,6 +161,9 @@ export class TimelineModel {
 
   @Field({ nullable: true })
   chatSummary?: string;
+
+  @Field({ nullable: true })
+  chatSummaryLanguage?: string;
 }
 
 @ObjectType()

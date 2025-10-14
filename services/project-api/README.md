@@ -7,6 +7,7 @@ Project API は ITDO ERP3 のプロジェクト管理・チャット連携の試
 - プロジェクトタイムラインとチャット要約の取得
 - バーンダウンチャートとリスクサマリを含むメトリクスの取得
 - Slack / Teams スレッドのプロビジョニング
+- OpenAI ベースのチャット要約（再試行・多言語切替・ベクトル保存・Datadog メトリクス連携）
 
 ## セットアップ
 
@@ -20,6 +21,22 @@ npm run start:dev    # http://localhost:3000/api/v1, http://localhost:3000/graph
 ```
 
 起動時に `app.setGlobalPrefix('api/v1')` が適用されるため、REST エンドポイントには `/api/v1` プレフィックスが付きます。GraphQL Playground は `/graphql` で利用できます。Prisma は SQLite を利用しており、`npm run db:setup` でマイグレーションとシードデータを投入します。`DATABASE_URL` を変更することで、別ファイルの SQLite や他データソースへ切り替え可能です。
+
+### Chat Summarizer 設定
+
+OpenAI を利用する場合は `.env` に以下の変数を設定してください。
+
+| 環境変数 | 役割 |
+|----------|------|
+| `CHAT_SUMMARIZER_PROVIDER` | `openai` を指定すると本番モード、未設定時は `mock` |
+| `CHAT_SUMMARIZER_API_KEY` / `CHAT_SUMMARIZER_SECRET_ID` | 直接キーを指定するか、AWS Secrets Manager から取得 |
+| `CHAT_SUMMARIZER_LANGUAGE` | 要約出力言語 (`ja` / `en`) |
+| `CHAT_SUMMARIZER_MAX_CHARS` | 1 チャンクあたりの最大文字数（長文は自動分割） |
+| `CHAT_SUMMARIZER_RETRY_*` | リトライ回数とバックオフ (`ATTEMPTS` / `BASE_MS` / `MAX_MS`) |
+| `VECTOR_STORE_URL` | `pgvector` 対応 PostgreSQL への接続文字列。未設定で無効化 |
+| `DATADOG_AGENT_HOST` | Datadog Agent のホスト。未設定でメトリクス送出をスキップ |
+
+`VECTOR_STORE_URL` を指定するとチャット要約の埋め込みを `pgvector` テーブルへ保存します。要約成功・失敗やリトライ状況は Datadog StatsD 経由でメトリクス化されます（`DD_SERVICE` / `DD_ENV` でタグ付け）。
 
 ## REST エンドポイント
 
@@ -45,6 +62,8 @@ curl -X POST http://localhost:3000/api/v1/projects \
 # タイムライン取得
 curl http://localhost:3000/api/v1/projects/proj-1001/timeline
 ```
+
+タイムライン応答では `chatSummaryLanguage` とトークン使用量 (`summaryUsage`) が返り、課金モニタリングや多言語 UI 切り替えに活用できます。
 
 ## GraphQL
 

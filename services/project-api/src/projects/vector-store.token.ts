@@ -1,0 +1,1 @@
+export const VECTOR_STORE_TOKEN = Symbol('VECTOR_STORE_TOKEN');
