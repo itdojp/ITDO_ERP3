@@ -1,0 +1,37 @@
+name: Terraform Compliance Stack
+
+on:
+  pull_request:
+    paths:
+      - 'iac/**'
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: iac/stacks/electronic-ledger
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+      - name: Terraform init
+        run: terraform init
+      - name: Terraform validate
+        run: terraform validate
+      - name: Terraform plan
+        env:
+          TF_VAR_aws_region: ap-northeast-1
+          TF_VAR_ledger_bucket_name: demo-ledger-bucket
+          TF_VAR_aws_account_id: "000000000000"
+          TF_VAR_account_admin_arn: arn:aws:iam::000000000000:role/Dummy
+          TF_VAR_skip_credentials_validation: "true"
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+          AWS_DEFAULT_REGION: ap-northeast-1
+          TF_VAR_environment: ci
+        run: terraform plan -input=false -lock=false

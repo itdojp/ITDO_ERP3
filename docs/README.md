@@ -28,6 +28,7 @@
 ## Finance & Compliance
 - [契約/請求 ERD](contracts/erd.md)
 - [電子帳簿法チェックリスト](compliance/electronic-book.md)
+- [電子帳簿法対応 Runbook](compliance/electronic-ledger-runbook.md)
 
 ## Services
 - [Project API (NestJS)](../services/project-api/README.md)
