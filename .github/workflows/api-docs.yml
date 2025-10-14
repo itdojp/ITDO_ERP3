@@ -1,0 +1,75 @@
+name: API Docs
+
+on:
+  pull_request:
+    paths:
+      - 'openapi/**'
+      - 'services/project-api/**'
+      - 'scripts/generate-api-docs.sh'
+      - 'docs/api/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'openapi/**'
+      - 'services/project-api/**'
+      - 'scripts/generate-api-docs.sh'
+      - 'docs/api/**'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/project-api/package-lock.json
+
+      - name: Install service dependencies
+        working-directory: services/project-api
+        run: npm ci
+
+      - name: Generate API docs
+        run: ./scripts/generate-api-docs.sh
+
+      - name: Capture docs diff
+        id: diff
+        run: |
+          if git diff --quiet -- docs/api; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- docs/api > diffstat.txt
+            {
+              echo "diffstat<<'EOF'"
+              cat diffstat.txt
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload generated docs
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-docs
+          path: docs/api
+
+      - name: Comment diff summary
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: "### API Docs Check"
+          body: |
+            ### API Docs Check
+            Status: ${{ steps.diff.outputs.changed == 'true' && '差分あり ❌' || '最新 ✅' }}
+            ${{ steps.diff.outputs.changed == 'true' && format('```\n{0}\n```', steps.diff.outputs.diffstat) || 'docs/api ディレクトリに変更はありません。' }}
+
+      - name: Ensure docs up to date
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          echo "docs/api に未コミットの差分があります。`./scripts/generate-api-docs.sh` を実行して成果物をコミットしてください。"
+          exit 1
