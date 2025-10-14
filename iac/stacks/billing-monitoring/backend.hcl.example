@@ -1,0 +1,3 @@
+bucket  = "my-terraform-state"
+key     = "billing-monitoring/terraform.tfstate"
+region  = "ap-northeast-1"
