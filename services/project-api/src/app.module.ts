@@ -5,6 +5,7 @@ import { join } from 'path';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectModule } from './projects/project.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ProjectModule } from './projects/project.module';
       path: '/graphql',
     }),
     ProjectModule,
+    BillingModule,
   ],
 })
 export class AppModule {}
