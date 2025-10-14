@@ -17,6 +17,7 @@
     "db:setup": "npm run prisma:migrate && npm run prisma:seed"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.908.0",
     "@aws-sdk/client-s3": "^3.664.0",
     "@aws-sdk/client-secrets-manager": "^3.664.0",
     "@aws-sdk/client-ses": "^3.664.0",
@@ -46,9 +47,9 @@
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.12.7",
+    "@types/pdfkit": "^0.13.8",
     "@types/pg": "^8.11.6",
     "@types/supertest": "^2.0.16",
-    "@types/pg": "^8.11.6",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.0",
@@ -62,8 +63,7 @@
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.2",
-    "typescript": "^5.4.2",
-    "@types/pdfkit": "^0.13.8"
+    "typescript": "^5.4.2"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

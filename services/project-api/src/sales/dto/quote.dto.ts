@@ -1,4 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, Float, ID, InputType, Int, ObjectType } from '@nestjs/graphql';
+import { GraphQLISODateTime } from 'graphql-scalars';
+import { OrderModel } from './order.dto';
+import { CreditReviewModel } from './credit-review.dto';
 
 @ObjectType()
 export class QuoteItemModel {
@@ -7,6 +11,9 @@ export class QuoteItemModel {
 
   @Field(() => String)
   productCode!: string;
+
+  @Field(() => String, { nullable: true })
+  description?: string;
 
   @Field(() => Int)
   quantity!: number;
@@ -35,14 +42,41 @@ export class QuoteModel {
   @Field(() => Float)
   totalAmount!: number;
 
+  @Field(() => String)
+  currency!: string;
+
+  @Field(() => Int)
+  version!: number;
+
+  @Field(() => GraphQLISODateTime)
+  createdAt!: Date;
+
+  @Field(() => GraphQLISODateTime)
+  updatedAt!: Date;
+
+  @Field(() => GraphQLISODateTime, { nullable: true })
+  submittedAt?: Date;
+
+  @Field(() => GraphQLISODateTime, { nullable: true })
+  approvedAt?: Date;
+
   @Field(() => [QuoteItemModel])
   items!: QuoteItemModel[];
+
+  @Field(() => OrderModel, { nullable: true })
+  order?: OrderModel;
+
+  @Field(() => [CreditReviewModel])
+  creditReviews!: CreditReviewModel[];
 }
 
 @InputType()
 export class QuoteItemInput {
   @Field(() => String)
   productCode!: string;
+
+  @Field(() => String, { nullable: true })
+  description?: string;
 
   @Field(() => Int)
   quantity!: number;
@@ -64,13 +98,16 @@ export class CreateQuoteInput {
 
   @Field(() => String, { nullable: true })
   currency?: string;
+
+  @Field(() => String, { nullable: true })
+  quoteNumber?: string;
 }
 
 @InputType()
-export class SubmitQuoteInput {
-  @Field(() => ID)
-  quoteId!: string;
+export class QuoteFilterInput {
+  @Field(() => String, { nullable: true })
+  customerId?: string;
 
   @Field(() => String, { nullable: true })
-  approverId?: string;
+  status?: string;
 }

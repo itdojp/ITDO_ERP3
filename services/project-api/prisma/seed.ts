@@ -3,6 +3,16 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function seed() {
+  await prisma.orderAuditLog.deleteMany();
+  await prisma.creditReview.deleteMany();
+  await prisma.order.deleteMany();
+  await prisma.quoteItem.deleteMany();
+  await prisma.quote.deleteMany();
+  await prisma.conversationSummary.deleteMany();
+  await prisma.interactionNote.deleteMany();
+  await prisma.opportunity.deleteMany();
+  await prisma.contact.deleteMany();
+  await prisma.customer.deleteMany();
   await prisma.chatMessage.deleteMany();
   await prisma.chatThread.deleteMany();
   await prisma.risk.deleteMany();
@@ -312,6 +322,142 @@ async function seed() {
       data: project,
     });
   }
+
+  const acme = await prisma.customer.create({
+    data: {
+      name: 'Acme Manufacturing',
+      type: 'CUSTOMER',
+      industry: 'Manufacturing',
+      ownerUserId: 'user-sales-lead',
+      tagsJson: JSON.stringify(['strategic', 'phase2']),
+      contacts: {
+        create: [
+          {
+            name: 'Hiro Tanaka',
+            role: 'Procurement Lead',
+            email: 'hiro.tanaka@acme.example'
+          },
+          {
+            name: 'Mina Sato',
+            role: 'IT Director',
+            email: 'mina.sato@acme.example'
+          }
+        ]
+      }
+    },
+    include: { contacts: true }
+  });
+
+  const acmeOpp = await prisma.opportunity.create({
+    data: {
+      customerId: acme.id,
+      title: 'ERP Phase2 Rollout',
+      stage: 'NEGOTIATION',
+      amount: 18_000_000,
+      currency: 'JPY',
+      probability: 65,
+      ownerUserId: 'user-sales-lead',
+      expectedClose: new Date('2025-11-30')
+    }
+  });
+
+  const acmeNote = await prisma.interactionNote.create({
+    data: {
+      customerId: acme.id,
+      contactId: acme.contacts[0].id,
+      opportunityId: acmeOpp.id,
+      channel: 'Teams',
+      rawText: 'Reviewed pricing model; requested AI-assisted onboarding demo.'
+    }
+  });
+
+  await prisma.conversationSummary.create({
+    data: {
+      interactionId: acmeNote.id,
+      summaryText: 'Client wants assurance on AI onboarding; follow-up demo scheduled.',
+      followupSuggestedJson: JSON.stringify(['Prepare onboarding demo deck', 'Share AI ops runbook preview']),
+      confidence: 0.82
+    }
+  });
+
+  const acmeQuote = await prisma.quote.create({
+    data: {
+      quoteNumber: 'Q-2025-0001',
+      customerId: acme.id,
+      status: 'PENDING_APPROVAL',
+      totalAmount: 18_500_000,
+      currency: 'JPY',
+      items: {
+        create: [
+          {
+            productCode: 'ERP-CORE',
+            description: 'ERP core license + support',
+            quantity: 1,
+            unitPrice: 12_000_000
+          },
+          {
+            productCode: 'AI-ADDON',
+            description: 'AI Ops add-on bundle',
+            quantity: 1,
+            unitPrice: 6_500_000,
+            discountRate: 0.1
+          }
+        ]
+      }
+    }
+  });
+
+  const acmeOrder = await prisma.order.create({
+    data: {
+      orderNumber: 'SO-2025-0001',
+      quoteId: acmeQuote.id,
+      customerId: acme.id,
+      status: 'PENDING',
+      paymentTerm: 'Net 30',
+      totalAmount: acmeQuote.totalAmount
+    }
+  });
+
+  await prisma.creditReview.create({
+    data: {
+      orderId: acmeOrder.id,
+      status: 'APPROVED',
+      reviewerUserId: 'user-finance',
+      score: 82,
+      remarks: 'Credit limit sufficient. Proceed once PO is received.',
+      decidedAt: new Date('2025-10-10T02:30:00Z')
+    }
+  });
+
+  await prisma.orderAuditLog.create({
+    data: {
+      orderId: acmeOrder.id,
+      changeType: 'status.change',
+      payload: JSON.stringify({ from: 'REQUESTED', to: 'APPROVED', reviewer: 'user-finance' }),
+      checksum: 'approved-2025-10-10'
+    }
+  });
+
+  const betaCustomer = await prisma.customer.create({
+    data: {
+      name: 'Beta Retail Holdings',
+      type: 'PROSPECT',
+      industry: 'Retail',
+      tagsJson: JSON.stringify(['pilot', 'high-touch'])
+    }
+  });
+
+  await prisma.opportunity.create({
+    data: {
+      customerId: betaCustomer.id,
+      title: 'Retail Expansion CRM',
+      stage: 'QUALIFIED',
+      amount: 9_800_000,
+      currency: 'JPY',
+      probability: 45,
+      ownerUserId: 'user-crm-specialist'
+    }
+  });
 }
 
 seed()
