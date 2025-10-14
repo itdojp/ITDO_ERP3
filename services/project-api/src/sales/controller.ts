@@ -3,6 +3,7 @@ import { SalesService } from './service';
 import { ApproveCreditReviewInput, CreditReviewModel } from './dto/credit-review.dto';
 import { CreateOrderInput, OrderModel } from './dto/order.dto';
 import { CreateQuoteInput, QuoteModel } from './dto/quote.dto';
+import { SalesMetricsModel } from './metrics/sales-metrics.model';
 
 @Controller('api/v1/sales')
 export class SalesController {
@@ -30,6 +31,11 @@ export class SalesController {
   @Post('orders')
   createOrder(@Body() input: CreateOrderInput): Promise<OrderModel> {
     return this.salesService.createOrder(input);
+  }
+
+  @Get('metrics')
+  getMetrics(): Promise<SalesMetricsModel> {
+    return this.salesService.getMetrics();
   }
 
   @Post('orders/:orderId/credit-review')

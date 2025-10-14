@@ -7,13 +7,14 @@ Phase3 本実装に合わせて CRM / Sales モジュールを本番適用する
 - [ ] Seed データで作成されるサンプル顧客/見積データが不要な場合は無効化または削除
 - [ ] `SALES_METRICS_ENABLED=true` と AWS IAM 権限を設定し、CloudWatch へメトリクス送信できることを確認 (`QuoteCreatedCount`, `OrderCreatedCount` など)
 - [ ] `api/v1/crm`・`api/v1/sales` REST エンドポイントをステージングで疎通確認 (`GET /quotes`, `POST /orders` など)
+- [ ] `/api/v1/sales/metrics` と GraphQL `salesMetrics` クエリで KPI スナップショットが取得できることを確認
 - [ ] GraphQL スキーマ差分を `npm run lint` で確認
 
 ## 2. リリース手順
 1. `npm run lint` / `npm run test` を実行し、CI と同等のカバレッジを通過させる
 2. `DATABASE_URL` を本番環境の接続文字列に設定し、`npx prisma migrate deploy` を実行
 3. `scripts/ci/run-codex-template-smoke.sh` を実行し、新テンプレートのテンプレ生成が成功することを確認
-4. `api/v1/crm/customers` と `api/v1/sales/quotes` を `curl` で実行し、200 応答と想定データが返ることを確認
+4. `api/v1/crm/customers` / `api/v1/sales/quotes` / `api/v1/sales/metrics` を `curl` で実行し、200 応答と想定データが返ることを確認
 5. Slack `#sales-ops` と PagerDuty `Sales Ops` エスカレーションポリシーへリリース開始を共有し、クレジット承認時の通知ルールを再確認
 
 ## 3. ロールバック

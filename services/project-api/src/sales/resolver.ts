@@ -3,6 +3,7 @@ import { SalesService } from './service';
 import { QuoteModel, CreateQuoteInput, QuoteFilterInput } from './dto/quote.dto';
 import { OrderModel, CreateOrderInput } from './dto/order.dto';
 import { CreditReviewModel, ApproveCreditReviewInput } from './dto/credit-review.dto';
+import { SalesMetricsModel } from './metrics/sales-metrics.model';
 
 @Resolver(() => QuoteModel)
 export class SalesResolver {
@@ -26,6 +27,11 @@ export class SalesResolver {
   @Mutation(() => OrderModel)
   createOrder(@Args('input') input: CreateOrderInput): Promise<OrderModel> {
     return this.salesService.createOrder(input);
+  }
+
+  @Query(() => SalesMetricsModel)
+  salesMetrics(): Promise<SalesMetricsModel> {
+    return this.salesService.getMetrics();
   }
 
   @Mutation(() => CreditReviewModel)
