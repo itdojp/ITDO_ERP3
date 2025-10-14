@@ -1,0 +1,23 @@
+name: Billing Pipeline Dry Run
+
+on:
+  schedule:
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  replay-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Dry run invoice replay
+        run: |
+          node scripts/billing/replay-invoice.js \
+            --project nightly-check \
+            --code NIGHTLY-CHECK \
+            --event SIGNED \
+            --base-url ${PROJECT_API_BASE:-http://localhost:3000} \
+            --dry-run
