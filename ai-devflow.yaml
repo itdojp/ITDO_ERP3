@@ -1,7 +1,8 @@
 version: 1
 metadata:
-  owner: ai-dev-team
-  reviewed_at: 2025-10-14
+  owner: ai-platform-team
+  source: docs/ai-devflow.md
+  revised_at: 2025-10-14
 stages:
   - id: spec_authoring
     name: Spec Authoring
@@ -28,6 +29,27 @@ stages:
         criteria:
           - coverage_of_requirements
           - dependency_mapping
+    pipelines:
+      - id: crm-spec
+        issue: 295
+        artifacts:
+          - docs/specs/crm/requirements.md
+          - docs/metrics/crm.md
+      - id: sales-spec
+        issue: 296
+        artifacts:
+          - docs/specs/sales/requirements.md
+          - docs/compliance/sales-ledger.md
+      - id: hr-spec
+        issue: 297
+        artifacts:
+          - docs/runbooks/hr-ops.md
+          - docs/compliance/hr-privacy.md
+      - id: bi-spec
+        issue: 298
+        artifacts:
+          - docs/bi/data-mart.md
+          - docs/bi/etl-evaluation.md
   - id: code_generation
     name: Code Generation & Scaffolding
     description: Use Codex CLI templates and project conventions to generate code skeletons.
@@ -51,6 +73,28 @@ stages:
         check: lint
       - type: automatic_check
         check: unit_tests
+    pipelines:
+      - id: crm-module
+        branch: feature/phase2-crm-sales-prep
+        outputs:
+          - services/project-api/src/crm/**
+          - shared/ai/conversation/**
+      - id: sales-module
+        branch: feature/phase2-crm-sales-prep
+        outputs:
+          - services/project-api/src/sales/**
+          - iac/terraform/sales-monitoring/**
+      - id: hr-module
+        branch: feature/phase2-hr-bi-prep
+        outputs:
+          - services/project-api/src/hr/**
+          - db/seeds/hr/skill-tags.json
+      - id: bi-analytics
+        branch: feature/phase2-hr-bi-prep
+        outputs:
+          - docs/bi/**
+          - iac/terraform/analytics-observability/**
+          - examples/bi/nl-query-poc/**
   - id: test_and_review
     name: Automated Test & AI Review
     description: Execute automated tests and leverage AI reviewers before human approval.
@@ -120,3 +164,13 @@ stages:
       - type: metric_watch
         thresholds:
           - service_error_rate < 1%
+    pipelines:
+      - id: github-actions-hr
+        workflow: HR Module CI
+        url: .github/workflows/hr-module-ci.yml
+      - id: codex-template-smoke
+        workflow: Codex Template Smoke
+        url: .github/workflows/codex-template-smoke.yml
+      - id: analytics-observability
+        workflow: Terraform Compliance
+        url: .github/workflows/terraform-compliance.yml

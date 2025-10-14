@@ -1,0 +1,31 @@
+name: HR Module CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'services/project-api/src/hr/**'
+      - 'docs/runbooks/hr-ops.md'
+      - 'db/seeds/hr/**'
+      - 'docs/compliance/hr-privacy.md'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            services/project-api/package-lock.json
+      - name: Install dependencies
+        working-directory: services/project-api
+        run: npm install --no-audit --prefer-offline --no-fund
+      - name: Lint HR module
+        working-directory: services/project-api
+        run: npx eslint src/hr
+      - name: Test HR module
+        working-directory: services/project-api
+        run: npm run test -- --testPathPattern=src/hr --passWithNoTests

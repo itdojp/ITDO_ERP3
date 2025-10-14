@@ -14,6 +14,9 @@
 ## Metrics
 - [CRM KPI 指標一覧](metrics/crm.md)
 
+## Runbooks
+- [HR Ops Runbook](runbooks/hr-ops.md)
+
 ## Live Testing
 - [Live Testing Guide](live-testing.md)
 - GitHub Actions: `Podman Live Playwright Tests` (workflow_dispatch)
@@ -49,6 +52,12 @@
 - [電子帳簿法チェックリスト](compliance/electronic-book.md)
 - [電子帳簿法対応 Runbook](compliance/electronic-ledger-runbook.md)
 - [販売管理モジュール 電子帳簿法対応ガイド](compliance/sales-ledger.md)
+- [人事モジュール 個人情報保護ガイドライン](compliance/hr-privacy.md)
+
+## BI & Analytics
+- [BI データマート設計](bi/data-mart.md)
+- [ETL 方式比較](bi/etl-evaluation.md)
+- [自然言語クエリ PoC](../examples/bi/nl-query-poc/README.md)
 
 ## Services
 - [Project API (NestJS)](../services/project-api/README.md)
