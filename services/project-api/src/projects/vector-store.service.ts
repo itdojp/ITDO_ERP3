@@ -12,12 +12,31 @@ export interface VectorStorePayload {
 
 export interface VectorStore {
   saveEmbedding(payload: VectorStorePayload): Promise<void>;
+  searchSimilar(options: VectorSearchOptions): Promise<VectorSearchResult[]>;
+}
+
+export interface VectorSearchOptions {
+  projectId: string;
+  embedding: number[];
+  topK?: number;
+  minScore?: number;
+}
+
+export interface VectorSearchResult {
+  threadId: string;
+  projectId: string;
+  summary: string;
+  score: number;
 }
 
 class NullVectorStore implements VectorStore {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async saveEmbedding(_payload: VectorStorePayload): Promise<void> {
     // no-op
+  }
+
+  async searchSimilar(_options: VectorSearchOptions): Promise<VectorSearchResult[]> {
+    return [];
   }
 }
 
@@ -53,6 +72,39 @@ class PostgresVectorStore implements VectorStore {
       );
     } catch (error) {
       this.logger.warn(`Failed to persist embedding for thread ${payload.threadId}`, error as Error);
+    }
+  }
+
+  async searchSimilar(options: VectorSearchOptions): Promise<VectorSearchResult[]> {
+    const topK = options.topK ?? 5;
+    try {
+      const vector = options.embedding.length === this.dimension ? options.embedding : this.padEmbedding(options.embedding, this.dimension);
+      const result = await this.pool.query(
+        `
+          SELECT
+            thread_id,
+            project_id,
+            summary,
+            1 / (1 + (embedding <#> $2::vector)) AS score
+          FROM ${this.table}
+          WHERE project_id = $1
+          ORDER BY embedding <#> $2::vector ASC
+          LIMIT $3
+        `,
+        [options.projectId, toSql(vector), topK],
+      );
+      const minScore = options.minScore ?? 0;
+      return result.rows
+        .map((row) => ({
+          threadId: row.thread_id as string,
+          projectId: row.project_id as string,
+          summary: row.summary as string,
+          score: Number(row.score ?? 0),
+        }))
+        .filter((entry) => entry.score >= minScore);
+    } catch (error) {
+      this.logger.warn(`Failed to query similar summaries for project ${options.projectId}`, error as Error);
+      return [];
     }
   }
 
@@ -104,5 +156,13 @@ export class VectorStoreService implements VectorStore {
     }
     const store = await this.storePromise;
     await store.saveEmbedding(payload);
+  }
+
+  async searchSimilar(options: VectorSearchOptions): Promise<VectorSearchResult[]> {
+    if (!this.storePromise) {
+      return [];
+    }
+    const store = await this.storePromise;
+    return store.searchSimilar(options);
   }
 }

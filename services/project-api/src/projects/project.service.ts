@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { buildBurndownSeries, calculateEvm } from '../../../../shared/metrics/evm';
 import {
   ChatProvider,
+  ChatSummarySearchModel,
   ChatThreadModel,
   ProjectMetricsModel,
   ProjectModel,
@@ -202,6 +203,93 @@ export class ProjectService {
       include: { messages: true },
     });
     return threads.map((thread) => this.toChatThreadModel(thread));
+  }
+
+  async searchChatSummaries(
+    projectId: string,
+    keyword: string,
+    options: { top?: number; minScore?: number } = {},
+  ): Promise<ChatSummarySearchModel[]> {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      return [];
+    }
+    await this.ensureProjectExists(projectId);
+
+    const limit = Math.min(Math.max(options.top ?? 5, 1), 20);
+    const minScore = options.minScore ?? 0.2;
+
+    const vectorMatches = await this.chatSummary.searchSummaries(projectId, trimmed, {
+      topK: limit,
+      minScore,
+    });
+
+    const vectorThreadIds = vectorMatches.map((match) => match.threadId);
+    const threadsFromVector = vectorThreadIds.length
+      ? await this.prisma.chatThread.findMany({
+          where: { id: { in: vectorThreadIds } },
+          select: {
+            id: true,
+            provider: true,
+            channelName: true,
+            summary: true,
+            summaryLanguage: true,
+            projectId: true,
+          },
+        })
+      : [];
+
+    const threadMap = new Map(threadsFromVector.map((thread) => [thread.id, thread]));
+    const ranked: ChatSummarySearchModel[] = [];
+    for (const match of vectorMatches) {
+      const thread = threadMap.get(match.threadId);
+      if (!thread) {
+        continue;
+      }
+      ranked.push({
+        threadId: thread.id,
+        provider: this.mapProvider(thread.provider),
+        channelName: thread.channelName ?? undefined,
+        summary: thread.summary ?? match.summary,
+        summaryLanguage: thread.summaryLanguage ?? undefined,
+        score: Number(match.score?.toFixed(4) ?? 0),
+      });
+    }
+
+    if (ranked.length >= limit) {
+      return ranked.slice(0, limit);
+    }
+
+    const remaining = limit - ranked.length;
+    const fallbackThreads = await this.prisma.chatThread.findMany({
+      where: {
+        projectId,
+        summary: { contains: trimmed },
+        id: vectorThreadIds.length ? { notIn: vectorThreadIds } : undefined,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: remaining,
+      select: {
+        id: true,
+        provider: true,
+        channelName: true,
+        summary: true,
+        summaryLanguage: true,
+      },
+    });
+
+    fallbackThreads.forEach((thread) => {
+      ranked.push({
+        threadId: thread.id,
+        provider: this.mapProvider(thread.provider),
+        channelName: thread.channelName ?? undefined,
+        summary: thread.summary ?? '',
+        summaryLanguage: thread.summaryLanguage ?? undefined,
+        score: Number((Math.max(minScore / 2, 0.05)).toFixed(4)),
+      });
+    });
+
+    return ranked.slice(0, limit);
   }
 
   private async findProjectWithRelations(projectId: string): Promise<ProjectWithRelations> {

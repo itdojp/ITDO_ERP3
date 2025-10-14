@@ -1,5 +1,6 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import {
+  ChatSummarySearchModel,
   ChatThreadModel,
   ProjectCollectionModel,
   ProjectMetricsModel,
@@ -48,6 +49,16 @@ export class ProjectResolver {
   @Query(() => [ChatThreadModel])
   projectChatThreads(@Args('projectId') projectId: string): Promise<ChatThreadModel[]> {
     return this.projectService.listChatThreads(projectId);
+  }
+
+  @Query(() => [ChatSummarySearchModel])
+  projectChatSummarySearch(
+    @Args('projectId') projectId: string,
+    @Args('keyword') keyword: string,
+    @Args('top', { nullable: true }) top?: number,
+    @Args('minScore', { nullable: true }) minScore?: number,
+  ): Promise<ChatSummarySearchModel[]> {
+    return this.projectService.searchChatSummaries(projectId, keyword, { top, minScore });
   }
 
   @Mutation(() => ProjectModel)

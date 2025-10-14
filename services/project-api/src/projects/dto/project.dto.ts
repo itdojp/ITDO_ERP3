@@ -1,6 +1,6 @@
 import { ArgsType, Field, InputType } from '@nestjs/graphql';
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { ChatProvider, ProjectStatus } from '../models/project.model';
 
 export class ListProjectsFilterDto {
@@ -81,4 +81,24 @@ export class ProvisionChatThreadArgs {
   @Field(() => CreateChatThreadInput)
   @Type(() => CreateChatThreadInput)
   input!: CreateChatThreadInput;
+}
+
+export class ChatSummarySearchDto {
+  @IsString()
+  @MaxLength(500)
+  q!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  top?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  minScore?: number;
 }

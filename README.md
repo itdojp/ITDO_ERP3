@@ -150,3 +150,5 @@ GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を
 ## Services
 - [Project API (NestJS)](services/project-api/README.md)
 - [API ドキュメント (OpenAPI/GraphQL)](docs/api/README.md)
+- [Project Dashboard (AI ハイライト)](docs/projects/project-dashboard.md)
+- [チャット要約検索 / 通知 Runbook](docs/projects/chat-summary-runbook.md)

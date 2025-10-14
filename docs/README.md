@@ -20,6 +20,7 @@
 
 ## CLI ユーティリティ
 - [Projects Slack 共有 CLI ガイド](projects-share-cli.md)
+- `scripts/notifications/send-summary.js` — 要約検索結果を Slack へ通知する CLI（Runbook 参照）
 
 ## API Examples
 - [Projects 一覧のページネーション例](api-projects-pagination.md)
@@ -37,3 +38,5 @@
 ## Services
 - [Project API (NestJS)](../services/project-api/README.md)
 - [Contract Invoice Pipeline](contracts/invoice-pipeline.md)
+- [Project Dashboard (AI ハイライト)](projects/project-dashboard.md)
+- [チャット要約検索 / 通知 Runbook](projects/chat-summary-runbook.md)
