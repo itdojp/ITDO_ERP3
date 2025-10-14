@@ -31,3 +31,4 @@
 
 ## Services
 - [Project API (NestJS)](../services/project-api/README.md)
+- [Contract Invoice Pipeline](contracts/invoice-pipeline.md)

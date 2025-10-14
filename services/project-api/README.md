@@ -8,6 +8,7 @@ Project API は ITDO ERP3 のプロジェクト管理・チャット連携の試
 - バーンダウンチャートとリスクサマリを含むメトリクスの取得
 - Slack / Teams スレッドのプロビジョニング
 - OpenAI ベースのチャット要約（再試行・多言語切替・ベクトル保存・Datadog メトリクス連携）
+- DocuSign Webhook / 契約イベント連携による請求書生成パイプライン
 
 ## セットアップ
 
@@ -34,9 +35,20 @@ OpenAI を利用する場合は `.env` に以下の変数を設定してくだ�
 | `CHAT_SUMMARIZER_MAX_CHARS` | 1 チャンクあたりの最大文字数（長文は自動分割） |
 | `CHAT_SUMMARIZER_RETRY_*` | リトライ回数とバックオフ (`ATTEMPTS` / `BASE_MS` / `MAX_MS`) |
 | `VECTOR_STORE_URL` | `pgvector` 対応 PostgreSQL への接続文字列。未設定で無効化 |
-| `DATADOG_AGENT_HOST` | Datadog Agent のホスト。未設定でメトリクス送出をスキップ |
+| `DATADOG_AGENT_HOST` / `DD_SERVICE` / `DD_ENV` | Datadog StatsD への送出設定 |
 
 `VECTOR_STORE_URL` を指定するとチャット要約の埋め込みを `pgvector` テーブルへ保存します。要約成功・失敗やリトライ状況は Datadog StatsD 経由でメトリクス化されます（`DD_SERVICE` / `DD_ENV` でタグ付け）。
+
+### 請求パイプライン設定
+
+| 環境変数 | 説明 |
+|----------|------|
+| `INVOICE_S3_BUCKET` / `INVOICE_S3_PREFIX` | S3 へ PDF/HTML を格納。設定されない場合はローカル出力 |
+| `INVOICE_OUTPUT_DIR` | ローカル保存先（デフォルト `logs/invoices`） |
+| `INVOICE_EMAIL_FROM` / `INVOICE_EMAIL_RECIPIENT` | AWS SES を用いた通知メール宛先 |
+| `AWS_REGION` | S3 / SES / Secrets Manager で利用するリージョン |
+
+DocuSign Webhook (`/billing/docusign/webhook`) は `completed` イベントを `SIGNED` として取り込み、契約 ID 単位で請求書をキューイングします。ローカル検証では `/billing/contracts/events` に `SIGNED` イベントを POST すると同じフローを起動できます。
 
 ## REST エンドポイント
 
@@ -47,6 +59,8 @@ OpenAI を利用する場合は `.env` に以下の変数を設定してくだ�
 | `GET` | `/api/v1/projects/:id/timeline` | タスクタイムラインとチャット要約の取得 |
 | `GET` | `/api/v1/projects/:id/metrics` | EVM / バーンダウン / リスク指標の取得 |
 | `POST` | `/api/v1/projects/:id/chat/threads` | Slack / Teams スレッドの生成 |
+| `POST` | `/billing/docusign/webhook` | DocuSign Webhook (PoC) |
+| `POST` | `/billing/contracts/events` | 契約イベントを手動登録し請求パイプラインを起動 |
 
 サンプル:
 
@@ -64,6 +78,8 @@ curl http://localhost:3000/api/v1/projects/proj-1001/timeline
 ```
 
 タイムライン応答では `chatSummaryLanguage` とトークン使用量 (`summaryUsage`) が返り、課金モニタリングや多言語 UI 切り替えに活用できます。
+
+請求フローを試すには `curl -X POST http://localhost:3000/billing/contracts/events -H 'Content-Type: application/json' -d '{"type":"SIGNED","contractId":"test-1","contractCode":"TEST-1"}'` を実行するとローカル出力先に PDF/HTML が生成されます。
 
 ## GraphQL
 
