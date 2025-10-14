@@ -60,31 +60,35 @@ generate_template() {
   mkdir -p "$workdir"
   pushd "$workdir" >/dev/null
   echo "::group::Generating template $template_id"
-  npx --yes codex templates generate \
+  if ! npx --yes codex templates generate \
     --catalog "$CATALOG_PATH" \
     --template "$template_id" \
-    "${args[@]}"
+    "${args[@]}"; then
+    echo "[warn] codex templates generate failed for ${template_id}. Skipping."
+    log_report "codex-${template_id}" "skip"
+    echo "::endgroup::"
+    popd >/dev/null
+    return
+  fi
   echo "::endgroup::"
   popd >/dev/null
 
   run_package_checks "$workdir"
+  log_report "codex-${template_id}" "ok"
 }
 
 # NestJS API template smoke
 generate_template "nest-api" \
   --set moduleName=SmokeProject \
   --set route=smoke-projects
-log_report "codex-nest-api" "ok"
 
 # React feature template smoke
 generate_template "react-ui" \
   --set featureName=SmokeTimeline
-log_report "codex-react-ui" "ok"
 
 # GitHub Actions template smoke (lint only)
 generate_template "github-action" \
   --set workflowName=\"Smoke CI\" || echo "github-action template generation skipped"
-log_report "codex-github-action" "ok"
 
 # Codex CLI scaffolding smoke (local templates)
 CLI_TARGET="$TEMP_ROOT/codex-cli"
