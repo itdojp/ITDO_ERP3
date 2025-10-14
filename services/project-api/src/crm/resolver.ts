@@ -1,9 +1,9 @@
 import { Query, Resolver } from '@nestjs/graphql';
 
 @Resolver()
-export class {{pascalName}}Resolver {
+export class CrmResolver {
   @Query(() => [String])
-  sample{{pascalName}}() {
+  sampleCrm() {
     return [];
   }
 }

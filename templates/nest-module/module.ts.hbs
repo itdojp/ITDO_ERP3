@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { {{name}}Service } from './{{fileName}}.service';
-import { {{name}}Resolver } from './{{fileName}}.resolver';
+import { {{pascalName}}Service } from './service';
+import { {{pascalName}}Resolver } from './resolver';
 
 @Module({
-  providers: [{{name}}Service, {{name}}Resolver],
+  providers: [{{pascalName}}Service, {{pascalName}}Resolver],
 })
 export class {{pascalName}}Module {}

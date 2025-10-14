@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class {{pascalName}}Service {
+export class CrmService {
   findAll() {
     return [];
   }
