@@ -16,6 +16,7 @@
 
 ## Runbooks
 - [HR Ops Runbook](runbooks/hr-ops.md)
+- [CRM / Sales リリース手順](runbooks/crm-sales-release.md)
 
 ## Live Testing
 - [Live Testing Guide](live-testing.md)
