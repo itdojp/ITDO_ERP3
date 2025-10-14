@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
@@ -41,7 +42,7 @@ export class HrService {
   }
 
   upsertEmployee(input: UpsertEmployeeInput): EmployeeModel {
-    const id = input.id ?? `emp-${Date.now()}`;
+    const id = input.id ?? randomUUID();
     const record: EmployeeModel = {
       id,
       name: input.name,
@@ -58,7 +59,7 @@ export class HrService {
 
   createReviewCycle(input: CreateReviewCycleInput): ReviewCycleModel {
     const cycle: ReviewCycleModel = {
-      id: `cycle-${Date.now()}`,
+      id: randomUUID(),
       cycleName: input.cycleName,
       startDate: input.startDate,
       endDate: input.endDate,

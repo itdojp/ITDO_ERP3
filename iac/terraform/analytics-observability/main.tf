@@ -29,7 +29,7 @@ resource "aws_athena_workgroup" "analytics_workgroup" {
   name = local.athena_workgroup
   configuration {
     result_configuration {
-      output_location = "s3://itdo-analytics-${var.environment}/athena-results/"
+      output_location = var.athena_result_bucket
     }
     bytes_scanned_cutoff_per_query = 104857600
   }
@@ -81,6 +81,7 @@ resource "aws_cloudwatch_metric_alarm" "etl_failure" {
 }
 
 resource "aws_quicksight_dashboard" "analytics_dashboard" {
+  count          = var.quicksight_template_arn == "" || var.quicksight_dataset_arn == "" ? 0 : 1
   aws_account_id = data.aws_caller_identity.current.account_id
   dashboard_id   = "analytics-${var.environment}"
   name           = "Analytics Overview (${var.environment})"
@@ -89,11 +90,11 @@ resource "aws_quicksight_dashboard" "analytics_dashboard" {
     source_template {
       data_set_references = [
         {
-          data_set_arn = "arn:aws:quicksight:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dataset/analytics-placeholder"
+          data_set_arn         = var.quicksight_dataset_arn
           data_set_placeholder = "AnalyticsDataset"
         }
       ]
-      arn = "arn:aws:quicksight:${var.aws_region}:${data.aws_caller_identity.current.account_id}:template/analytics-placeholder"
+      arn = var.quicksight_template_arn
     }
   }
 

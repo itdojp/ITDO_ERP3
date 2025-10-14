@@ -47,3 +47,7 @@ Issue #298 / #159 に基づき、Phase2 の BI/分析モジュールで構築す
 2. QuickSight テンプレートの JSON 定義を準備
 3. LangGraph PoC に Athena 実クエリを接続
 4. KPI ダッシュボードカードをプロジェクトボードへ追加（権限取得後）
+
+## Terraform パラメータ覚書
+- `athena_result_bucket`: Athena 結果を保存する S3 URI（例: `s3://itdo-analytics-dev/athena-results/`）
+- `quicksight_template_arn` / `quicksight_dataset_arn`: QuickSight を本番展開する際に指定。未指定の場合はダッシュボード作成をスキップ

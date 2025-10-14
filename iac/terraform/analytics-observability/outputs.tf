@@ -5,5 +5,5 @@ output "athena_workgroup" {
 
 output "quicksight_dashboard_id" {
   description = "QuickSight dashboard identifier"
-  value       = aws_quicksight_dashboard.analytics_dashboard.dashboard_id
+  value       = length(aws_quicksight_dashboard.analytics_dashboard) > 0 ? aws_quicksight_dashboard.analytics_dashboard[0].dashboard_id : null
 }
