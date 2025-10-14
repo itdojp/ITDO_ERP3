@@ -7,6 +7,13 @@
 - [Phase2 モジュール計画](phase2/module-planning.md)
 - [Phase2 実装準備プラン](phase2/implementation-plan.md)
 
+## Phase2 Specs
+- [CRM モジュール要件定義](specs/crm/requirements.md)
+- [販売管理モジュール要件定義](specs/sales/requirements.md)
+
+## Metrics
+- [CRM KPI 指標一覧](metrics/crm.md)
+
 ## Live Testing
 - [Live Testing Guide](live-testing.md)
 - GitHub Actions: `Podman Live Playwright Tests` (workflow_dispatch)
@@ -41,6 +48,7 @@
 - [契約/請求 ERD](contracts/erd.md)
 - [電子帳簿法チェックリスト](compliance/electronic-book.md)
 - [電子帳簿法対応 Runbook](compliance/electronic-ledger-runbook.md)
+- [販売管理モジュール 電子帳簿法対応ガイド](compliance/sales-ledger.md)
 
 ## Services
 - [Project API (NestJS)](../services/project-api/README.md)
