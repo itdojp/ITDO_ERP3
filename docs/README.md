@@ -24,6 +24,10 @@
 ## API Examples
 - [Projects 一覧のページネーション例](api-projects-pagination.md)
 
+## API Docs
+- [OpenAPI (Projects v1)](api/openapi/projects-v1.html)
+- [GraphQL (Project API)](api/graphql/index.html)
+- 自動生成スクリプト: `./scripts/generate-api-docs.sh`（CI ワークフロー `API Docs` で整合性チェック）
 
 ## Finance & Compliance
 - [契約/請求 ERD](contracts/erd.md)
