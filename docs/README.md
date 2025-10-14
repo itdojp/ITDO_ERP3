@@ -5,6 +5,7 @@
 - [AI開発ワークフロー仕様](ai-devflow.md)
 - [Codex CLI テンプレート利用ガイド](codex-templates.md)
 - [Phase2 モジュール計画](phase2/module-planning.md)
+- [Phase2 実装準備プラン](phase2/implementation-plan.md)
 
 ## Live Testing
 - [Live Testing Guide](live-testing.md)
