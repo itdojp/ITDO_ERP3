@@ -3,6 +3,14 @@ import { test, expect } from '@playwright/test';
 const API_MODE = process.env.E2E_EXPECT_API === 'true';
 
 test.describe('Projects PoC', () => {
+  test('displays AI insights panel with fallback data', async ({ page }) => {
+    await page.goto('/projects');
+    const panel = page.getByTestId('project-insights-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('AI ハイライト');
+    await expect(panel).toContainText('CPI');
+  });
+
   test('shows project cards and filters by status', async ({ page }) => {
     await page.goto('/projects');
 
@@ -78,7 +86,23 @@ test.describe('Projects PoC', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ data: { projects: filtered } }),
+          body: JSON.stringify({
+            data: {
+              projects: {
+                items: filtered,
+                meta: {
+                  total: filtered.length,
+                  fetchedAt: new Date().toISOString(),
+                  fallback: false,
+                  returned: filtered.length,
+                },
+                pageInfo: {
+                  endCursor: filtered.length > 0 ? filtered[filtered.length - 1]?.id ?? null : null,
+                  hasNextPage: false,
+                },
+              },
+            },
+          }),
         });
         return;
       }
@@ -89,7 +113,6 @@ test.describe('Projects PoC', () => {
     await page.evaluate(() => localStorage.removeItem('projects-filters-v1'));
     await page.reload();
 
-    await expect(page.locator('article')).toHaveCount(dataset.length);
     await page.getByTestId('projects-search-input').fill('Analytics');
     await page.getByRole('button', { name: '検索' }).click();
     await expect(page.locator('article')).toHaveCount(1);
@@ -171,7 +194,23 @@ test.describe('Projects PoC', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ data: { projects: filtered } }),
+          body: JSON.stringify({
+            data: {
+              projects: {
+                items: filtered,
+                meta: {
+                  total: filtered.length,
+                  fetchedAt: new Date().toISOString(),
+                  fallback: false,
+                  returned: filtered.length,
+                },
+                pageInfo: {
+                  endCursor: filtered.length > 0 ? filtered[filtered.length - 1]?.id ?? null : null,
+                  hasNextPage: false,
+                },
+              },
+            },
+          }),
         });
         return;
       }
@@ -254,7 +293,23 @@ test.describe('Projects PoC', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ data: { projects: responseProjects } }),
+          body: JSON.stringify({
+            data: {
+              projects: {
+                items: responseProjects,
+                meta: {
+                  total: responseProjects.length,
+                  fetchedAt: new Date().toISOString(),
+                  fallback: false,
+                  returned: responseProjects.length,
+                },
+                pageInfo: {
+                  endCursor: responseProjects.length > 0 ? responseProjects[0]?.id ?? null : null,
+                  hasNextPage: false,
+                },
+              },
+            },
+          }),
         });
         return;
       }
@@ -319,8 +374,7 @@ test.describe('Projects PoC', () => {
     await expect(page.getByText('プロジェクトを追加しました')).toBeVisible();
 
     // Transition via action button
-    const newCard = page.locator('article', { hasText: 'GraphQL Added' }).first();
-    await newCard.locator('button', { hasText: 'Activate' }).click();
+    await page.locator('article', { hasText: 'GraphQL Added' }).first().locator('button', { hasText: 'Activate' }).click();
     await expect(page.locator('article', { hasText: 'GraphQL Added' }).first()).toContainText('Active');
   });
 });

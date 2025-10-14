@@ -88,3 +88,58 @@ export const PROJECT_TRANSITION_MUTATION = `#graphql
     }
   }
 `;
+
+export const PROJECT_INSIGHTS_QUERY = `#graphql
+  query ProjectInsights($projectId: String!) {
+    timeline: projectTimeline(projectId: $projectId) {
+      projectId
+      chatSummary
+      chatSummaryLanguage
+      metrics {
+        plannedValue
+        earnedValue
+        actualCost
+        costVariance
+        scheduleVariance
+        cpi
+        spi
+      }
+      tasks {
+        id
+        name
+        phase
+        startDate
+        endDate
+        status
+      }
+      phases {
+        id
+        name
+        sortOrder
+      }
+    }
+    metrics: projectMetrics(projectId: $projectId) {
+      projectId
+      evm {
+        plannedValue
+        earnedValue
+        actualCost
+        costVariance
+        scheduleVariance
+        cpi
+        spi
+      }
+      burndown {
+        labels
+        planned
+        actual
+      }
+      risks {
+        id
+        probability
+        impact
+        status
+      }
+    }
+  }
+`;

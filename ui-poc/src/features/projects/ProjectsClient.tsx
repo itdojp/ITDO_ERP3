@@ -2,13 +2,14 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { buildShareTemplate } from "../../../../../shared/share-template";
+import { buildShareTemplate } from "../../../../shared/share-template";
 import { apiRequest, graphqlRequest } from "@/lib/api-client";
 import { reportClientTelemetry } from "@/lib/telemetry";
 import { PROJECTS_PAGE_SIZE } from "./constants";
 import { STATUS_LABEL, type ProjectAction, type ProjectListResponse, type ProjectStatus } from "./types";
 import { mockProjects } from "./mock-data";
 import { CREATE_PROJECT_MUTATION, PROJECTS_PAGE_QUERY, PROJECT_TRANSITION_MUTATION } from "./queries";
+import { ProjectInsightsPanel } from "./ProjectInsightsPanel";
 
 const statusFilters: Array<{ value: "all" | ProjectStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -179,6 +180,7 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
   };
   const [projects, setProjects] = useState(initialProjects.items);
   const [filter, setFilter] = useState<(typeof statusFilters)[number]["value"]>("all");
+  const [insightProjectId, setInsightProjectId] = useState<string | null>(initialProjects.items[0]?.id ?? null);
   const [updateState, setUpdateState] = useState<UpdateState>({ id: null, message: null, variant: null });
   const [pending, setPending] = useState<string | null>(null);
   const [meta, setMeta] = useState(initialMeta);
@@ -299,6 +301,16 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
     });
     setCopyState("idle");
   }, []);
+
+  useEffect(() => {
+    if (projects.length === 0) {
+      setInsightProjectId(null);
+      return;
+    }
+    if (!insightProjectId || !projects.some((project) => project.id === insightProjectId)) {
+      setInsightProjectId(projects[0]?.id ?? null);
+    }
+  }, [projects, insightProjectId]);
 
   const normalizeTagLabel = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -1443,6 +1455,13 @@ export function ProjectsClient({ initialProjects }: ProjectsClientProps) {
 
   return (
     <div className="space-y-6">
+      <ProjectInsightsPanel
+        projects={projects}
+        selectedProjectId={insightProjectId}
+        onSelectProject={setInsightProjectId}
+        listLoading={listLoading}
+      />
+
       <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-slate-950/20">
         <h3 className="text-sm font-semibold text-slate-200">GraphQL: プロジェクト追加</h3>
         <p className="mt-1 text-xs text-slate-400">GraphQL ミューテーションを利用して PoC データを更新するサンプルです。</p>
