@@ -9,9 +9,16 @@ on:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - stack: electronic-ledger
+            workdir: iac/stacks/electronic-ledger
+          - stack: billing-monitoring
+            workdir: iac/stacks/billing-monitoring
     defaults:
       run:
-        working-directory: iac/stacks/electronic-ledger
+        working-directory: ${{ matrix.workdir }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -23,7 +30,8 @@ jobs:
         run: terraform init
       - name: Terraform validate
         run: terraform validate
-      - name: Terraform plan
+      - name: Terraform plan (electronic-ledger)
+        if: matrix.stack == 'electronic-ledger'
         env:
           TF_VAR_aws_region: ap-northeast-1
           TF_VAR_ledger_bucket_name: demo-ledger-bucket
@@ -34,4 +42,14 @@ jobs:
           AWS_SECRET_ACCESS_KEY: dummy
           AWS_DEFAULT_REGION: ap-northeast-1
           TF_VAR_environment: ci
+        run: terraform plan -input=false -lock=false
+      - name: Terraform plan (billing-monitoring)
+        if: matrix.stack == 'billing-monitoring'
+        env:
+          TF_VAR_aws_region: ap-northeast-1
+          TF_VAR_environment: ci
+          TF_VAR_skip_credentials_validation: "true"
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+          AWS_DEFAULT_REGION: ap-northeast-1
         run: terraform plan -input=false -lock=false

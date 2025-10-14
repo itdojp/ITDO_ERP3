@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import type { ContractEventPayload } from '../../../../shared/contracts/lifecycle';
 import { generateInvoiceHtml, generateInvoicePdf, InvoicePayload } from './invoice-renderer';
+import { DatadogMetricsService } from '../monitoring/datadog.service';
 
 export interface InvoiceJob {
   contractId: string;
@@ -21,16 +22,27 @@ export class InvoiceProcessorService {
   private sesClient?: SESClient;
   private versioningChecked = false;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService, private readonly metrics: DatadogMetricsService) {}
 
   async process(job: InvoiceJob) {
+    const start = Date.now();
+    const tags = [`contract:${job.contractCode}`, `event:${job.eventType}`];
     this.logger.log(`Processing invoice job for contract ${job.contractCode}`);
-    const payload = this.buildInvoicePayload(job);
-    const [html, pdf] = await Promise.all([generateInvoiceHtml(payload), generateInvoicePdf(payload)]);
-    const objectKey = `${payload.contractCode}/invoice-${payload.invoiceNumber}.pdf`;
-    const location = await this.persistInvoice(objectKey, pdf, html);
-    if (job.customerEmail) {
-      await this.dispatchEmail(job.customerEmail, payload.invoiceNumber, location);
+    try {
+      const payload = this.buildInvoicePayload(job);
+      const [html, pdf] = await Promise.all([generateInvoiceHtml(payload), generateInvoicePdf(payload)]);
+      const objectKey = `${payload.contractCode}/invoice-${payload.invoiceNumber}.pdf`;
+      const location = await this.persistInvoice(objectKey, pdf, html);
+      if (job.customerEmail) {
+        await this.dispatchEmail(job.customerEmail, payload.invoiceNumber, location);
+      }
+      this.metrics.increment('billing.invoice.success', 1, tags);
+      const duration = Date.now() - start;
+      this.metrics.timing('billing.invoice.duration_ms', duration, tags);
+    } catch (error) {
+      this.metrics.increment('billing.invoice.failure', 1, tags);
+      this.logger.error(`Invoice processing failed for ${job.contractCode}`, error as Error);
+      throw error;
     }
   }
 
@@ -119,6 +131,7 @@ export class InvoiceProcessorService {
         },
       }),
     );
+    this.metrics.increment('billing.invoice.email.success', 1, [`recipient:${recipient}`]);
   }
 
   private ensureS3Client() {
