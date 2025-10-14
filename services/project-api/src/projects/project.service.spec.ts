@@ -120,9 +120,41 @@ describe('ProjectService', () => {
   };
 
   let chatSummaryMock: jest.Mocked<ChatSummaryService>;
+  let searchSummariesMock: jest.Mock;
   let service: ProjectService;
 
   beforeEach(() => {
+    const baseThreads = [
+      {
+        id: 'thread-1',
+        projectId: baseProject.id,
+        provider: 'Slack',
+        externalThreadId: 'alpha-thread-001',
+        channelName: 'alpha-daily-sync',
+        summary: 'Daily standup summary',
+        summaryEmbedding: JSON.stringify([0.1, 0.2]),
+        summaryLanguage: 'ja',
+        summaryUsage: JSON.stringify({ totalTokens: 10, promptTokens: 7, completionTokens: 3 }),
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-02T00:00:00Z'),
+        messages: [],
+      },
+      {
+        id: 'thread-2',
+        projectId: baseProject.id,
+        provider: 'Teams',
+        externalThreadId: 'alpha-risk',
+        channelName: 'alpha-risk',
+        summary: '追加リスクのレビュー',
+        summaryEmbedding: null,
+        summaryLanguage: 'ja',
+        summaryUsage: null,
+        createdAt: new Date('2025-01-03T00:00:00Z'),
+        updatedAt: new Date('2025-01-04T00:00:00Z'),
+        messages: [],
+      },
+    ];
+
     prismaMock = {
       project: {
         findMany: jest.fn().mockResolvedValue([baseProject]),
@@ -162,25 +194,49 @@ describe('ProjectService', () => {
           createdAt: new Date('2025-02-12T00:00:00Z'),
           updatedAt: new Date('2025-02-12T00:00:00Z'),
         })),
-        findMany: jest.fn().mockResolvedValue([
-          {
-            id: 'thread-1',
-            projectId: baseProject.id,
-            provider: 'Slack',
-            externalThreadId: 'alpha-thread-001',
-            channelName: 'alpha-daily-sync',
-            summary: 'Daily standup summary',
-            summaryEmbedding: JSON.stringify([0.1, 0.2]),
-            summaryLanguage: 'ja',
-            summaryUsage: JSON.stringify({ totalTokens: 10, promptTokens: 7, completionTokens: 3 }),
-            createdAt: new Date('2025-01-01T00:00:00Z'),
-            updatedAt: new Date('2025-01-01T00:00:00Z'),
-            messages: [],
-          },
-        ]),
+        findMany: jest.fn().mockImplementation(async (args?: any) => {
+          if (!args) {
+            return baseThreads;
+          }
+          const filterIds = args.where?.id?.in ?? args.where?.id?.notIn ?? null;
+          let result = [...baseThreads];
+          if (Array.isArray(filterIds)) {
+            if (args.where?.id?.in) {
+              result = result.filter((thread) => filterIds.includes(thread.id));
+            } else if (args.where?.id?.notIn) {
+              result = result.filter((thread) => !filterIds.includes(thread.id));
+            }
+          }
+          if (args.where?.summary?.contains) {
+            const keyword = String(args.where.summary.contains).toLowerCase();
+            result = result.filter((thread) => (thread.summary ?? '').toLowerCase().includes(keyword));
+          }
+          if (args.orderBy?.updatedAt === 'desc') {
+            result.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+          }
+          if (typeof args.take === 'number') {
+            result = result.slice(0, args.take);
+          }
+          if (args.select) {
+            return result.map((thread) => {
+              const entry: Record<string, unknown> = {};
+              for (const [key, selected] of Object.entries(args.select)) {
+                if (selected) {
+                  entry[key] = (thread as any)[key];
+                }
+              }
+              return entry;
+            });
+          }
+          return result;
+        }),
         update: jest.fn().mockResolvedValue(undefined),
       },
     };
+
+    searchSummariesMock = jest.fn().mockResolvedValue([
+      { threadId: 'thread-1', projectId: baseProject.id, summary: 'Daily standup summary', score: 0.82 },
+    ]);
 
     chatSummaryMock = {
       summarize: jest.fn().mockResolvedValue({
@@ -189,6 +245,7 @@ describe('ProjectService', () => {
         language: 'ja',
         usage: { totalTokens: 120, promptTokens: 80, completionTokens: 40 },
       }),
+      searchSummaries: searchSummariesMock as unknown as ChatSummaryService['searchSummaries'],
     } as unknown as jest.Mocked<ChatSummaryService>;
 
     service = new ProjectService(prismaMock as unknown as PrismaService, chatSummaryMock);
@@ -266,6 +323,33 @@ describe('ProjectService', () => {
     expect(prismaMock.chatThread.create).toHaveBeenCalled();
     expect(thread.summaryEmbedding).toEqual([]);
     expect(thread.channelName).toBe('Daily Sync');
+  });
+
+  it('searches chat summaries via vector store', async () => {
+    const results = await service.searchChatSummaries(baseProject.id, 'Daily standup', { top: 3, minScore: 0.5 });
+
+    expect(searchSummariesMock).toHaveBeenCalledWith(baseProject.id, 'Daily standup', {
+      topK: 3,
+      minScore: 0.5,
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ threadId: 'thread-1', provider: ChatProvider.Slack, score: 0.82 });
+  });
+
+  it('falls back to substring search when vector results are empty', async () => {
+    searchSummariesMock.mockResolvedValueOnce([]);
+
+    const results = await service.searchChatSummaries(baseProject.id, 'リスク', { top: 2 });
+
+    expect(prismaMock.chatThread.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          summary: expect.objectContaining({ contains: 'リスク' }),
+        }),
+      }),
+    );
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].provider).toBeDefined();
   });
 
   it('throws when project not found', async () => {

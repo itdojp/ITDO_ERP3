@@ -121,6 +121,16 @@ export class ChatSummarizer {
     };
   }
 
+  async embedText(text: string): Promise<number[]> {
+    const apiKey = await this.resolveApiKey();
+    const retry = this.options.retry ?? DEFAULT_RETRY;
+    if (this.options.provider === 'mock' || !apiKey) {
+      this.log('info', 'Using mock embedding (provider unset or API key missing)');
+      return this.computeFallbackEmbedding(text);
+    }
+    return this.fetchEmbeddingFromOpenAI(text, apiKey, retry);
+  }
+
   private async fetchSummaryFromOpenAI(
     content: string,
     apiKey: string,

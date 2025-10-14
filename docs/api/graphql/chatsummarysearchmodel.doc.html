@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link type="text/css" rel="stylesheet" href="./styles/graphdoc.css" />
-    <title>specifiedBy</title>
+    <title>ChatSummarySearchModel</title>
     <link href="https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700" rel="stylesheet"><link type="text/css" rel="stylesheet" href="./assets/code.css" /><link type="text/css" rel="stylesheet" href="./assets/require-by.css" />
 </head>
 <body class="slds-scrollable--y">
@@ -105,7 +105,7 @@
                 BurndownSeriesModel
             </a>
         </li>
-        <li  title="ChatSummarySearchModel">
+        <li class="slds-is-active" title="ChatSummarySearchModel">
             <a href="chatsummarysearchmodel.doc.html" class="slds-navigation-list--vertical__action slds-text-link--reset slds-truncate">
                 ChatSummarySearchModel
             </a>
@@ -230,7 +230,7 @@
                 skip
             </a>
         </li>
-        <li class="slds-is-active" title="specifiedBy">
+        <li  title="specifiedBy">
             <a href="specifiedby.doc.html" class="slds-navigation-list--vertical__action slds-text-link--reset slds-truncate">
                 specifiedBy
             </a>
@@ -250,10 +250,9 @@
         </div>
     </div>
     <div class="container">
-        <p class="slds-text-title--caps slds-text-color--weak"></p>
-        <h1 class="slds-text-heading--large">specifiedBy</h1>
-        <div class="slds-text-body--regular"><p>Exposes a URL that specifies the behavior of this scalar.</p>
-</div>
+        <p class="slds-text-title--caps slds-text-color--weak">OBJECT</p>
+        <h1 class="slds-text-heading--large">ChatSummarySearchModel</h1>
+        <div class="slds-text-body--regular"></div>
     </div>
 </section>
 <section>
@@ -264,7 +263,7 @@
             </a>
             GraphQL Schema definition
         </h2>
-        <code class="highlight"><ul class="code" style="padding-left:28px"><li><span class="keyword operator ts">directive</span> <span class="keyword operator ts">@specifiedBy</span>(<span class="meta">url</span>: <a class="support type" href="string.doc.html">String</a>!) on <span class="keyword operator ts">SCALAR</span></li></ul></code>
+        <code class="highlight"><ul class="code" style="padding-left:42px"><li><span class="keyword operator ts">type</span> <span class="identifier">ChatSummarySearchModel</span> {</li><li></li><li><span class="tab"><span class="meta">channelName</span>: <a class="support type" href="string.doc.html">String</a> </span></li><li></li><li><span class="tab"><span class="meta">provider</span>: <a class="support type" href="chatprovider.doc.html">ChatProvider</a>! </span></li><li></li><li><span class="tab"><span class="meta">score</span>: <a class="support type" href="float.doc.html">Float</a>! </span></li><li></li><li><span class="tab"><span class="meta">summary</span>: <a class="support type" href="string.doc.html">String</a>! </span></li><li></li><li><span class="tab"><span class="meta">summaryLanguage</span>: <a class="support type" href="string.doc.html">String</a> </span></li><li></li><li><span class="tab"><span class="meta">threadId</span>: <a class="support type" href="id.doc.html">ID</a>! </span></li><li>}</li></ul></code>
     </div>
 </section>
 <section>
@@ -275,7 +274,7 @@
             </a>
             Require by
         </h2>
-        <div class="require-by anyone">This element is not required by anyone</div>
+        <ul class="require-by"><li><a href="query.doc.html" title="Query - ">Query<em>null</em></a><li></ul>
     </div>
 </section>
 <footer>

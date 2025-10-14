@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ProjectCollectionModel,
   ProjectMetricsModel,
@@ -6,7 +6,7 @@ import {
   TimelineModel,
 } from './models/project.model';
 import { ProjectService } from './project.service';
-import { CreateChatThreadDto, CreateProjectDto, ListProjectsFilterDto } from './dto/project.dto';
+import { ChatSummarySearchDto, CreateChatThreadDto, CreateProjectDto, ListProjectsFilterDto } from './dto/project.dto';
 
 @Controller('projects')
 export class ProjectController {
@@ -37,5 +37,16 @@ export class ProjectController {
   async createThread(@Param('id') projectId: string, @Body() dto: CreateChatThreadDto) {
     const thread = await this.projectService.createChatThread(projectId, dto);
     return thread;
+  }
+
+  @Get(':id/chat/summary-search')
+  async searchSummaries(@Param('id') projectId: string, @Query() query: ChatSummarySearchDto) {
+    if (!query.q || !query.q.trim()) {
+      throw new BadRequestException('Query parameter "q" is required');
+    }
+    return this.projectService.searchChatSummaries(projectId, query.q, {
+      top: query.top,
+      minScore: query.minScore,
+    });
   }
 }

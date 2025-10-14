@@ -182,6 +182,27 @@ export class ProjectMetricsModel {
 }
 
 @ObjectType()
+export class ChatSummarySearchModel {
+  @Field(() => ID)
+  threadId!: string;
+
+  @Field(() => ChatProvider)
+  provider!: ChatProvider;
+
+  @Field({ nullable: true })
+  channelName?: string;
+
+  @Field()
+  summary!: string;
+
+  @Field(() => Float)
+  score!: number;
+
+  @Field({ nullable: true })
+  summaryLanguage?: string;
+}
+
+@ObjectType()
 export class ProjectModel {
   @Field(() => ID)
   id!: string;

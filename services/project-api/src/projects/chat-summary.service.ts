@@ -7,7 +7,7 @@ import {
   SummaryResult,
 } from '../../../../shared/ai/chat-summary';
 import { DatadogMetricsService } from '../monitoring/datadog.service';
-import { VectorStore, VectorStorePayload } from './vector-store.service';
+import { VectorSearchResult, VectorStore, VectorStorePayload } from './vector-store.service';
 import { VECTOR_STORE_TOKEN } from './vector-store.token';
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 
@@ -97,6 +97,28 @@ export class ChatSummaryService {
       });
     }
     return result;
+  }
+
+  async searchSummaries(projectId: string, query: string, options?: { topK?: number; minScore?: number }): Promise<VectorSearchResult[]> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+    try {
+      const embedding = await this.summarizer.embedText(trimmed);
+      const results = await this.vectorStore.searchSimilar({
+        projectId,
+        embedding,
+        topK: options?.topK ?? 5,
+        minScore: options?.minScore ?? 0,
+      });
+      this.metrics.increment('chat_summarizer.search.success', 1, [`project:${projectId}`, `count:${results.length}`]);
+      return results;
+    } catch (error) {
+      this.logger.warn(`Chat summary search failed for project ${projectId}`, error as Error);
+      this.metrics.increment('chat_summarizer.search.error', 1, [`project:${projectId}`]);
+      return [];
+    }
   }
 
   private formatLog(message: string, meta?: Record<string, unknown>): string {
