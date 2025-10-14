@@ -1,0 +1,32 @@
+[
+  {
+    "tag": "project_management",
+    "description": "複数プロジェクトを同時にリードできる能力",
+    "category": "leadership",
+    "weight": 0.9
+  },
+  {
+    "tag": "nestjs",
+    "description": "NestJS フレームワークで API を設計・実装できる",
+    "category": "backend",
+    "weight": 0.8
+  },
+  {
+    "tag": "react_ui",
+    "description": "React + TypeScript で UI を実装し、状態管理を設計できる",
+    "category": "frontend",
+    "weight": 0.7
+  },
+  {
+    "tag": "ai_prompting",
+    "description": "生成AIのプロンプト設計・評価ができる",
+    "category": "ai",
+    "weight": 0.6
+  },
+  {
+    "tag": "hr_policy",
+    "description": "評価制度と労務コンプライアンスに精通している",
+    "category": "people_ops",
+    "weight": 0.85
+  }
+]
