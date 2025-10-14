@@ -23,6 +23,23 @@ graph TD
 
 詳細なトリガーや品質ゲートは `ai-devflow.yaml` を参照してください。
 
+### yaml フォーマットの補足
+```yaml
+version: 1
+metadata:
+  owner: ai-dev-team
+stages:
+  - id: spec_authoring
+    actors:
+      - role: product_owner
+        responsibilities:
+          - approve scope
+    gates:
+      - type: review
+        reviewer: domain_lead
+```
+`stages[].gates` に品質ゲートを追加することで、自動チェックや AI レビューのオプションを柔軟に拡張できます。
+
 ## 3. 運用ガイド
 - `ai-devflow.yaml` の更新は四半期ごとに見直し、変更時は #ai-devflow-updates で告知します。
 - 仕様→コード生成パイプラインは GitHub Actions から参照されることを前提に命名規則を統一します。
