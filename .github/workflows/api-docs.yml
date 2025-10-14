@@ -16,9 +16,22 @@ on:
       - 'scripts/generate-api-docs.sh'
       - 'docs/api/**'
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: api-docs-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   generate:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+      diffstat: ${{ steps.detect.outputs.diffstat }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,8 +48,8 @@ jobs:
       - name: Generate API docs
         run: ./scripts/generate-api-docs.sh
 
-      - name: Capture docs diff
-        id: diff
+      - name: Detect docs diff
+        id: detect
         run: |
           if git diff --quiet -- docs/api; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -50,26 +63,44 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload generated docs
-        if: steps.diff.outputs.changed == 'true'
-        uses: actions/upload-artifact@v4
+      - name: Upload Pages artifact
+        if: steps.detect.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: api-docs
           path: docs/api
 
-      - name: Comment diff summary
-        if: github.event_name == 'pull_request'
+      - name: Ensure docs up to date
+        if: steps.detect.outputs.changed == 'true' && github.event_name != 'push'
+        run: |
+          echo "docs/api に未コミットの差分があります。`./scripts/generate-api-docs.sh` を実行して成果物をコミットしてください。"
+          exit 1
+
+  deploy:
+    needs: generate
+    runs-on: ubuntu-latest
+    if: needs.generate.outputs.changed == 'true'
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v4
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  comment:
+    needs: [generate, deploy]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Post PR comment
         uses: peter-evans/create-or-update-comment@v3
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body-includes: "### API Docs Check"
           body: |
             ### API Docs Check
-            Status: ${{ steps.diff.outputs.changed == 'true' && '差分あり ❌' || '最新 ✅' }}
-            ${{ steps.diff.outputs.changed == 'true' && format('```\n{0}\n```', steps.diff.outputs.diffstat) || 'docs/api ディレクトリに変更はありません。' }}
-
-      - name: Ensure docs up to date
-        if: steps.diff.outputs.changed == 'true'
-        run: |
-          echo "docs/api に未コミットの差分があります。`./scripts/generate-api-docs.sh` を実行して成果物をコミットしてください。"
-          exit 1
+            Status: ${{ needs.generate.outputs.changed == 'true' && '差分あり ❌' || '最新 ✅' }}
+            ${{ needs.generate.outputs.changed == 'true' && format('```
+{0}
+```', needs.generate.outputs.diffstat) || 'docs/api ディレクトリに変更はありません。' }}
+            ${{ needs.generate.outputs.changed == 'true' && format('Preview: {0}', needs.deploy.outputs.page_url) || '' }}
