@@ -11,11 +11,11 @@ Issue #296 / #159 の範囲として、見積・受注・与信フローをカ�
 ## 2. エンティティ
 | エンティティ | 主な属性 | 備考 |
 |--------------|----------|------|
-| Quote | id, quoteNumber, customerId, status, currency, totalAmount, validUntil | ステータス: Draft/PendingApproval/Approved/Rejected |
-| QuoteItem | id, quoteId, productCode, quantity, unitPrice, discountRate | 税込・税抜の2軸を保持 |
+| Quote | id, quoteNumber, customerId, status, currency, totalAmount, validUntil, version | ステータス: DRAFT/PENDING_APPROVAL/APPROVED/REJECTED |
+| QuoteItem | id, quoteId, productCode, quantity, unitPrice, discountRate | 金額は `REAL` (SQLite) / `NUMERIC(12,2)` (Postgres) |
 | Order | id, orderNumber, quoteId, status, signedAt, paymentTerm | ステータス: Pending/Fulfilled/Cancelled |
 | CreditReview | id, orderId, status, reviewerUserId, score, remarks | ステータス: Requested/Approved/Rejected |
-| OrderAuditLog | id, orderId, changeType, payload, createdAt | 電子帳簿法対象。改ざん防止ログに送信 |
+| OrderAuditLog | id, orderId, changeType, payload, createdAt, checksum | 電子帳簿法対象。payload は JSON 文字列、checksum で改ざん検知 |
 
 ## 3. API / GraphQL
 ```graphql
@@ -37,7 +37,7 @@ REST エンドポイント（初期案）:
 - `POST /api/v1/sales/orders/{id}/credit-review`
 
 ## 4. ビジネスルール
-- 見積の合計金額は QuoteItem の税込/税抜を双方保持し、受注変換時に税込金額を確定
+- 見積の合計金額は QuoteItem 単価・数量・割引率から算出し、Order 作成時に確定
 - 与信未承認の受注は請求モジュールへ伝播させない Feature Flag を導入
 - OrderAuditLog は KMS 署名付きで保存し、7 年保管
 - Quote → Order の変換で版履歴を残し、再承認が必要
