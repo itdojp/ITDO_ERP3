@@ -61,4 +61,4 @@ REST エンドポイント（初期案）:
 ## 8. 未確定事項
 - 与信外部サービスの最終選定（AWS Marketplace vs 自社）
 - 電子帳簿法ログのバックアップ戦略（S3 Glacier Deep Archive）
-- Slack 通知チャネル（#sales-ops or #finance-alerts）
+- Slack 通知チャネル：CloudWatch アラートは `#sales-ops-alerts`、リリース実況・KPI 共有は `#sales-ops`
