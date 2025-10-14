@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ChatThread, Prisma, Project as ProjectEntity } from '@prisma/client';
 import { ChatSummaryService } from './chat-summary.service';
+import { SummaryResult } from '../../../../shared/ai/chat-summary';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildBurndownSeries, calculateEvm } from '../../../../shared/metrics/evm';
 import {
@@ -145,7 +146,8 @@ export class ProjectService {
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((phase) => ({ id: phase.id, name: phase.name, sortOrder: phase.sortOrder })),
       metrics,
-      chatSummary: chatSummary ?? undefined,
+      chatSummary: chatSummary?.summary ?? undefined,
+      chatSummaryLanguage: chatSummary?.language,
     };
   }
 
@@ -229,14 +231,36 @@ export class ProjectService {
     return project;
   }
 
-  private async resolveChatSummary(project: ProjectWithRelations) {
+  private async resolveChatSummary(project: ProjectWithRelations): Promise<SummaryResult | null> {
     const primaryThread = project.chatThreads[0];
     if (!primaryThread) {
-      return project.description ? `No chat thread. ${project.description}` : null;
+      const fallback = project.description ? `No chat thread. ${project.description}` : null;
+      if (!fallback) {
+        return null;
+      }
+      return {
+        summary: fallback,
+        embedding: [],
+        language: this.chatSummaryLanguageFallback(project),
+        usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
+      };
     }
 
     if (primaryThread.summary) {
-      return primaryThread.summary;
+      const existingLanguage = (primaryThread as { summaryLanguage?: string }).summaryLanguage;
+      const normalizedLanguage: 'ja' | 'en' = existingLanguage === 'en' ? 'en' : 'ja';
+      const existingUsage = this.toSummaryUsage((primaryThread as { summaryUsage?: string }).summaryUsage ?? undefined);
+      return {
+        summary: primaryThread.summary,
+        embedding: this.toNumericVector(primaryThread.summaryEmbedding),
+        language: normalizedLanguage,
+        usage:
+          existingUsage ?? {
+            totalTokens: 0,
+            promptTokens: 0,
+            completionTokens: 0,
+          },
+      };
     }
 
     if (primaryThread.messages.length === 0) {
@@ -249,6 +273,10 @@ export class ProjectService {
         content: message.content,
         postedAt: message.postedAt.toISOString(),
       })),
+      {
+        projectId: project.id,
+        threadId: primaryThread.id,
+      },
     );
 
     await this.prisma.chatThread.update({
@@ -256,10 +284,16 @@ export class ProjectService {
       data: {
         summary: summary.summary,
         summaryEmbedding: JSON.stringify(summary.embedding),
+        summaryLanguage: summary.language,
+        summaryUsage: JSON.stringify(summary.usage),
       },
     });
 
-    return summary.summary;
+    return summary;
+  }
+
+  private chatSummaryLanguageFallback(project: ProjectWithRelations): 'ja' | 'en' {
+    return project.description && /[\u3040-\u30ff\u4e00-\u9faf]/.test(project.description) ? 'ja' : 'en';
   }
 
   private async ensureProjectExists(projectId: string) {
@@ -286,13 +320,21 @@ export class ProjectService {
     };
   }
 
-  private toChatThreadModel(thread: ChatThread & { summaryEmbedding: string | null }): ChatThreadModel {
+  private toChatThreadModel(
+    thread: ChatThread & {
+      summaryEmbedding: string | null;
+      summaryLanguage?: string | null;
+      summaryUsage?: unknown;
+    },
+  ): ChatThreadModel {
     return {
       id: thread.id,
       provider: this.mapProvider(thread.provider),
       externalThreadId: thread.externalThreadId,
       summaryEmbedding: this.toNumericVector(thread.summaryEmbedding),
       channelName: thread.channelName ?? undefined,
+      summaryLanguage: thread.summaryLanguage ?? undefined,
+      summaryUsage: this.toSummaryUsage(thread.summaryUsage),
     };
   }
 
@@ -319,6 +361,27 @@ export class ProjectService {
     } catch (error) {
       return [];
     }
+  }
+
+  private toSummaryUsage(
+    value: unknown,
+  ): { totalTokens: number; promptTokens: number; completionTokens: number } | undefined {
+    if (!value || typeof value !== 'string') {
+      return undefined;
+    }
+    let record: Record<string, unknown>;
+    try {
+      record = JSON.parse(value) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+    const totalTokens = Number(record.totalTokens ?? record.total_tokens ?? 0);
+    const promptTokens = Number(record.promptTokens ?? record.prompt_tokens ?? 0);
+    const completionTokens = Number(record.completionTokens ?? record.completion_tokens ?? 0);
+    if ([totalTokens, promptTokens, completionTokens].every((num) => Number.isFinite(num))) {
+      return { totalTokens, promptTokens, completionTokens };
+    }
+    return undefined;
   }
 
   private mapProjectStatus(value: string): ProjectStatus {

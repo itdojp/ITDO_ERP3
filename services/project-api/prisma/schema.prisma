@@ -76,6 +76,8 @@ model ChatThread {
   channelName      String?
   summary          String?
   summaryEmbedding String?
+  summaryLanguage  String?
+  summaryUsage     String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
