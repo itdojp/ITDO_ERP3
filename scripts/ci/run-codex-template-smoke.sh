@@ -10,6 +10,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+fail_when_missing() {
+  local path="$1"
+  if [[ ! -f "$path" ]]; then
+    echo "[error] expected file not found: $path" >&2
+    exit 1
+  fi
+}
+
 echo "Using catalog: $CATALOG_PATH"
 echo "Temporary workspace: $TEMP_ROOT"
 
@@ -67,5 +75,38 @@ generate_template "react-ui" \
 # GitHub Actions template smoke (lint only)
 generate_template "github-action" \
   --set workflowName=\"Smoke CI\" || echo "github-action template generation skipped"
+
+# Codex CLI scaffolding smoke (local templates)
+CLI_TARGET="$TEMP_ROOT/codex-cli"
+mkdir -p "$CLI_TARGET"
+
+echo "::group::Codex CLI template smoke (nest-module)"
+CLI_NEST_DIR="$CLI_TARGET/nest-module"
+node "$ROOT_DIR/scripts/templates/create-module.js" \
+  --type nest-module \
+  --name smoke-module \
+  --target "$CLI_NEST_DIR"
+fail_when_missing "$CLI_NEST_DIR/module.ts"
+fail_when_missing "$CLI_NEST_DIR/service.ts"
+fail_when_missing "$CLI_NEST_DIR/resolver.ts"
+echo "::endgroup::"
+
+echo "::group::Codex CLI template smoke (terraform-stack)"
+CLI_TERRAFORM_DIR="$CLI_TARGET/terraform-stack"
+node "$ROOT_DIR/scripts/templates/create-module.js" \
+  --type terraform-stack \
+  --name smoke-monitoring \
+  --target "$CLI_TERRAFORM_DIR"
+fail_when_missing "$CLI_TERRAFORM_DIR/main.tf"
+echo "::endgroup::"
+
+echo "::group::Codex CLI template smoke (runbook)"
+CLI_RUNBOOK_DIR="$CLI_TARGET/runbook"
+node "$ROOT_DIR/scripts/templates/create-module.js" \
+  --type runbook \
+  --name smoke-runbook \
+  --target "$CLI_RUNBOOK_DIR"
+fail_when_missing "$CLI_RUNBOOK_DIR/runbook.md"
+echo "::endgroup::"
 
 echo "Codex template smoke run completed successfully."
