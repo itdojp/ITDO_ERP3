@@ -12,11 +12,11 @@ Issue #295 / #159 に基づき、Phase2 で実装する CRM モジュールの�
 ## 2. エンティティとリレーション
 | エンティティ | 主な属性 | 備考 |
 |--------------|----------|------|
-| Customer | id, name, type, industry, ownerUserId, tags[] | 法人／個人双方を扱えるスキーマ |
+| Customer | id, name, type, industry, ownerUserId, tagsJson | タグは JSON 文字列（SQLite 互換）。本番では pgvector + JSONB へ移行予定 |
 | Contact | id, customerId, name, role, email, phone | 顧客担当者。Slack/Meet 等の識別子も保持 |
 | Opportunity | id, customerId, title, stage, amount, expectedClose | 案件フェーズ（Lead/Qualified/Proposal/Negotiation/Won/Lost） |
 | InteractionNote | id, customerId, contactId?, occurredAt, channel, rawText | 会話ログの原文保存。要約は AI 側で付随 |
-| ConversationSummary | id, interactionId, embedding, summaryText, followupSuggested | LangGraph で生成した要約を保持 |
+| ConversationSummary | id, interactionId, embedding, summaryText, followupSuggestedJson | LangGraph で生成した要約。フォローアップは JSON 文字列で保持 |
 
 リレーション:
 - Customer 1 - n Contact / Opportunity / InteractionNote
@@ -38,11 +38,13 @@ createOpportunity(input: CreateOpportunityInput!): Opportunity!
 conversationSummaries(customerId: ID!, limit: Int = 20): [ConversationSummary!]
 ```
 
-REST エンドポイント（暫定）：
-- `GET /api/v1/crm/customers`
+REST エンドポイント：
+- `GET /api/v1/crm/customers` (search/type/industry クエリパラメータ対応)
 - `POST /api/v1/crm/customers`
-- `GET /api/v1/crm/opportunities`
+- `PATCH /api/v1/crm/customers/:id`
+- `GET /api/v1/crm/customers/:id/opportunities`
 - `POST /api/v1/crm/opportunities`
+- `POST /api/v1/crm/interaction-notes`
 
 ## 4. バリデーション / ビジネスルール
 - 顧客名 + 担当者の組合せで重複登録を防止
@@ -51,7 +53,7 @@ REST エンドポイント（暫定）：
 - ConversationSummary の followupSuggested は最大 5 件
 
 ## 5. 非機能要件
-- pgvector を利用して ConversationSummary.embedding を格納し、会話検索を最適化
+- pgvector を利用して ConversationSummary.embedding を格納し、会話検索を最適化（SQLite では TEXT, 本番は pgvector）
 - 監査ログ (customer.created/updated, opportunity.stageChanged) を既存監査ストリームへ発行
 - 1 分毎のバッチ連携（外部チャット統合）を想定し、API タイムアウトは 5 秒以下
 
@@ -65,8 +67,8 @@ REST エンドポイント（暫定）：
 
 ## 8. AI DevFlow バリデーション
 - Spec 作成 → `node scripts/templates/create-module.js --type nest-module --name crm --target services/project-api/src/crm`
-- プロジェクト全体の lint には既存検証エラーがあるため、`npx eslint src/crm` で新規モジュールの整合性を確認
-- `2025-10-14` 時点で CRM モジュール配下は lint OK。全体 lint の修正は別 Issue で追跡
+- `npx eslint src/crm src/sales` で新規モジュールの整合性を確認（プロジェクト全体 lint は別 Issue で追跡）
+- `2025-10-14` 時点で CRM / Sales モジュール配下は lint OK。全体 lint の修正は別 Issue で追跡
 
 ## 9. 未決事項
 - Customer スキーマのセグメント分類 (ARR/NRR) → Finance チームと連携予定

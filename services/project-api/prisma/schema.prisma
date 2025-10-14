@@ -8,15 +8,15 @@ datasource db {
 }
 
 model Project {
-  id          String         @id @default(cuid())
-  code        String         @unique
+  id          String    @id @default(cuid())
+  code        String    @unique
   name        String
   description String?
-  status      String         @default("draft")
+  status      String    @default("draft")
   startDate   DateTime
   endDate     DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   plannedValue Float @default(0)
   earnedValue  Float @default(0)
@@ -30,10 +30,10 @@ model Project {
 }
 
 model Phase {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   projectId String
   name      String
-  sortOrder Int      @default(0)
+  sortOrder Int       @default(0)
   startDate DateTime?
   endDate   DateTime?
 
@@ -42,7 +42,7 @@ model Phase {
 }
 
 model Task {
-  id          String     @id @default(cuid())
+  id          String   @id @default(cuid())
   projectId   String
   phaseId     String?
   name        String
@@ -50,15 +50,15 @@ model Task {
   status      String
   startDate   DateTime
   endDate     DateTime
-  effortHours Float      @default(0)
-  orderIndex  Int        @default(0)
+  effortHours Float    @default(0)
+  orderIndex  Int      @default(0)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
 }
 
 model Risk {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   projectId   String
   probability Int
   impact      Int
@@ -69,39 +69,194 @@ model Risk {
 }
 
 model ChatThread {
-  id               String        @id @default(cuid())
+  id               String   @id @default(cuid())
   projectId        String
   provider         String
-  externalThreadId String        @unique
+  externalThreadId String   @unique
   channelName      String?
   summary          String?
   summaryEmbedding String?
   summaryLanguage  String?
   summaryUsage     String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   messages ChatMessage[]
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  threadId  String
-  author    String
-  content   String
-  postedAt  DateTime
+  id       String   @id @default(cuid())
+  threadId String
+  author   String
+  content  String
+  postedAt DateTime
 
   thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 }
 
 model BurndownPoint {
-  id         String  @id @default(cuid())
+  id         String @id @default(cuid())
   projectId  String
   label      String
   planned    Float
   actual     Float
-  orderIndex Int     @default(0)
+  orderIndex Int    @default(0)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  externalId  String?  @unique
+  name        String
+  type        String   @default("CUSTOMER")
+  industry    String?
+  ownerUserId String?
+  tagsJson    String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contacts         Contact[]
+  opportunities    Opportunity[]
+  interactionNotes InteractionNote[]
+  quotes           Quote[]
+  orders           Order[]
+}
+
+model Contact {
+  id           String   @id @default(cuid())
+  customerId   String
+  name         String
+  role         String?
+  email        String?
+  phone        String?
+  slackUserId  String?
+  meetIdentity String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  notes    InteractionNote[] @relation("ContactNotes")
+}
+
+model Opportunity {
+  id             String    @id @default(cuid())
+  customerId     String
+  title          String
+  stage          String    @default("LEAD")
+  amount         Float     @default(0)
+  currency       String    @default("JPY")
+  expectedClose  DateTime?
+  ownerUserId    String?
+  stageEnteredAt DateTime? @default(now())
+  probability    Int?      @default(0)
+  statusReason   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  customer Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  notes    InteractionNote[] @relation("OpportunityNotes")
+}
+
+model InteractionNote {
+  id            String   @id @default(cuid())
+  customerId    String
+  contactId     String?
+  opportunityId String?
+  occurredAt    DateTime @default(now())
+  channel       String
+  rawText       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customer    Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contact     Contact?             @relation("ContactNotes", fields: [contactId], references: [id], onDelete: SetNull)
+  opportunity Opportunity?         @relation("OpportunityNotes", fields: [opportunityId], references: [id], onDelete: SetNull)
+  summary     ConversationSummary?
+}
+
+model ConversationSummary {
+  id                    String   @id @default(cuid())
+  interactionId         String   @unique
+  summaryText           String
+  followupSuggestedJson String   @default("[]")
+  embedding             Bytes?
+  confidence            Float    @default(0)
+  createdAt             DateTime @default(now())
+
+  interaction InteractionNote @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+}
+
+model Quote {
+  id          String    @id @default(cuid())
+  quoteNumber String    @unique
+  customerId  String
+  status      String    @default("DRAFT")
+  currency    String    @default("JPY")
+  totalAmount Float     @default(0)
+  validUntil  DateTime?
+  version     Int       @default(1)
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    QuoteItem[]
+  order    Order?
+}
+
+model QuoteItem {
+  id           String  @id @default(cuid())
+  quoteId      String
+  productCode  String
+  description  String?
+  quantity     Int
+  unitPrice    Float   @default(0)
+  discountRate Float   @default(0)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id          String    @id @default(cuid())
+  orderNumber String    @unique
+  quoteId     String    @unique
+  customerId  String
+  status      String    @default("PENDING")
+  signedAt    DateTime?
+  paymentTerm String
+  totalAmount Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  quote         Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  customer      Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  creditReviews CreditReview[]
+  auditLogs     OrderAuditLog[]
+}
+
+model CreditReview {
+  id             String    @id @default(cuid())
+  orderId        String
+  status         String    @default("REQUESTED")
+  reviewerUserId String?
+  score          Float?
+  remarks        String?
+  requestedAt    DateTime  @default(now())
+  decidedAt      DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model OrderAuditLog {
+  id         String   @id @default(cuid())
+  orderId    String
+  changeType String
+  payload    String
+  createdAt  DateTime @default(now())
+  checksum   String
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
