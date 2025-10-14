@@ -46,9 +46,17 @@ node scripts/notifications/send-summary.js \
 - Webhook URL が無効 (HTTP 410) の場合は再発行。
 - Payload サイズ (40KB) 超過に注意。結果件数を `--top 3` などで縮小。
 
-## 監視メトリクス
-- `chat_summarizer.search.success` / `chat_summarizer.search.error`
-- Nightly CLI 実行結果 (予定): GitHub Actions の exit code でモニタリング。
+## 監視メトリクス / SLA
+- Datadog ダッシュボード (import: `docs/monitoring/chat-summarizer-dashboard.json`)
+  - `chat_summarizer.success` vs `chat_summarizer.failure`
+  - `chat_summarizer.retry_exhausted`
+  - `chat_summarizer.duration_ms` 平均
+  - 検索成功率 `chat_summarizer.search.success` / `chat_summarizer.search.error`
+- SLA 目標
+  - 要約成功率: 99% 以上 (5分平均)
+  - 検索成功率: 97% 以上
+  - リトライ枯渇 (`retry_exhausted`) が 5 分間に 3 回連続発生したら当番に通知
+- Nightly CLI (GitHub Actions) で Slack 通知の乾式実行を継続監視。
 
 ## 関連資料
 - [Project Dashboard (AI ハイライト)](project-dashboard.md)
