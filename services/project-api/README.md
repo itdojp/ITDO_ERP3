@@ -9,6 +9,7 @@ Project API は ITDO ERP3 のプロジェクト管理・チャット連携の試
 - Slack / Teams スレッドのプロビジョニング
 - OpenAI ベースのチャット要約（再試行・多言語切替・ベクトル保存・Datadog メトリクス連携）
 - DocuSign Webhook / 契約イベント連携による請求書生成パイプライン
+- CRM 顧客管理と Sales オペレーション（見積・受注・クレジット審査）API、CloudWatch メトリクス連携
 
 ## セットアップ
 
@@ -50,6 +51,15 @@ OpenAI を利用する場合は `.env` に以下の変数を設定してくだ�
 
 DocuSign Webhook (`/billing/docusign/webhook`) は `completed` イベントを `SIGNED` として取り込み、契約 ID 単位で請求書をキューイングします。ローカル検証では `/billing/contracts/events` に `SIGNED` イベントを POST すると同じフローを起動できます。
 
+### Sales メトリクス設定
+
+| 環境変数 | 説明 |
+|----------|------|
+| `SALES_METRICS_ENABLED` | `true` で CloudWatch 送信を有効化（未設定時はローカル集計のみ） |
+| `SALES_METRICS_NAMESPACE` | CloudWatch メトリクスの名前空間。デフォルト `ITDO/Sales` |
+| `SALES_METRICS_ENV` | メトリクスに付与する Environment タグ（`APP_ENVIRONMENT` / `DD_ENV` をフォールバック） |
+| `AWS_REGION` | CloudWatch / SNS などに利用するリージョン |
+
 ## REST エンドポイント
 
 | Method | Path | 説明 |
@@ -61,6 +71,14 @@ DocuSign Webhook (`/billing/docusign/webhook`) は `completed` イベントを `
 | `POST` | `/api/v1/projects/:id/chat/threads` | Slack / Teams スレッドの生成 |
 | `POST` | `/billing/docusign/webhook` | DocuSign Webhook (PoC) |
 | `POST` | `/billing/contracts/events` | 契約イベントを手動登録し請求パイプラインを起動 |
+| `GET` | `/api/v1/crm/customers` | CRM 顧客一覧と検索 |
+| `POST` | `/api/v1/crm/customers` | CRM 顧客の登録 |
+| `GET` | `/api/v1/sales/quotes` | 見積一覧（`customerId` / `status` フィルタ対応） |
+| `POST` | `/api/v1/sales/quotes` | 見積作成（CloudWatch `QuoteCreatedCount` を送信） |
+| `GET` | `/api/v1/sales/orders` | 受注一覧（`customerId` でフィルタ） |
+| `POST` | `/api/v1/sales/orders` | 受注作成（見積承認と pending クレジット再計算） |
+| `GET` | `/api/v1/sales/metrics` | Sales KPI スナップショット取得 |
+| `POST` | `/api/v1/sales/orders/:orderId/credit-review` | クレジット審査承認と CloudWatch 更新 |
 
 サンプル:
 
@@ -83,7 +101,7 @@ curl http://localhost:3000/api/v1/projects/proj-1001/timeline
 
 ## GraphQL
 
-GraphQL はコードファースト構成で、`dist/schema.gql` に自動生成されます。主な操作は下記の通りです。
+GraphQL はコードファースト構成で、`dist/schema.gql` に自動生成されます。Project ドメインに加えて、CRM / Sales リゾルバから `quotes`, `orders`, `approveCreditReview`, `salesMetrics` などの操作を提供します。主な操作は下記の通りです。
 
 ```graphql
 query ActiveProjects {
@@ -106,7 +124,19 @@ mutation CreateProject {
 }
 ```
 
-`projectTimeline`, `projectMetrics`, `projectChatThreads` などのクエリでタイムラインおよびチャットスレッドの情報を取得できます。
+```graphql
+query SalesSnapshot {
+  salesMetrics {
+    generatedAt
+    totalQuotes
+    totalOrders
+    pendingCreditReviews
+    quoteToOrderConversionRate
+  }
+}
+```
+
+`projectTimeline`, `projectMetrics`, `projectChatThreads` に加え、`quotes(filter: { status: PENDING_APPROVAL })` や `salesMetrics` で Sales KPI のスナップショットを取得できます。
 
 ## テスト
 

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { Field, Float, ID, InputType } from '@nestjs/graphql';
+import { Field, Float, ID, InputType, Int } from '@nestjs/graphql';
 import { GraphQLISODateTime } from 'graphql-scalars';
 
 @InputType()

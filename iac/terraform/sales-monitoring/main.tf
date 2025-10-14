@@ -13,7 +13,7 @@ provider "aws" {
 }
 
 locals {
-  namespace      = "ITDO/Sales"
+  namespace      = var.metrics_namespace
   dashboard_name = "sales-overview-${var.environment}"
 }
 
@@ -74,4 +74,11 @@ resource "aws_cloudwatch_metric_alarm" "credit_review_sla" {
 
   alarm_actions = [var.alert_topic_arn]
   ok_actions    = [var.alert_topic_arn]
+}
+
+resource "aws_sns_topic_subscription" "sales_ops_slack" {
+  count     = var.slack_webhook_url == "" ? 0 : 1
+  topic_arn = var.alert_topic_arn
+  protocol  = "https"
+  endpoint  = var.slack_webhook_url
 }

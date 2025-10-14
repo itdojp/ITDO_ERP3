@@ -23,7 +23,7 @@ export class OrderModel {
   @Field(() => Float)
   totalAmount!: number;
 
-  @Field()
+  @Field(() => String)
   paymentTerm!: string;
 
   @Field(() => GraphQLISODateTime, { nullable: true })
@@ -52,6 +52,7 @@ export class CreateOrderInput {
 
   @Field(() => Float, { nullable: true })
   totalAmount?: number;
+
   @Field(() => GraphQLISODateTime, { nullable: true })
   signedAt?: Date;
 }

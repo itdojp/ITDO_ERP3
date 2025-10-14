@@ -43,7 +43,8 @@ REST エンドポイント（初期案）:
 - Quote → Order の変換で版履歴を残し、再承認が必要
 
 ## 5. 非機能 / インテグレーション
-- Terraform Stack `iac/terraform/sales-monitoring` で CloudWatch メトリクス + Slack 通知
+- Terraform Stack `iac/terraform/sales-monitoring` で CloudWatch メトリクス + Slack 通知（`QuoteCreatedCount` / `OrderCreatedCount` / `CreditPendingCount` を監視）
+- 環境変数 `SALES_METRICS_ENABLED`, `SALES_METRICS_NAMESPACE`, `SALES_METRICS_ENV` を用意し、CloudWatch メトリクス送信を制御する
 - Electron Ledger 対応のため `docs/compliance/sales-ledger.md` で運用ポリシーを定義
 - GitHub Actions で sales モジュールのスモークテストを追加（#299で補完）
 

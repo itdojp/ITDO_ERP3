@@ -4,22 +4,23 @@ import {
   AddInteractionNoteInput,
   CreateCustomerInput,
   CreateOpportunityInput,
+  CustomerFilterInput,
   UpdateCustomerInput,
-} from './dto/crm.input';
-import { CustomerModel, InteractionNoteModel, OpportunityModel } from './models/crm.model';
+} from './dto/customer.input';
+import { CustomerModel, InteractionNoteModel, OpportunityModel } from './models/customer.model';
 
 @Controller('api/v1/crm')
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 
   @Get('customers')
-  listCustomers(
-    @Query('search') search?: string,
-    @Query('type') type?: string,
-    @Query('industry') industry?: string,
-  ): Promise<CustomerModel[]> {
-    const filter = search || type || industry ? { search, type, industry } : undefined;
+  listCustomers(@Query() filter?: CustomerFilterInput): Promise<CustomerModel[]> {
     return this.crmService.listCustomers(filter);
+  }
+
+  @Get('customers/:id')
+  getCustomer(@Param('id') id: string): Promise<CustomerModel> {
+    return this.crmService.getCustomer(id);
   }
 
   @Post('customers')
@@ -36,8 +37,8 @@ export class CrmController {
   }
 
   @Get('customers/:id/opportunities')
-  customerOpportunities(@Param('id') id: string): Promise<OpportunityModel[]> {
-    return this.crmService.listOpportunities(id);
+  listOpportunities(@Param('id') customerId: string): Promise<OpportunityModel[]> {
+    return this.crmService.listOpportunities(customerId);
   }
 
   @Post('opportunities')

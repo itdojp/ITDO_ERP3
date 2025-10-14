@@ -5,21 +5,16 @@ import {
   AddInteractionNoteInput,
   CreateCustomerInput,
   CreateOpportunityInput,
+  CustomerFilterInput,
   UpdateCustomerInput,
-} from './dto/crm.input';
+} from './dto/customer.input';
 import {
   ContactModel,
   ConversationSummaryModel,
   CustomerModel,
   InteractionNoteModel,
   OpportunityModel,
-} from './models/crm.model';
-
-type CustomerFilter = {
-  search?: string;
-  type?: string;
-  industry?: string;
-};
+} from './models/customer.model';
 
 interface ConversationSummaryEntity {
   id: string;
@@ -76,68 +71,54 @@ interface CustomerEntity {
 export class CrmService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listCustomers(filter?: CustomerFilter): Promise<CustomerModel[]> {
+  async listCustomers(filter?: CustomerFilterInput): Promise<CustomerModel[]> {
     const where: Prisma.CustomerWhereInput = {};
-
-    const filterValues: CustomerFilter = filter ? { ...filter } : {};
-
-    if (filterValues.type) {
-      where.type = filterValues.type;
+    if (filter?.type) {
+      where.type = filter.type;
     }
-
-    if (filterValues.industry) {
-      where.industry = { equals: filterValues.industry, mode: 'insensitive' };
+    if (filter?.industry) {
+      where.industry = { equals: filter.industry, mode: 'insensitive' };
     }
-
-    if (filterValues.search) {
+    if (filter?.search) {
       where.OR = [
-        { name: { contains: filterValues.search, mode: 'insensitive' } },
-        { industry: { contains: filterValues.search, mode: 'insensitive' } },
+        { name: { contains: filter.search, mode: 'insensitive' } },
+        { industry: { contains: filter.search, mode: 'insensitive' } },
       ];
     }
 
-    const customers = await this.prisma.customer.findMany({
+    const prismaCustomers = await this.prisma.customer.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
       include: {
         contacts: true,
         opportunities: {
           orderBy: { createdAt: 'desc' },
-          include: {
-            notes: {
-              orderBy: { createdAt: 'desc' },
-              include: { summary: true },
-            },
-          },
+          include: { notes: { orderBy: { createdAt: 'desc' }, include: { summary: true } } },
         },
       },
     });
 
-    return (customers as CustomerEntity[]).map((entity) => this.mapCustomer(entity));
+    const customers = prismaCustomers as unknown as CustomerEntity[];
+    return customers.map((customer) => this.mapCustomer(customer));
   }
 
   async getCustomer(id: string): Promise<CustomerModel> {
-    const customer = await this.prisma.customer.findUnique({
+    const prismaCustomer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
         contacts: true,
         opportunities: {
           orderBy: { createdAt: 'desc' },
-          include: {
-            notes: {
-              orderBy: { createdAt: 'desc' },
-              include: { summary: true },
-            },
-          },
+          include: { notes: { orderBy: { createdAt: 'desc' }, include: { summary: true } } },
         },
       },
     });
 
-    if (!customer) {
+    if (!prismaCustomer) {
       throw new NotFoundException(`Customer ${id} not found`);
     }
 
-    return this.mapCustomer(customer as CustomerEntity);
+    return this.mapCustomer(prismaCustomer as unknown as CustomerEntity);
   }
 
   async createCustomer(input: CreateCustomerInput): Promise<CustomerModel> {
@@ -145,8 +126,8 @@ export class CrmService {
       data: {
         name: input.name,
         type: input.type ?? 'CUSTOMER',
-        industry: input.industry,
-        ownerUserId: input.ownerUserId,
+        industry: input.industry ?? null,
+        ownerUserId: input.ownerUserId ?? null,
         tagsJson: JSON.stringify(input.tags ?? []),
       },
       include: {
@@ -157,7 +138,7 @@ export class CrmService {
       },
     });
 
-    return this.mapCustomer(customer);
+    return this.mapCustomer(customer as unknown as CustomerEntity);
   }
 
   async updateCustomer(id: string, input: UpdateCustomerInput): Promise<CustomerModel> {
@@ -178,13 +159,12 @@ export class CrmService {
       },
     });
 
-    return this.mapCustomer(customer);
+    return this.mapCustomer(customer as unknown as CustomerEntity);
   }
 
   async createOpportunity(input: CreateOpportunityInput): Promise<OpportunityModel> {
-    await this.assertCustomerExists(input.customerId);
-
-    const opportunity = await this.prisma.opportunity.create({
+    await this.ensureCustomerExists(input.customerId);
+    const prismaOpportunity = await this.prisma.opportunity.create({
       data: {
         customerId: input.customerId,
         title: input.title,
@@ -194,21 +174,16 @@ export class CrmService {
         probability: input.probability ?? null,
         expectedClose: input.expectedClose ?? null,
       },
-      include: {
-        notes: {
-          orderBy: { createdAt: 'desc' },
-          include: { summary: true },
-        },
-      },
+      include: { notes: { include: { summary: true }, orderBy: { createdAt: 'desc' } } },
     });
 
-    return this.mapOpportunity(opportunity as OpportunityEntity);
+    return this.mapOpportunity(prismaOpportunity as unknown as OpportunityEntity);
   }
 
   async addInteractionNote(input: AddInteractionNoteInput): Promise<InteractionNoteModel> {
-    await this.assertCustomerExists(input.customerId);
+    await this.ensureCustomerExists(input.customerId);
 
-    const note = await this.prisma.interactionNote.create({
+    const prismaNote = await this.prisma.interactionNote.create({
       data: {
         customerId: input.customerId,
         contactId: input.contactId ?? null,
@@ -216,12 +191,13 @@ export class CrmService {
         channel: input.channel,
         rawText: input.rawText,
       },
+      include: { summary: true },
     });
 
     if (input.summaryText || (input.followups && input.followups.length)) {
       await this.prisma.conversationSummary.create({
         data: {
-          interactionId: note.id,
+          interactionId: prismaNote.id,
           summaryText: input.summaryText ?? '',
           followupSuggestedJson: JSON.stringify(input.followups ?? []),
           confidence: input.confidence ?? 0,
@@ -229,40 +205,21 @@ export class CrmService {
       });
     }
 
-    return this.getInteractionNote(note.id);
+    return this.mapInteractionNote(prismaNote as unknown as InteractionNoteEntity);
   }
 
   async listOpportunities(customerId: string): Promise<OpportunityModel[]> {
-    const opportunities = await this.prisma.opportunity.findMany({
+    const prismaOpportunities = await this.prisma.opportunity.findMany({
       where: { customerId },
       orderBy: { createdAt: 'desc' },
-      include: {
-        notes: {
-          orderBy: { createdAt: 'desc' },
-          include: { summary: true },
-        },
-      },
+      include: { notes: { include: { summary: true }, orderBy: { createdAt: 'desc' } } },
     });
 
-    return (opportunities as OpportunityEntity[]).map((op) => this.mapOpportunity(op));
+    const opportunities = prismaOpportunities as unknown as OpportunityEntity[];
+    return opportunities.map((op) => this.mapOpportunity(op));
   }
 
-  private async getInteractionNote(id: string): Promise<InteractionNoteModel> {
-    const note = await this.prisma.interactionNote.findUnique({
-      where: { id },
-      include: {
-        summary: true,
-      },
-    });
-
-    if (!note) {
-      throw new NotFoundException(`Interaction note ${id} not found`);
-    }
-
-    return this.mapInteractionNote(note as InteractionNoteEntity);
-  }
-
-  private async assertCustomerExists(id: string): Promise<void> {
+  private async ensureCustomerExists(id: string): Promise<void> {
     const exists = await this.prisma.customer.count({ where: { id } });
     if (!exists) {
       throw new NotFoundException(`Customer ${id} not found`);

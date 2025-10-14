@@ -126,58 +126,58 @@ async function seed() {
     },
     {
       code: 'BETA-02',
-      name: 'Customer Portal Revamp',
-      description: 'Customer-facing portal modernization and chat integration.',
-      status: 'onHold',
-      startDate: new Date('2024-10-01'),
-      endDate: new Date('2025-04-30'),
-      plannedValue: 85000,
-      earnedValue: 62000,
-      actualCost: 69000,
+      name: 'Beta CX Transformation',
+      description: 'Customer experience analytics with AI summarization and CRM integration.',
+      status: 'active',
+      startDate: new Date('2025-02-10'),
+      endDate: new Date('2025-09-30'),
+      plannedValue: 98000,
+      earnedValue: 90000,
+      actualCost: 87000,
       phases: {
         create: [
           {
             id: 'phase-beta-discovery',
             name: 'Discovery',
             sortOrder: 1,
-            startDate: new Date('2024-10-01'),
-            endDate: new Date('2024-11-10'),
+            startDate: new Date('2025-02-10'),
+            endDate: new Date('2025-03-15'),
           },
           {
-            id: 'phase-beta-design',
-            name: 'Design',
+            id: 'phase-beta-build',
+            name: 'Build',
             sortOrder: 2,
-            startDate: new Date('2024-11-11'),
-            endDate: new Date('2025-01-31'),
+            startDate: new Date('2025-03-16'),
+            endDate: new Date('2025-07-31'),
           },
         ],
       },
       tasks: {
         create: [
           {
-            name: 'Requirement Refinement',
+            name: 'Stakeholder Interviews',
             phaseId: 'phase-beta-discovery',
             status: 'done',
-            startDate: new Date('2024-10-03'),
-            endDate: new Date('2024-11-15'),
-            effortHours: 120,
+            startDate: new Date('2025-02-10'),
+            endDate: new Date('2025-02-18'),
+            effortHours: 32,
             orderIndex: 1,
           },
           {
-            name: 'UI/UX Prototype',
-            phaseId: 'phase-beta-design',
-            status: 'review',
-            startDate: new Date('2024-11-18'),
-            endDate: new Date('2025-01-31'),
-            effortHours: 200,
+            name: 'AI Interaction Summaries',
+            phaseId: 'phase-beta-build',
+            status: 'inProgress',
+            startDate: new Date('2025-03-20'),
+            endDate: new Date('2025-05-10'),
+            effortHours: 210,
             orderIndex: 2,
           },
           {
-            name: 'Chatbot Integration',
-            phaseId: 'phase-beta-design',
-            status: 'blocked',
-            startDate: new Date('2025-02-05'),
-            endDate: new Date('2025-04-15'),
+            name: 'CX Dashboard Rollout',
+            phaseId: 'phase-beta-build',
+            status: 'todo',
+            startDate: new Date('2025-06-01'),
+            endDate: new Date('2025-08-15'),
             effortHours: 160,
             orderIndex: 3,
           },
@@ -185,129 +185,41 @@ async function seed() {
       },
       risks: {
         create: [
-          { probability: 55, impact: 5, status: 'escalated', summary: 'Vendor contract pending' },
-          { probability: 20, impact: 2, status: 'watching', summary: 'Security review resourcing' },
+          { probability: 30, impact: 4, status: 'monitoring', summary: 'AI summarizer accuracy drift risk' },
+          { probability: 20, impact: 2, status: 'new', summary: 'Integration timeline with CRM backend' },
         ],
       },
       burndown: {
         create: [
-          { label: 'Sprint 1', planned: 100, actual: 90, orderIndex: 1 },
-          { label: 'Sprint 2', planned: 200, actual: 170, orderIndex: 2 },
-          { label: 'Sprint 3', planned: 300, actual: 210, orderIndex: 3 },
-          { label: 'Sprint 4', planned: 400, actual: 250, orderIndex: 4 },
+          { label: 'Sprint 1', planned: 110, actual: 108, orderIndex: 1 },
+          { label: 'Sprint 2', planned: 220, actual: 215, orderIndex: 2 },
+          { label: 'Sprint 3', planned: 330, actual: 320, orderIndex: 3 },
+          { label: 'Sprint 4', planned: 440, actual: 420, orderIndex: 4 },
         ],
       },
       chatThreads: {
         create: [
           {
             provider: 'Teams',
-            externalThreadId: 'beta-thread-001',
-            channelName: 'beta-design-huddle',
+            externalThreadId: 'beta-thread-042',
+            channelName: 'beta-cx-weekly',
+            summary: 'Discussed AI summarizer accuracy and CRM sync timeline.',
             messages: {
               create: [
                 {
-                  author: 'Designer',
-                  content: 'Awaiting marketing sign-off on new landing page.',
-                  postedAt: new Date('2025-01-25T04:00:00Z'),
+                  author: 'ProductOwner',
+                  content: 'Need accuracy >92% before pilot; review model prompts.',
+                  postedAt: new Date('2025-04-02T09:15:00Z'),
                 },
                 {
-                  author: 'SecurityLead',
-                  content: 'Security review blocked until vendor provides SOC2 report.',
-                  postedAt: new Date('2025-01-26T07:15:00Z'),
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      code: 'GAMMA-03',
-      name: 'Data Warehouse Stabilization',
-      description: 'Stabilize ETL pipelines and improve reporting cadence.',
-      status: 'completed',
-      startDate: new Date('2024-03-01'),
-      endDate: new Date('2024-12-20'),
-      plannedValue: 64000,
-      earnedValue: 64000,
-      actualCost: 65800,
-      phases: {
-        create: [
-          {
-            id: 'phase-gamma-audit',
-            name: 'Audit',
-            sortOrder: 1,
-            startDate: new Date('2024-03-01'),
-            endDate: new Date('2024-04-15'),
-          },
-          {
-            id: 'phase-gamma-stabilize',
-            name: 'Stabilization',
-            sortOrder: 2,
-            startDate: new Date('2024-04-16'),
-            endDate: new Date('2024-10-31'),
-          },
-        ],
-      },
-      tasks: {
-        create: [
-          {
-            name: 'Pipeline Audit',
-            phaseId: 'phase-gamma-audit',
-            status: 'done',
-            startDate: new Date('2024-03-05'),
-            endDate: new Date('2024-04-15'),
-            effortHours: 140,
-            orderIndex: 1,
-          },
-          {
-            name: 'Data Quality Initiative',
-            phaseId: 'phase-gamma-stabilize',
-            status: 'done',
-            startDate: new Date('2024-04-20'),
-            endDate: new Date('2024-09-30'),
-            effortHours: 320,
-            orderIndex: 2,
-          },
-          {
-            name: 'Executive Reporting Enablement',
-            phaseId: 'phase-gamma-stabilize',
-            status: 'done',
-            startDate: new Date('2024-10-05'),
-            endDate: new Date('2024-12-10'),
-            effortHours: 160,
-            orderIndex: 3,
-          },
-        ],
-      },
-      risks: {
-        create: [{ probability: 10, impact: 1, status: 'closed', summary: 'Post-mortem complete' }],
-      },
-      burndown: {
-        create: [
-          { label: 'Sprint 1', planned: 80, actual: 82, orderIndex: 1 },
-          { label: 'Sprint 2', planned: 160, actual: 162, orderIndex: 2 },
-          { label: 'Sprint 3', planned: 240, actual: 240, orderIndex: 3 },
-          { label: 'Sprint 4', planned: 320, actual: 320, orderIndex: 4 },
-        ],
-      },
-      chatThreads: {
-        create: [
-          {
-            provider: 'Slack',
-            externalThreadId: 'gamma-thread-001',
-            channelName: 'gamma-retro',
-            messages: {
-              create: [
-                {
-                  author: 'PM',
-                  content: 'Retro complete; focusing on knowledge transfer next sprint.',
-                  postedAt: new Date('2024-12-18T09:15:00Z'),
+                  author: 'DataLead',
+                  content: 'Working on fine-tune dataset with CRM transcripts.',
+                  postedAt: new Date('2025-04-02T12:45:00Z'),
                 },
                 {
-                  author: 'Analyst',
-                  content: 'Dashboard refresh now under 30 minutes consistently.',
-                  postedAt: new Date('2024-12-18T11:45:00Z'),
+                  author: 'CSM',
+                  content: 'Pilot retailers willing to test dashboards in June.',
+                  postedAt: new Date('2025-04-02T15:20:00Z'),
                 },
               ],
             },
@@ -328,19 +240,23 @@ async function seed() {
       name: 'Acme Manufacturing',
       type: 'CUSTOMER',
       industry: 'Manufacturing',
-      tagsJson: JSON.stringify(['strategic', 'phase2']),
+      ownerUserId: 'user-sdr-001',
+      tagsJson: JSON.stringify(['key-account', 'renewal-2025']),
       contacts: {
         create: [
           {
-            name: 'Hiro Tanaka',
-            role: 'Procurement Lead',
-            email: 'hiro.tanaka@acme.example',
+            name: 'Keiko Tanaka',
+            role: 'COO',
+            email: 'keiko.tanaka@acme.example.com',
             phone: '+81-3-1234-5678',
+            slackUserId: 'U02COO',
           },
           {
-            name: 'Mina Sato',
-            role: 'IT Director',
-            email: 'mina.sato@acme.example',
+            name: 'Ryohei Sato',
+            role: 'Finance Director',
+            email: 'ryohei.sato@acme.example.com',
+            phone: '+81-3-2345-6789',
+            slackUserId: 'U03FIN',
           },
         ],
       },
@@ -348,7 +264,7 @@ async function seed() {
     include: { contacts: true },
   });
 
-  const acmeOpportunity = await prisma.opportunity.create({
+  const acmeOpp = await prisma.opportunity.create({
     data: {
       customerId: acme.id,
       title: 'ERP Phase2 Rollout',
@@ -365,7 +281,7 @@ async function seed() {
     data: {
       customerId: acme.id,
       contactId: acme.contacts[0].id,
-      opportunityId: acmeOpportunity.id,
+      opportunityId: acmeOpp.id,
       channel: 'Teams',
       rawText: 'Reviewed pricing model; requested AI-assisted onboarding demo.',
     },
@@ -414,7 +330,7 @@ async function seed() {
       customerId: acme.id,
       status: 'PENDING',
       paymentTerm: 'Net 30',
-      totalAmount: 18_500_000,
+      totalAmount: acmeQuote.totalAmount,
     },
   });
 

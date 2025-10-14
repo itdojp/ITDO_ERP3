@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { SalesService } from './service';
-import { ApproveCreditReviewInput } from './dto/credit-review.dto';
+import { ApproveCreditReviewInput, CreditReviewModel } from './dto/credit-review.dto';
 import { CreateOrderInput, OrderModel } from './dto/order.dto';
-import { CreateQuoteInput, QuoteFilterInput, QuoteModel } from './dto/quote.dto';
-import { CreditReviewModel } from './dto/credit-review.dto';
+import { CreateQuoteInput, QuoteModel } from './dto/quote.dto';
+import { SalesMetricsModel } from './metrics/sales-metrics.model';
 
 @Controller('api/v1/sales')
 export class SalesController {
@@ -11,8 +11,10 @@ export class SalesController {
 
   @Get('quotes')
   listQuotes(
-    @Query() filter?: QuoteFilterInput,
+    @Query('customerId') customerId?: string,
+    @Query('status') status?: string,
   ): Promise<QuoteModel[]> {
+    const filter = customerId || status ? { customerId, status } : undefined;
     return this.salesService.listQuotes(filter);
   }
 
@@ -29,6 +31,11 @@ export class SalesController {
   @Post('orders')
   createOrder(@Body() input: CreateOrderInput): Promise<OrderModel> {
     return this.salesService.createOrder(input);
+  }
+
+  @Get('metrics')
+  getMetrics(): Promise<SalesMetricsModel> {
+    return this.salesService.getMetrics();
   }
 
   @Post('orders/:orderId/credit-review')

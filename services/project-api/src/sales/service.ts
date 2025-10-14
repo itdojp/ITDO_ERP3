@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SalesMetricsService } from './metrics/sales-metrics.service';
+import { SalesMetricsSnapshot } from './metrics/sales-metrics.model';
 import { ApproveCreditReviewInput, CreditReviewModel } from './dto/credit-review.dto';
 import { CreateOrderInput, OrderModel } from './dto/order.dto';
 import { CreateQuoteInput, QuoteFilterInput, QuoteModel } from './dto/quote.dto';
@@ -57,8 +59,6 @@ interface QuoteEntity {
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
-
   private readonly quoteInclude = {
     items: true,
     order: {
@@ -75,6 +75,11 @@ export class SalesService {
       orderBy: { requestedAt: 'desc' },
     },
   } satisfies Prisma.OrderInclude;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: SalesMetricsService,
+  ) {}
 
   async listQuotes(filter?: QuoteFilterInput): Promise<QuoteModel[]> {
     const where: Prisma.QuoteWhereInput = {};
@@ -117,14 +122,27 @@ export class SalesService {
       include: this.quoteInclude,
     });
 
+    await this.metrics.recordQuoteCreated(quote.customerId);
+
     return this.mapQuote(quote as QuoteEntity);
   }
 
   async createOrder(input: CreateOrderInput): Promise<OrderModel> {
     const quote = await this.prisma.quote.findUnique({ where: { id: input.quoteId } });
-
     if (!quote) {
       throw new NotFoundException(`Quote ${input.quoteId} not found`);
+    }
+
+    if (quote.status !== 'APPROVED') {
+      const approvedAt = quote.approvedAt ?? new Date();
+      await this.prisma.quote.update({
+        where: { id: quote.id },
+        data: {
+          status: 'APPROVED',
+          approvedAt,
+        },
+      });
+      await this.metrics.recordQuoteApproved(quote.customerId);
     }
 
     const order = await this.prisma.order.create({
@@ -140,14 +158,22 @@ export class SalesService {
       include: this.orderInclude,
     });
 
-    await this.prisma.orderAuditLog.create({
-      data: {
-        orderId: order.id,
-        changeType: 'order.created',
-        payload: JSON.stringify({ orderNumber: order.orderNumber, totalAmount: order.totalAmount }),
-        checksum: `order-created-${order.id}`,
-      },
-    }).catch(() => undefined);
+    await this.metrics.recordOrderCreated(order.customerId);
+    await this.metrics.syncPendingCreditCount();
+
+    await this.prisma.orderAuditLog
+      .create({
+        data: {
+          orderId: order.id,
+          changeType: 'order.created',
+          payload: JSON.stringify({
+            orderNumber: order.orderNumber,
+            totalAmount: order.totalAmount,
+          }),
+          checksum: `order-created-${order.id}`,
+        },
+      })
+      .catch(() => undefined);
 
     return this.mapOrder(order as OrderEntity);
   }
@@ -173,14 +199,22 @@ export class SalesService {
       data: { status: 'FULFILLED' },
     });
 
-    await this.prisma.orderAuditLog.create({
-      data: {
-        orderId: order.id,
-        changeType: 'credit-review',
-        payload: JSON.stringify({ score: input.score, remarks: input.remarks ?? null }),
-        checksum: `credit-review-${order.id}-${review.id}`,
-      },
-    }).catch(() => undefined);
+    await this.metrics.recordCreditReviewApproved(order.customerId);
+    await this.metrics.syncPendingCreditCount();
+
+    await this.prisma.orderAuditLog
+      .create({
+        data: {
+          orderId: order.id,
+          changeType: 'credit-review',
+          payload: JSON.stringify({
+            score: input.score,
+            remarks: input.remarks ?? null,
+          }),
+          checksum: `credit-review-${order.id}-${review.id}`,
+        },
+      })
+      .catch(() => undefined);
 
     return this.mapCreditReview(review as CreditReviewEntity);
   }
@@ -193,6 +227,10 @@ export class SalesService {
     });
 
     return (orders as OrderEntity[]).map((order) => this.mapOrder(order));
+  }
+
+  async getMetrics(): Promise<SalesMetricsSnapshot> {
+    return this.metrics.snapshot();
   }
 
   private mapQuote(entity: QuoteEntity): QuoteModel {

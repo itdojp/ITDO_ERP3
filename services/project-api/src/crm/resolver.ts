@@ -6,12 +6,12 @@ import {
   CreateOpportunityInput,
   CustomerFilterInput,
   UpdateCustomerInput,
-} from './dto/crm.input';
+} from './dto/customer.input';
 import {
   CustomerModel,
   InteractionNoteModel,
   OpportunityModel,
-} from './models/crm.model';
+} from './models/customer.model';
 
 @Resolver(() => CustomerModel)
 export class CrmResolver {
@@ -19,10 +19,7 @@ export class CrmResolver {
 
   @Query(() => [CustomerModel])
   customers(@Args('filter', { nullable: true }) filter?: CustomerFilterInput): Promise<CustomerModel[]> {
-    const resolvedFilter = filter
-      ? { search: filter.search ?? undefined, type: filter.type ?? undefined, industry: filter.industry ?? undefined }
-      : undefined;
-    return this.crmService.listCustomers(resolvedFilter);
+    return this.crmService.listCustomers(filter);
   }
 
   @Query(() => CustomerModel)
