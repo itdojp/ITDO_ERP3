@@ -9,6 +9,32 @@ interface QueryContext {
   result: Array<Record<string, unknown>>;
 }
 
+const ATHENA_REQUIRED_ENV = ['ATHENA_WORKGROUP', 'ATHENA_DATABASE', 'ATHENA_OUTPUT_LOCATION'] as const;
+const ATHENA_POLL_INTERVAL_MS = Number(process.env.ATHENA_POLL_INTERVAL_MS ?? '1500');
+const ATHENA_TIMEOUT_MS = Number(process.env.ATHENA_TIMEOUT_MS ?? '60000');
+
+function hasAthenaConfiguration(): boolean {
+  return ATHENA_REQUIRED_ENV.every((key) => Boolean(process.env[key]));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseValue(value: string | undefined): unknown {
+  if (value === undefined) {
+    return null;
+  }
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric)) {
+    return numeric;
+  }
+  if (value === 'true' || value === 'false') {
+    return value === 'true';
+  }
+  return value;
+}
+
 export async function inferIntent(input: string): Promise<QueryContext> {
   const normalized = input.toLowerCase();
   if (normalized.includes('受注率')) {
@@ -50,7 +76,13 @@ export async function executeQuery(context: QueryContext): Promise<QueryContext>
     return { ...context, result: [] };
   }
 
-  // TODO: Phase2 Sprint8 で Athena を実際に呼び出す。
+  if (hasAthenaConfiguration()) {
+    const athenaResult = await runAthenaQuery(context.sql);
+    if (athenaResult.length > 0) {
+      return { ...context, result: athenaResult };
+    }
+  }
+
   const mockData: Record<QueryContext['intent'], Array<Record<string, unknown>>> = {
     conversion: [
       { month: '2025-07-01', conversion_rate: 0.42 },
@@ -96,6 +128,92 @@ export async function run(input: string): Promise<string> {
   const withSql = await buildSql(intent);
   const executed = await executeQuery(withSql);
   return summarize(executed);
+}
+
+async function runAthenaQuery(sql: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena');
+    const client = new AthenaClient({ region: process.env.AWS_REGION ?? 'ap-northeast-1' });
+
+    const start = await client.send(
+      new StartQueryExecutionCommand({
+        WorkGroup: process.env.ATHENA_WORKGROUP,
+        QueryString: sql,
+        QueryExecutionContext: {
+          Database: process.env.ATHENA_DATABASE,
+        },
+        ResultConfiguration: {
+          OutputLocation: process.env.ATHENA_OUTPUT_LOCATION,
+        },
+      }),
+    );
+
+    const executionId = start.QueryExecutionId;
+    if (!executionId) {
+      throw new Error('Athena query execution ID was not returned.');
+    }
+
+    const state = await waitForAthenaCompletion(client, executionId, GetQueryExecutionCommand);
+    if (state !== 'SUCCEEDED') {
+      throw new Error(`Athena query finished with status: ${state}`);
+    }
+
+    const results = await client.send(
+      new GetQueryResultsCommand({
+        QueryExecutionId: executionId,
+      }),
+    );
+
+    const columns = results.ResultSet?.ResultSetMetadata?.ColumnInfo ?? [];
+    const rows = results.ResultSet?.Rows ?? [];
+
+    return rows.slice(1).map((row) => {
+      const record: Record<string, unknown> = {};
+      columns.forEach((column, index) => {
+        const key = column.Name ?? `col_${index}`;
+        const value = row.Data?.[index]?.VarCharValue;
+        record[key] = parseValue(value);
+      });
+      return record;
+    });
+  } catch (error) {
+    if (process.env.DEBUG) {
+      console.warn('[Athena] falling back to mock data:', (error as Error).message);
+    }
+    return [];
+  }
+}
+
+async function waitForAthenaCompletion(
+  client: any,
+  executionId: string,
+  GetQueryExecutionCommand: new (...args: Array<unknown>) => any,
+): Promise<string> {
+  const startedAt = Date.now();
+  let state = 'QUEUED';
+
+  while (state === 'QUEUED' || state === 'RUNNING') {
+    if (Date.now() - startedAt > ATHENA_TIMEOUT_MS) {
+      throw new Error('Athena query timed out.');
+    }
+
+    await sleep(ATHENA_POLL_INTERVAL_MS);
+
+    const status = await client.send(
+      new GetQueryExecutionCommand({
+        QueryExecutionId: executionId,
+      }),
+    );
+
+    state = status.QueryExecution?.Status?.State ?? 'FAILED';
+    if (state === 'FAILED') {
+      const reason =
+        status.QueryExecution?.Status?.StateChangeReason ?? 'Unknown failure reason';
+      throw new Error(reason);
+    }
+  }
+
+  return state;
 }
 
 if (require.main === module) {
