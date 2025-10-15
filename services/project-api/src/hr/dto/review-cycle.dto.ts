@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { Field, ID, InputType, ObjectType } from '@nestjs/graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { Field, ID, InputType, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { GraphQLDateTime } from 'graphql-scalars';
 
 @ObjectType()
 export class ReviewCycleModel {
@@ -10,10 +10,10 @@ export class ReviewCycleModel {
   @Field()
   cycleName!: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => GraphQLDateTime)
   startDate!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => GraphQLDateTime)
   endDate!: Date;
 
   @Field(() => [String])
@@ -25,12 +25,43 @@ export class CreateReviewCycleInput {
   @Field()
   cycleName!: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => GraphQLDateTime)
   startDate!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => GraphQLDateTime)
   endDate!: Date;
 
   @Field(() => [ID])
   participantIds!: string[];
+}
+
+export enum ReviewReminderPhase {
+  KICKOFF = 'KICKOFF',
+  MIDPOINT = 'MIDPOINT',
+  FINAL = 'FINAL',
+}
+
+registerEnumType(ReviewReminderPhase, {
+  name: 'ReviewReminderPhase',
+});
+
+@ObjectType()
+export class ReviewReminderModel {
+  @Field(() => ID)
+  cycleId!: string;
+
+  @Field(() => ID)
+  participantId!: string;
+
+  @Field(() => GraphQLDateTime)
+  triggerAt!: Date;
+
+  @Field(() => [String])
+  channels!: string[];
+
+  @Field(() => ReviewReminderPhase)
+  phase!: ReviewReminderPhase;
+
+  @Field()
+  message!: string;
 }
