@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, ID, InputType, ObjectType } from '@nestjs/graphql';
+import { GraphQLISODateTime } from 'graphql-scalars';
 
 @ObjectType()
 export class ReviewCycleModel {
@@ -8,10 +10,10 @@ export class ReviewCycleModel {
   @Field()
   cycleName!: string;
 
-  @Field(() => Date)
+  @Field(() => GraphQLISODateTime)
   startDate!: Date;
 
-  @Field(() => Date)
+  @Field(() => GraphQLISODateTime)
   endDate!: Date;
 
   @Field(() => [String])
@@ -23,10 +25,10 @@ export class CreateReviewCycleInput {
   @Field()
   cycleName!: string;
 
-  @Field()
+  @Field(() => GraphQLISODateTime)
   startDate!: Date;
 
-  @Field()
+  @Field(() => GraphQLISODateTime)
   endDate!: Date;
 
   @Field(() => [ID])

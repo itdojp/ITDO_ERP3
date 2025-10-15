@@ -1,0 +1,55 @@
+name: AI Ops Insights Publisher
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 0 * * *'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Collect workflow metrics
+        id: collect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          fetch_last() {
+            local workflow="$1"
+            gh run list \
+              --workflow "${workflow}" \
+              --limit 1 \
+              --json conclusion,createdAt,headBranch \
+              --jq 'if length>0 then (.[] | "\(.conclusion) @ \(.createdAt) [\(.headBranch)]") else "n/a" end'
+          }
+
+          langgraph="$(fetch_last "AI Ops LangGraph Verify")"
+          handoff="$(fetch_last "AI Ops Auto Handoff")"
+          codex_smoke="$(fetch_last "Codex Template Smoke")"
+
+          mkdir -p reports
+          cat <<EOF > reports/ai-ops-insights.md
+          ## AI Ops Insights (${GITHUB_REF})
+          - LangGraph Verify: ${langgraph}
+          - Auto Handoff: ${handoff}
+          - Codex Template Smoke: ${codex_smoke}
+          - Generated at: $(date -u +%FT%TZ)
+          EOF
+
+      - name: Upload insights report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ops-insights
+          path: reports/ai-ops-insights.md

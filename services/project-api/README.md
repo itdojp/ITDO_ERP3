@@ -10,6 +10,7 @@ Project API は ITDO ERP3 のプロジェクト管理・チャット連携の試
 - OpenAI ベースのチャット要約（再試行・多言語切替・ベクトル保存・Datadog メトリクス連携）
 - DocuSign Webhook / 契約イベント連携による請求書生成パイプライン
 - CRM 顧客管理と Sales オペレーション（見積・受注・クレジット審査）API、CloudWatch メトリクス連携
+- HR 評価サイクルとスキルタグ管理（Prisma ベースの Employee / ReviewCycle API）
 
 ## セットアップ
 
@@ -101,7 +102,7 @@ curl http://localhost:3000/api/v1/projects/proj-1001/timeline
 
 ## GraphQL
 
-GraphQL はコードファースト構成で、`dist/schema.gql` に自動生成されます。Project ドメインに加えて、CRM / Sales リゾルバから `quotes`, `orders`, `approveCreditReview`, `salesMetrics` などの操作を提供します。主な操作は下記の通りです。
+GraphQL はコードファースト構成で、`dist/schema.gql` に自動生成されます。Project ドメインに加えて、CRM / Sales / HR リゾルバから `quotes`, `orders`, `approveCreditReview`, `salesMetrics`, `employees`, `skillTags`, `reviewCycles` などの操作を提供します。主な操作は下記の通りです。
 
 ```graphql
 query ActiveProjects {
@@ -136,7 +137,22 @@ query SalesSnapshot {
 }
 ```
 
-`projectTimeline`, `projectMetrics`, `projectChatThreads` に加え、`quotes(filter: { status: PENDING_APPROVAL })` や `salesMetrics` で Sales KPI のスナップショットを取得できます。
+```graphql
+query HrOverview {
+  employees {
+    id
+    name
+    skillTags
+  }
+  reviewCycles {
+    id
+    cycleName
+    participantIds
+  }
+}
+```
+
+`projectTimeline`, `projectMetrics`, `projectChatThreads` に加え、`quotes(filter: { status: PENDING_APPROVAL })` や `salesMetrics` で Sales KPI、`employees` / `reviewCycles` で HR 評価サイクルの状況を取得できます。
 
 ## テスト
 

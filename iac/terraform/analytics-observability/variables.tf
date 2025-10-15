@@ -30,3 +30,21 @@ variable "quicksight_dataset_arn" {
   type        = string
   default     = ""
 }
+
+variable "ai_ops_failure_threshold" {
+  description = "Allowed Codex Smoke failure rate (%) before alarming"
+  type        = number
+  default     = 5
+}
+
+variable "ai_ops_latency_threshold" {
+  description = "Maximum LangGraph verification latency in seconds"
+  type        = number
+  default     = 600
+}
+
+variable "ai_ops_handoff_threshold" {
+  description = "Maximum auto handoff lead time in minutes"
+  type        = number
+  default     = 45
+}

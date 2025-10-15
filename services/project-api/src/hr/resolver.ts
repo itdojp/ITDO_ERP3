@@ -9,27 +9,27 @@ export class HrResolver {
   constructor(private readonly service: HrService) {}
 
   @Query(() => [SkillTagModel])
-  skillTags(): SkillTagModel[] {
+  skillTags(): Promise<SkillTagModel[]> {
     return this.service.listSkillTags();
   }
 
   @Query(() => [EmployeeModel])
-  employees(): EmployeeModel[] {
+  employees(): Promise<EmployeeModel[]> {
     return this.service.listEmployees();
   }
 
   @Mutation(() => EmployeeModel)
-  upsertEmployee(@Args('input') input: UpsertEmployeeInput): EmployeeModel {
+  upsertEmployee(@Args('input') input: UpsertEmployeeInput): Promise<EmployeeModel> {
     return this.service.upsertEmployee(input);
   }
 
   @Query(() => [ReviewCycleModel])
-  reviewCycles(): ReviewCycleModel[] {
+  reviewCycles(): Promise<ReviewCycleModel[]> {
     return this.service.listReviewCycles();
   }
 
   @Mutation(() => ReviewCycleModel)
-  createReviewCycle(@Args('input') input: CreateReviewCycleInput): ReviewCycleModel {
+  createReviewCycle(@Args('input') input: CreateReviewCycleInput): Promise<ReviewCycleModel> {
     return this.service.createReviewCycle(input);
   }
 }

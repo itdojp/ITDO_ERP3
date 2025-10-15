@@ -1,0 +1,50 @@
+name: AI Ops Auto Handoff
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Summarize template generation phase
+        run: |
+          echo "::group::Template generation summary"
+          echo "Templates validated via Codex Smoke placeholder step."
+          echo "::endgroup::"
+
+      - name: Dispatch LangGraph verification
+        id: trigger_verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run "AI Ops LangGraph Verify" --ref "${GITHUB_REF}"
+          echo "status=queued" >> "${GITHUB_OUTPUT}"
+
+      - name: Record handoff summary
+        run: |
+          mkdir -p reports
+          cat <<EOF > reports/ai-ops-handoff.json
+          {
+            "timestamp": "$(date -u +%FT%TZ)",
+            "triggered_by": "${{ github.triggering_actor || github.actor }}",
+            "langgraph_dispatch_status": "${{ steps.trigger_verify.outputs.status }}"
+          }
+          EOF
+
+      - name: Upload handoff record
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ops-handoff
+          path: reports/ai-ops-handoff.json

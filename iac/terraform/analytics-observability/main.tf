@@ -19,6 +19,7 @@ locals {
   glue_database    = "analytics_${var.environment}"
   athena_workgroup = "analytics-${var.environment}"
   dashboard_name   = "analytics-observability-${var.environment}"
+  ai_ops_namespace = "ITDO/AIOps"
 }
 
 resource "aws_glue_catalog_database" "analytics" {
@@ -56,6 +57,33 @@ resource "aws_cloudwatch_dashboard" "analytics_overview" {
           period  = 300
           stat    = "Average"
         }
+      },
+      {
+        type = "metric"
+        properties = {
+          title   = "Codex Smoke Failure Rate"
+          metrics = [["${local.ai_ops_namespace}", "CodexSmokeFailureRate", "Environment", var.environment]]
+          period  = 300
+          stat    = "Average"
+        }
+      },
+      {
+        type = "metric"
+        properties = {
+          title   = "LangGraph Verify Latency"
+          metrics = [["${local.ai_ops_namespace}", "LangGraphVerifyLatency", "Environment", var.environment]]
+          period  = 300
+          stat    = "Average"
+        }
+      },
+      {
+        type = "metric"
+        properties = {
+          title   = "Auto Handoff Lead Time"
+          metrics = [["${local.ai_ops_namespace}", "AutoHandoffLeadTime", "Environment", var.environment]]
+          period  = 300
+          stat    = "Average"
+        }
       }
     ]
   })
@@ -70,6 +98,63 @@ resource "aws_cloudwatch_metric_alarm" "etl_failure" {
   period              = 900
   statistic           = "Sum"
   threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  alarm_actions = [var.alert_topic_arn]
+  ok_actions    = [var.alert_topic_arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "ai_ops_smoke_failure" {
+  alarm_name          = "ai-ops-codex-smoke-failure-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CodexSmokeFailureRate"
+  namespace           = local.ai_ops_namespace
+  period              = 300
+  statistic           = "Average"
+  threshold           = var.ai_ops_failure_threshold
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  alarm_actions = [var.alert_topic_arn]
+  ok_actions    = [var.alert_topic_arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "ai_ops_latency" {
+  alarm_name          = "ai-ops-langgraph-latency-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "LangGraphVerifyLatency"
+  namespace           = local.ai_ops_namespace
+  period              = 300
+  statistic           = "Average"
+  threshold           = var.ai_ops_latency_threshold
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Environment = var.environment
+  }
+
+  alarm_actions = [var.alert_topic_arn]
+  ok_actions    = [var.alert_topic_arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "ai_ops_handoff" {
+  alarm_name          = "ai-ops-handoff-leadtime-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AutoHandoffLeadTime"
+  namespace           = local.ai_ops_namespace
+  period              = 300
+  statistic           = "Average"
+  threshold           = var.ai_ops_handoff_threshold
   treat_missing_data  = "notBreaching"
 
   dimensions = {
