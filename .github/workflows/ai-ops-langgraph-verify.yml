@@ -1,0 +1,46 @@
+name: AI Ops LangGraph Verify
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/project-api/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/project-api
+        run: npm ci
+
+      - name: Run LangGraph verification smoke (placeholder)
+        working-directory: services/project-api
+        run: npm run test -- src/sales/service.spec.ts
+
+      - name: Summarize results
+        run: |
+          mkdir -p reports
+          cat <<'EOF' > reports/ai-ops-verify.md
+          ## AI Ops LangGraph Verify
+          - Timestamp: $(date -u +%FT%TZ)
+          - Triggered by: ${{ github.triggering_actor || github.actor }}
+          - Status: ${{ job.status }}
+          EOF
+
+      - name: Upload verification summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ops-langgraph-verify
+          path: reports/ai-ops-verify.md

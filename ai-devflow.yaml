@@ -174,3 +174,49 @@ stages:
       - id: analytics-observability
         workflow: Terraform Compliance
         url: .github/workflows/terraform-compliance.yml
+  - id: ai_ops_phase3
+    name: AI Ops Automation
+    description: Coordinate AI-driven reviews, trigger remediation playbooks, and surface telemetry for Phase3.
+    actors:
+      - role: ai_ops
+        responsibilities:
+          - review Codex Smoke output and LangGraph verification results
+          - dispatch auto-remediation workflows when thresholds are breached
+      - role: platform_pm
+        responsibilities:
+          - approve automated handoffs and communicate release readiness
+    inputs:
+      - type: workflow
+        name: codex-template-smoke
+      - type: workflow
+        name: ai-ops-langgraph-verify
+      - type: insights
+        source: github_actions
+        location: reports/ai-ops-insights.md
+    outputs:
+      - type: notification
+        channels:
+          - slack:#ai-ops-alerts
+          - pagerduty:AI Ops Triage
+      - type: dashboard
+        url: docs/ai/ops-dashboard.md
+    gates:
+      - type: metric_watch
+        thresholds:
+          - codex_smoke_failure_rate < 5%
+          - langgraph_verify_latency < 600s
+      - type: approval
+        approver: ai_ops_lead
+        criteria:
+          - remediation_playbook_attached
+          - audit_log_updated
+    pipelines:
+      - id: ai-ops-langgraph
+        workflow: AI Ops LangGraph Verify
+        url: .github/workflows/ai-ops-langgraph-verify.yml
+      - id: ai-ops-handoff
+        workflow: AI Ops Auto Handoff
+        url: .github/workflows/ai-ops-auto-handoff.yml
+      - id: ai-ops-insights
+        workflow: AI Ops Insights Publisher
+        url: .github/workflows/ai-ops-insights.yml

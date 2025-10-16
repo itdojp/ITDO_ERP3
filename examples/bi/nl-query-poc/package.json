@@ -1,0 +1,8 @@
+{
+  "name": "nl-query-poc",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-athena": "^3.908.0"
+  }
+}
