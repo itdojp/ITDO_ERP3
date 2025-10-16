@@ -2,10 +2,12 @@ import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 import {
   CkmRoomType as PrismaCkmRoomType,
   CkmWorkspaceRole as PrismaCkmWorkspaceRole,
+  CkmMessageType as PrismaCkmMessageType,
 } from '../../../generated/ckm-client';
 
 registerEnumType(PrismaCkmRoomType, { name: 'CkmRoomType' });
 registerEnumType(PrismaCkmWorkspaceRole, { name: 'CkmWorkspaceRole' });
+registerEnumType(PrismaCkmMessageType, { name: 'CkmMessageType' });
 
 @ObjectType()
 export class CkmStatusModel {

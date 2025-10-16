@@ -7,10 +7,12 @@ import { CkmNotificationService } from './notification/ckm-notification.service'
 import { CkmRealtimeService } from './realtime/ckm-realtime.service';
 import { CkmRealtimeGateway } from './realtime/ckm-realtime.gateway';
 import { CkmRealtimeController } from './realtime/ckm-realtime.controller';
+import { CkmAuthGuard } from './auth/ckm-auth.guard';
+import { CkmWsAuthGuard } from './auth/ckm-ws-auth.guard';
 
 @Module({
   imports: [PrismaModule],
-  providers: [CkmService, CkmResolver, CkmNotificationService, CkmRealtimeService, CkmRealtimeGateway],
+  providers: [CkmService, CkmResolver, CkmNotificationService, CkmRealtimeService, CkmRealtimeGateway, CkmAuthGuard, CkmWsAuthGuard],
   controllers: [CkmController, CkmRealtimeController],
   exports: [CkmService, CkmNotificationService, CkmRealtimeService],
 })

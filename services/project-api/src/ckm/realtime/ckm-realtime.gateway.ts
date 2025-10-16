@@ -1,17 +1,19 @@
-import {
-  OnGatewayConnection,
-  OnGatewayDisconnect,
-  OnModuleDestroy,
-  WebSocketGateway,
-  WebSocketServer,
-} from '@nestjs/websockets';
+import { Logger, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Subscription } from 'rxjs';
 import { CkmRealtimeEvent, CkmRealtimeService } from './ckm-realtime.service';
+import { CkmWsAuthGuard } from '../auth/ckm-ws-auth.guard';
+import { CkmService } from '../ckm.service';
+import { CkmActor } from '../auth/ckm-auth.guard';
 
 interface GatewaySocket {
   id: string;
   emit: (event: string, payload: CkmRealtimeEvent) => unknown;
+  disconnect: (close?: boolean) => unknown;
+  data?: {
+    user?: CkmActor;
+  };
   handshake: {
     query?: Record<string, unknown>;
   };
@@ -23,25 +25,39 @@ interface ClientFilter {
   roomId?: string;
 }
 
-/* eslint-disable-next-line @typescript-eslint/no-unsafe-call */
 @WebSocketGateway({ namespace: 'ckm', transports: ['websocket'], cors: true })
+@UseGuards(CkmWsAuthGuard)
 export class CkmRealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
-  /* eslint-disable-next-line @typescript-eslint/no-unsafe-call */
   @WebSocketServer()
   server!: Server;
 
+  private readonly logger = new Logger(CkmRealtimeGateway.name);
   private readonly clients = new Map<string, ClientFilter>();
   private readonly subscription: Subscription;
 
-  constructor(private readonly realtimeService: CkmRealtimeService) {
+  constructor(
+    private readonly realtimeService: CkmRealtimeService,
+    private readonly ckmService: CkmService,
+  ) {
     this.subscription = this.realtimeService.onEvent((event) => this.broadcast(event));
   }
 
-  handleConnection(client: GatewaySocket) {
+  async handleConnection(client: GatewaySocket): Promise<void> {
     const socket = this.normalizeSocket(client);
-    const workspaceId = this.extractQueryParam(socket, 'workspaceId');
-    const roomId = this.extractQueryParam(socket, 'roomId');
-    this.clients.set(socket.id, { socket, workspaceId, roomId });
+    try {
+      const workspaceId = this.extractQueryParam(socket, 'workspaceId');
+      if (!workspaceId) {
+        throw new UnauthorizedException('workspaceId is required for CKM realtime subscription.');
+      }
+      const roomId = this.extractQueryParam(socket, 'roomId');
+      const actorId = this.getActorId(socket);
+      await this.ckmService.verifyRealtimeAccess({ workspaceId, roomId, actorId });
+      this.clients.set(socket.id, { socket, workspaceId, roomId });
+    } catch (error) {
+      this.logger.warn(`CKM websocket connection denied: ${(error as Error).message}`);
+      this.clients.delete(socket.id);
+      socket.disconnect(true);
+    }
   }
 
   handleDisconnect(client: GatewaySocket) {
@@ -84,5 +100,13 @@ export class CkmRealtimeGateway implements OnGatewayConnection, OnGatewayDisconn
         query: handshakeQuery,
       },
     };
+  }
+
+  private getActorId(socket: GatewaySocket): string {
+    const actorId = socket.data?.user?.id;
+    if (!actorId) {
+      throw new UnauthorizedException('CKM actor context is missing.');
+    }
+    return actorId;
   }
 }

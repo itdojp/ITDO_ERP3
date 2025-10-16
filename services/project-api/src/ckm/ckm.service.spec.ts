@@ -15,6 +15,12 @@ type PrismaClientMock = {
   ckmChatThread: {
     findUnique: jest.Mock;
   };
+  ckmWorkspaceMembership: {
+    findFirst: jest.Mock;
+  };
+  ckmRoomMember: {
+    findFirst: jest.Mock;
+  };
   ckmChatMessage: {
     create: jest.Mock;
     findUnique: jest.Mock;
@@ -53,6 +59,12 @@ const createPrismaClientMock = (): PrismaClientMock => {
     },
     ckmChatThread: {
       findUnique: jest.fn(),
+    },
+    ckmWorkspaceMembership: {
+      findFirst: jest.fn(),
+    },
+    ckmRoomMember: {
+      findFirst: jest.fn(),
     },
     ckmChatMessage: {
       create: jest.fn(),
@@ -122,11 +134,16 @@ describe('CkmService', () => {
       },
     ]);
 
-    const result = await service.listWorkspaces();
+    const result = await service.listWorkspaces('user-1');
 
     expect(prisma.ckmWorkspace.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { archivedAt: null },
+        where: expect.objectContaining({
+          archivedAt: null,
+          memberships: expect.objectContaining({
+            some: expect.objectContaining({ memberId: 'user-1', status: 'active' }),
+          }),
+        }),
         orderBy: { name: 'asc' },
       }),
     );
@@ -144,6 +161,17 @@ describe('CkmService', () => {
     prisma.ckmWorkspace.findUnique.mockResolvedValue({ id: 'ws-1', code: 'DEV' });
     prisma.ckmChatRoom.findFirst.mockResolvedValue({ id: 'room-1', workspaceId: 'ws-1' });
     prisma.ckmChatThread.findUnique.mockResolvedValue(null);
+    prisma.ckmWorkspaceMembership.findFirst.mockResolvedValue({
+      id: 'mem-1',
+      workspaceId: 'ws-1',
+      memberId: 'user-1',
+      status: 'active',
+    });
+    prisma.ckmRoomMember.findFirst.mockResolvedValue({
+      id: 'room-mem-1',
+      roomId: 'room-1',
+      membershipId: 'mem-1',
+    });
     prisma.ckmChatMessage.findUnique.mockResolvedValue({
       id: 'msg-parent',
       roomId: 'room-1',
@@ -227,6 +255,17 @@ describe('CkmService', () => {
     const { service, prisma } = createService();
     prisma.ckmWorkspace.findUnique.mockResolvedValue({ id: 'ws-1', code: 'DEV' });
     prisma.ckmChatRoom.findFirst.mockResolvedValue({ id: 'room-1', workspaceId: 'ws-1' });
+    prisma.ckmWorkspaceMembership.findFirst.mockResolvedValue({
+      id: 'mem-1',
+      workspaceId: 'ws-1',
+      memberId: 'user-1',
+      status: 'active',
+    });
+    prisma.ckmRoomMember.findFirst.mockResolvedValue({
+      id: 'room-mem-1',
+      roomId: 'room-1',
+      membershipId: 'mem-1',
+    });
     const postedAt = new Date('2024-01-05T00:00:00Z');
     prisma.ckmChatMessage.findMany.mockResolvedValue([
       {
@@ -248,7 +287,7 @@ describe('CkmService', () => {
       },
     ]);
 
-    const results = await service.searchMessages({ workspaceCode: 'DEV', keyword: 'kickoff', roomId: 'room-1' });
+    const results = await service.searchMessages({ workspaceCode: 'DEV', keyword: 'kickoff', roomId: 'room-1', actorId: 'user-1' });
 
     expect(prisma.ckmChatMessage.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -289,6 +328,17 @@ describe('CkmService', () => {
       deletedAt: null,
       version: 1,
       room: { id: 'room-1', workspaceId: 'ws-1' },
+    });
+    prisma.ckmWorkspaceMembership.findFirst.mockResolvedValue({
+      id: 'mem-1',
+      workspaceId: 'ws-1',
+      memberId: 'user-2',
+      status: 'active',
+    });
+    prisma.ckmRoomMember.findFirst.mockResolvedValue({
+      id: 'room-mem-1',
+      roomId: 'room-1',
+      membershipId: 'mem-1',
     });
     prisma.ckmMessageVersion.create.mockResolvedValue({ id: 'ver-2' });
     prisma.ckmChatMessage.update.mockResolvedValue({
@@ -387,6 +437,17 @@ describe('CkmService', () => {
       deletedAt: null,
       version: 1,
       room: { id: 'room-1', workspaceId: 'ws-1' },
+    });
+    prisma.ckmWorkspaceMembership.findFirst.mockResolvedValue({
+      id: 'mem-1',
+      workspaceId: 'ws-1',
+      memberId: 'user-2',
+      status: 'active',
+    });
+    prisma.ckmRoomMember.findFirst.mockResolvedValue({
+      id: 'room-mem-1',
+      roomId: 'room-1',
+      membershipId: 'mem-1',
     });
     prisma.ckmMessageVersion.create.mockResolvedValue({ id: 'ver-2' });
     const deletedAt = new Date('2024-01-07T00:00:00Z');

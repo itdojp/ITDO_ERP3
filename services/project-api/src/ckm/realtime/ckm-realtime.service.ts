@@ -41,15 +41,8 @@ export class CkmRealtimeService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.redis = createClient({ url });
-    this.redis.on('error', (err: Error) => this.logger.error('Redis error', err));
+    this.redis.on('error', (err: Error) => this.logger.error('Redis error', err.stack ?? err.message));
     await this.redis.connect();
-    await this.redis
-      .xGroupCreate(this.streamKey, 'ckm-consumers', '$', { MKSTREAM: true })
-      .catch((err: Error) => {
-        if (!String(err).includes('BUSYGROUP')) {
-          throw err;
-        }
-      });
     this.redisEnabled = true;
     void this.startRedisConsumer();
     this.logger.log('CKM Redis 接続完了');
@@ -67,7 +60,18 @@ export class CkmRealtimeService implements OnModuleInit, OnModuleDestroy {
     this.subject.next(event);
     if (this.redis && this.redisEnabled) {
       const payload: InternalRealtimeEvent = { ...event, sourceId: this.instanceId };
-      await this.redis.xAdd(this.streamKey, '*', { payload: JSON.stringify(payload) });
+      await this.redis.xAdd(
+        this.streamKey,
+        '*',
+        { payload: JSON.stringify(payload) },
+        {
+          TRIM: {
+            strategy: 'MAXLEN',
+            strategyModifier: '~',
+            threshold: 10000,
+          },
+        },
+      );
     }
   }
 
@@ -112,18 +116,17 @@ export class CkmRealtimeService implements OnModuleInit, OnModuleDestroy {
           }
           try {
             const payload = JSON.parse(payloadStr) as InternalRealtimeEvent;
-            if (payload.sourceId === this.instanceId) {
+            const { sourceId, ...event } = payload;
+            if (sourceId === this.instanceId) {
               continue;
             }
-            const { sourceId: _sourceId, ...event } = payload;
-            void _sourceId;
             this.subject.next(event as CkmRealtimeEvent);
           } catch (err) {
-            this.logger.error('Failed to parse CKM realtime event', err);
+            this.logger.error('Failed to parse CKM realtime event', (err as Error).stack ?? String(err));
           }
         }
       } catch (err) {
-        this.logger.error('CKM Redis consumer error', err);
+        this.logger.error('CKM Redis consumer error', (err as Error).stack ?? String(err));
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }

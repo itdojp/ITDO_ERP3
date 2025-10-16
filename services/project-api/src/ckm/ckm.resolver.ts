@@ -1,9 +1,14 @@
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { UseGuards, UnauthorizedException } from '@nestjs/common';
 import { CkmService } from './ckm.service';
 import { CkmStatusModel, CkmWorkspaceModel, CkmWorkspaceSummaryModel } from './models/ckm.models';
 import { PostMessageInput, CkmMessageModel, UpdateMessageInput } from './dto/message.dto';
+import { CkmAuthGuard, CkmActor } from './auth/ckm-auth.guard';
+
+type GraphQLContext = { req?: { user?: CkmActor } };
 
 @Resolver()
+@UseGuards(CkmAuthGuard)
 export class CkmResolver {
   constructor(private readonly ckmService: CkmService) {}
 
@@ -15,23 +20,23 @@ export class CkmResolver {
   @Query(() => [CkmWorkspaceSummaryModel], {
     description: 'CKM ワークスペース一覧（アクティブのみ）を返します。',
   })
-  ckmWorkspaces(): Promise<CkmWorkspaceSummaryModel[]> {
-    return this.ckmService.listWorkspaces();
+  ckmWorkspaces(@Context() context: GraphQLContext): Promise<CkmWorkspaceSummaryModel[]> {
+    return this.ckmService.listWorkspaces(this.getActorId(context));
   }
 
   @Query(() => CkmWorkspaceModel, {
     description: '指定したコードの CKM ワークスペース詳細を返します。',
   })
-  ckmWorkspace(@Args('code') code: string): Promise<CkmWorkspaceModel> {
-    return this.ckmService.getWorkspaceByCode(code);
+  ckmWorkspace(@Args('code') code: string, @Context() context: GraphQLContext): Promise<CkmWorkspaceModel> {
+    return this.ckmService.getWorkspaceByCode(code, this.getActorId(context));
   }
 
   @Mutation(() => CkmMessageModel, { description: 'CKM メッセージを投稿します。' })
-  postCkmMessage(@Args('input') input: PostMessageInput, @Args('authorId') authorId: string): Promise<CkmMessageModel> {
+  postCkmMessage(@Args('input') input: PostMessageInput, @Context() context: GraphQLContext): Promise<CkmMessageModel> {
     return this.ckmService.createMessage({
       workspaceCode: input.workspaceCode,
       roomId: input.roomId,
-      authorId,
+      authorId: this.getActorId(context),
       threadId: input.threadId ?? undefined,
       parentMessageId: input.parentMessageId ?? undefined,
       messageType: input.messageType,
@@ -45,12 +50,12 @@ export class CkmResolver {
   @Mutation(() => CkmMessageModel, { description: 'CKM メッセージを編集します。' })
   updateCkmMessage(
     @Args('input') input: UpdateMessageInput,
-    @Args('editorId') editorId: string,
+    @Context() context: GraphQLContext,
   ): Promise<CkmMessageModel> {
     return this.ckmService.updateMessage({
       workspaceCode: input.workspaceCode,
       messageId: input.messageId,
-      editorId,
+      editorId: this.getActorId(context),
       version: input.version,
       body: input.body,
       messageType: input.messageType,
@@ -64,9 +69,9 @@ export class CkmResolver {
   async deleteCkmMessage(
     @Args('workspaceCode') workspaceCode: string,
     @Args('messageId') messageId: string,
-    @Args('actorId') actorId: string,
+    @Context() context: GraphQLContext,
   ): Promise<boolean> {
-    await this.ckmService.deleteMessage({ workspaceCode, messageId, actorId });
+    await this.ckmService.deleteMessage({ workspaceCode, messageId, actorId: this.getActorId(context) });
     return true;
   }
 
@@ -76,7 +81,22 @@ export class CkmResolver {
     @Args('keyword') keyword: string,
     @Args('roomId', { nullable: true }) roomId?: string,
     @Args('limit', { nullable: true }) limit?: number,
+    @Context() context: GraphQLContext,
   ): Promise<CkmMessageModel[]> {
-    return this.ckmService.searchMessages({ workspaceCode, keyword, roomId, limit });
+    return this.ckmService.searchMessages({
+      workspaceCode,
+      keyword,
+      roomId,
+      limit,
+      actorId: this.getActorId(context),
+    });
+  }
+
+  private getActorId(context: GraphQLContext): string {
+    const actorId = context?.req?.user?.id;
+    if (!actorId) {
+      throw new UnauthorizedException('CKM actor context is missing.');
+    }
+    return actorId;
   }
 }

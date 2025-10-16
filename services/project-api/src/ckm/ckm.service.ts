@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { CkmRoomType, CkmWorkspaceRole, Prisma, CkmMessageType, CkmChatMessage } from '../../generated/ckm-client';
 import { CkmPrismaService } from '../prisma/ckm-prisma.service';
 import { CkmNotificationService } from './notification/ckm-notification.service';
@@ -68,6 +75,7 @@ export interface MessageSearchParams {
   keyword: string;
   roomId?: string;
   limit?: number;
+  actorId: string;
 }
 
 export interface UpdateMessageParams {
@@ -121,16 +129,21 @@ export class CkmService {
     return this.ckmPrismaService.prisma;
   }
 
-  async listWorkspaces(): Promise<CkmWorkspaceSummary[]> {
+  async listWorkspaces(actorId: string): Promise<CkmWorkspaceSummary[]> {
     const workspaces = await this.prisma.ckmWorkspace.findMany({
-      where: { archivedAt: null },
+      where: {
+        archivedAt: null,
+        memberships: {
+          some: { memberId: actorId, status: 'active' },
+        },
+      },
       orderBy: { name: 'asc' },
       include: { _count: { select: { rooms: true, memberships: true } } },
     });
     return workspaces.map((ws) => this.mapWorkspaceSummary(ws));
   }
 
-  async getWorkspaceByCode(code: string): Promise<CkmWorkspaceDetail> {
+  async getWorkspaceByCode(code: string, actorId: string): Promise<CkmWorkspaceDetail> {
     const workspace = await this.prisma.ckmWorkspace.findUnique({
       where: { code },
       include: {
@@ -147,11 +160,13 @@ export class CkmService {
       throw new NotFoundException(`CKM workspace not found for code "${code}".`);
     }
 
+    await this.assertWorkspaceMembership(workspace.id, actorId);
+
     return this.mapWorkspaceDetail(workspace);
   }
 
-  async listRooms(workspaceCode: string): Promise<CkmRoomSummary[]> {
-    const workspace = await this.getWorkspaceByCode(workspaceCode);
+  async listRooms(workspaceCode: string, actorId: string): Promise<CkmRoomSummary[]> {
+    const workspace = await this.getWorkspaceByCode(workspaceCode, actorId);
     return workspace.rooms;
   }
 
@@ -168,6 +183,8 @@ export class CkmService {
     if (!room) {
       throw new NotFoundException(`CKM room not found (id="${roomId}") in workspace "${workspaceCode}".`);
     }
+
+    await this.assertRoomMembership(workspace.id, room.id, authorId);
 
     let threadId: string | null = params.threadId ?? null;
     if (threadId) {
@@ -242,8 +259,10 @@ export class CkmService {
   }
 
   async searchMessages(params: MessageSearchParams): Promise<CkmMessage[]> {
-    const { workspaceCode, keyword, roomId, limit = 20 } = params;
+    const { workspaceCode, keyword, roomId, limit = 20, actorId } = params;
     const workspace = await this.requireWorkspace(workspaceCode);
+
+    await this.assertWorkspaceMembership(workspace.id, actorId);
 
     const roomFilter = roomId ? { id: roomId, workspaceId: workspace.id } : null;
     if (roomFilter) {
@@ -253,6 +272,8 @@ export class CkmService {
           `CKM room not found (id="${roomId}") in workspace "${workspaceCode}".`,
         );
       }
+
+      await this.assertRoomMembership(workspace.id, room.id, actorId);
     }
 
     const messages = await this.prisma.ckmChatMessage.findMany({
@@ -282,6 +303,8 @@ export class CkmService {
     if (message.version !== params.version) {
       throw new ConflictException('Message version mismatch. Reload and try again.');
     }
+
+    await this.assertRoomMembership(workspace.id, message.roomId, params.editorId);
 
     const nextVersion = message.version + 1;
     const metadataParsed =
@@ -369,6 +392,8 @@ export class CkmService {
     if (message.deletedAt) {
       throw new BadRequestException('Message already deleted.');
     }
+
+    await this.assertRoomMembership(workspace.id, message.roomId, params.actorId);
 
     const nextVersion = message.version + 1;
     const deleted = await this.prisma.$transaction(async (tx) => {
@@ -511,6 +536,14 @@ export class CkmService {
     return workspace;
   }
 
+  private async requireWorkspaceById(id: string) {
+    const workspace = await this.prisma.ckmWorkspace.findUnique({ where: { id } });
+    if (!workspace) {
+      throw new NotFoundException(`CKM workspace not found (id="${id}").`);
+    }
+    return workspace;
+  }
+
   private async requireMessage(workspaceId: string, messageId: string) {
     const message = await this.prisma.ckmChatMessage.findUnique({
       where: { id: messageId },
@@ -520,6 +553,45 @@ export class CkmService {
       throw new NotFoundException(`CKM message not found (id="${messageId}") in the specified workspace.`);
     }
     return message;
+  }
+
+  private async assertWorkspaceMembership(workspaceId: string, memberId: string) {
+    const membership = await this.prisma.ckmWorkspaceMembership.findFirst({
+      where: { workspaceId, memberId, status: 'active' },
+    });
+    if (!membership) {
+      throw new ForbiddenException('CKM workspace access denied.');
+    }
+    return membership;
+  }
+
+  private async assertRoomMembership(workspaceId: string, roomId: string, memberId: string) {
+    const membership = await this.assertWorkspaceMembership(workspaceId, memberId);
+    const roomMembership = await this.prisma.ckmRoomMember.findFirst({
+      where: { roomId, membershipId: membership.id },
+    });
+    if (!roomMembership) {
+      throw new ForbiddenException('CKM room access denied.');
+    }
+    return roomMembership;
+  }
+
+  async verifyRealtimeAccess(params: { workspaceId: string; roomId?: string; actorId: string }): Promise<void> {
+    const workspace = await this.requireWorkspaceById(params.workspaceId);
+    if (params.roomId) {
+      const room = await this.prisma.ckmChatRoom.findFirst({
+        where: { id: params.roomId, workspaceId: workspace.id },
+      });
+      if (!room) {
+        throw new NotFoundException(
+          `CKM room not found (id="${params.roomId}") in workspace "${workspace.id}".`,
+        );
+      }
+      await this.assertRoomMembership(workspace.id, room.id, params.actorId);
+      return;
+    }
+
+    await this.assertWorkspaceMembership(workspace.id, params.actorId);
   }
 
   private logAudit(
