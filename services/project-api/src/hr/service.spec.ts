@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { HrService } from './service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReviewReminderPhase } from './dto/review-cycle.dto';
 
 type PrismaMock = {
   skillTag: {
@@ -15,6 +16,7 @@ type PrismaMock = {
   reviewCycle: {
     findMany: jest.Mock;
     create: jest.Mock;
+    findUnique: jest.Mock;
   };
 };
 
@@ -36,6 +38,7 @@ describe('HrService', () => {
       reviewCycle: {
         findMany: jest.fn(),
         create: jest.fn(),
+        findUnique: jest.fn(),
       },
     };
 
@@ -268,6 +271,82 @@ describe('HrService', () => {
           participantIds: ['emp-1', 'emp-2'],
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('generateReviewReminders', () => {
+    it('builds reminders for each participant and phase', async () => {
+      const startDate = new Date('2025-04-01T00:00:00Z');
+      const endDate = new Date('2025-05-01T00:00:00Z');
+      prisma.reviewCycle.findUnique.mockResolvedValue({
+        id: 'cycle-1',
+        cycleName: 'FY2025-H1',
+        startDate,
+        endDate,
+        participants: [{ employeeId: 'emp-1' }, { employeeId: 'emp-2' }],
+      });
+
+      const reminders = await service.generateReviewReminders('cycle-1');
+
+      expect(prisma.reviewCycle.findUnique).toHaveBeenCalledWith({
+        where: { id: 'cycle-1' },
+        include: { participants: true },
+      });
+      expect(reminders).toHaveLength(6);
+      expect(reminders[0]).toEqual(
+        expect.objectContaining({
+          phase: ReviewReminderPhase.KICKOFF,
+          participantId: 'emp-1',
+          channels: ['slack', 'email'],
+        }),
+      );
+      expect(reminders.at(-1)?.phase).toBe(ReviewReminderPhase.FINAL);
+    });
+
+    it('throws when cycle is missing', async () => {
+      prisma.reviewCycle.findUnique.mockResolvedValue(null);
+
+      await expect(service.generateReviewReminders('missing')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('suggestSkillTags', () => {
+    it('ranks skill tags based on profile text matches and weight', async () => {
+      prisma.skillTag.findMany.mockResolvedValue([
+        { id: 'tag-1', tag: 'nestjs', description: 'NestJS, TypeScript, GraphQL', category: 'backend', weight: 0.9 },
+        { id: 'tag-2', tag: 'react', description: 'React / TypeScript UI', category: 'frontend', weight: 0.6 },
+        { id: 'tag-3', tag: 'prompt_engineering', description: 'Prompt design, LangChain', category: 'ai', weight: 0.5 },
+      ]);
+
+      const suggestions = await service.suggestSkillTags({
+        profile: '経験: NestJS と GraphQL でREST/GraphQL API開発。LangChainでAIワークフローも構築。',
+        seedTags: ['prompt_engineering'],
+        includeSeedTags: true,
+      });
+
+      expect(prisma.skillTag.findMany).toHaveBeenCalled();
+      expect(suggestions[0].tag).toBe('nestjs');
+      expect(suggestions[0].matchedKeywords).toContain('NestJS');
+      expect(suggestions.find((item) => item.tag === 'prompt_engineering')?.matchedKeywords).toContain('LangChain');
+      expect(suggestions).toHaveLength(2);
+    });
+
+    it('honors limit and ignores unmatched seed tags when includeSeedTags is false', async () => {
+      prisma.skillTag.findMany.mockResolvedValue([
+        { id: 'tag-1', tag: 'nestjs', description: 'NestJS', category: 'backend', weight: 0.9 },
+        { id: 'tag-2', tag: 'react', description: 'React', category: 'frontend', weight: 0.6 },
+        { id: 'tag-3', tag: 'python', description: 'Python', category: 'backend', weight: 0.7 },
+      ]);
+
+      const suggestions = await service.suggestSkillTags({
+        profile: 'フロントエンドではReact、バックエンドではNestJSを担当しています。',
+        seedTags: ['python'],
+        limit: 2,
+      });
+
+      expect(suggestions).toHaveLength(2);
+      expect(suggestions.map((s) => s.tag)).toEqual(expect.arrayContaining(['nestjs', 'react']));
+      expect(suggestions.find((s) => s.tag === 'python')).toBeUndefined();
     });
   });
 });

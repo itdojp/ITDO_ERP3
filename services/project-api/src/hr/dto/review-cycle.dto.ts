@@ -1,4 +1,4 @@
-import { Field, ID, InputType, ObjectType } from '@nestjs/graphql';
+import { Field, ID, InputType, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { GraphQLScalarType } from 'graphql';
 import { GraphQLISODateTime } from 'graphql-scalars';
 
@@ -35,4 +35,35 @@ export class CreateReviewCycleInput {
 
   @Field(() => [ID])
   participantIds!: string[];
+}
+
+export enum ReviewReminderPhase {
+  KICKOFF = 'KICKOFF',
+  MIDPOINT = 'MIDPOINT',
+  FINAL = 'FINAL',
+}
+
+registerEnumType(ReviewReminderPhase, {
+  name: 'ReviewReminderPhase',
+});
+
+@ObjectType()
+export class ReviewReminderModel {
+  @Field(() => ID)
+  cycleId!: string;
+
+  @Field(() => ID)
+  participantId!: string;
+
+  @Field(() => ISODateTimeScalar)
+  triggerAt!: Date;
+
+  @Field(() => [String])
+  channels!: string[];
+
+  @Field(() => ReviewReminderPhase)
+  phase!: ReviewReminderPhase;
+
+  @Field()
+  message!: string;
 }

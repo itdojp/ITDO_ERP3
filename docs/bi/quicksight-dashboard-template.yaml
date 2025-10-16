@@ -1,0 +1,67 @@
+# QuickSight ダッシュボード テンプレート（Analytics Overview）
+# Issue #304 / #159 用 — QuickSight テンプレートエクスポート(JSON)作成前の論理構成
+
+version: 0.1.0
+workgroup: analytics-${ENVIRONMENT}
+dataset_placeholder: AnalyticsDataset
+layout:
+  - id: executive-overview
+    title: Executive KPI Summary
+    visuals:
+      - id: pipeline-total
+        type: KPI
+        title: "受注見込み額"
+        measure: fact_opportunity.pipeline_value
+        aggregation: sum
+      - id: conversion-rate
+        type: KPI
+        title: "直近月の受注率"
+        measure: fact_order_conversion.conversion_rate
+        aggregation: average
+        comparison:
+          period: month
+      - id: evaluation-completion
+        type: KPI
+        title: "評価完了率"
+        measure: fact_review_cycle.completion_rate
+        aggregation: latest
+  - id: pipeline-detail
+    title: Pipeline by Stage
+    visuals:
+      - id: pipeline-waterfall
+        type: waterfall
+        group_by: fact_opportunity.stage
+        measure: fact_opportunity.amount
+        sort: stage_order
+  - id: evaluation-trend
+    title: Review Cycle Progress
+    visuals:
+      - id: evaluation-progress
+        type: line
+        dimension: fact_review_cycle.cycle_name
+        measure: fact_review_cycle.completion_rate
+        secondary_measure: fact_review_cycle.overdue_count
+  - id: ai-usage
+    title: AI Ops Metrics
+    visuals:
+      - id: ai-success-rate
+        type: combo
+        dimension: fact_ai_usage.day
+        measures:
+          - fact_ai_usage.success_rate
+          - fact_ai_usage.latency_p95
+filters:
+  - id: environment
+    field: dim_metadata.environment
+    default: ${ENVIRONMENT}
+  - id: customer_industry
+    field: dim_customer.industry
+    default: ALL
+sharing:
+  quicksight_groups:
+    - analytics-admins
+    - analytics-readers
+notes:
+  - 実際の QuickSight テンプレート JSON を生成する際は `quicksight describe-analysis` の出力をベースに、上記構成を反映させる。
+  - Pipeline Waterfall は Stage 順を保つため `stage_order` カラムを Dimension に含める。
+  - AI Ops Metrics は `fact_ai_usage` を SPICE で 24 時間キャッシュする。
