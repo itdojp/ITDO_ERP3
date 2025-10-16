@@ -5,6 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CATALOG_PATH="${CATALOG_PATH:-$ROOT_DIR/templates/catalog.json}"
 TEMP_ROOT="$(mktemp -d)"
 REPORT_FILE="$TEMP_ROOT/smoke-report.txt"
+REPORT_DIR="$ROOT_DIR/reports/codex-template-smoke"
+REPORT_JSON="$REPORT_DIR/latest.json"
+REPORT_MARKDOWN="$REPORT_DIR/latest.md"
+
+mkdir -p "$REPORT_DIR"
+touch "$REPORT_FILE"
 
 cleanup() {
   rm -rf "$TEMP_ROOT"
@@ -159,6 +165,42 @@ lint_existing_module "bi"
 if [[ -f "$REPORT_FILE" ]]; then
   echo "::notice ::Codex smoke summary"
   cat "$REPORT_FILE"
+
+  python - <<'PY' "$REPORT_FILE" "$REPORT_JSON" "$REPORT_MARKDOWN"
+import csv
+import json
+import sys
+from datetime import datetime, timezone
+
+report_path, json_path, markdown_path = sys.argv[1:4]
+rows = []
+with open(report_path, newline='') as handle:
+    reader = csv.reader(handle)
+    for row in reader:
+        if len(row) >= 2:
+            rows.append({"check": row[0], "status": row[1]})
+
+generated_at = datetime.now(tz=timezone.utc).isoformat()
+
+payload = {
+    "generatedAt": generated_at,
+    "items": rows,
+}
+
+with open(json_path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, indent=2)
+
+with open(markdown_path, "w", encoding="utf-8") as handle:
+    handle.write("# Codex Template Smoke Report\n\n")
+    handle.write(f"Generated: {generated_at}\n\n")
+    handle.write("| Check | Status |\n|-------|--------|\n")
+    for item in rows:
+        handle.write(f"| {item['check']} | {item['status']} |\n")
+PY
+
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    cat "$REPORT_MARKDOWN" >>"$GITHUB_STEP_SUMMARY"
+  fi
 fi
 
 echo "Codex template smoke run completed successfully."

@@ -31,3 +31,8 @@ jobs:
         run: npm install --no-audit --prefer-offline --no-fund
       - name: Run Codex template smoke test
         run: scripts/ci/run-codex-template-smoke.sh
+      - name: Upload Codex smoke report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-template-smoke-report
+          path: reports/codex-template-smoke/latest.*
