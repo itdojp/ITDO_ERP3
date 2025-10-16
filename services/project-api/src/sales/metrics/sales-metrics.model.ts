@@ -1,10 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { GraphQLScalarType } from 'graphql';
+import { GraphQLDateTime } from 'graphql-scalars';
+
+const DateTimeScalar = GraphQLDateTime as unknown as GraphQLScalarType<Date, string>;
 
 @ObjectType()
 export class SalesMetricsModel {
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   generatedAt!: Date;
 
   @Field(() => Int)

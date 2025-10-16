@@ -1,7 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, Float, ID, InputType, ObjectType } from '@nestjs/graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { GraphQLScalarType } from 'graphql';
+import { GraphQLDateTime } from 'graphql-scalars';
 import { CreditReviewModel } from './credit-review.dto';
+
+const DateTimeScalar = GraphQLDateTime as unknown as GraphQLScalarType<Date, string>;
 
 @ObjectType()
 export class OrderModel {
@@ -26,13 +28,13 @@ export class OrderModel {
   @Field(() => String)
   paymentTerm!: string;
 
-  @Field(() => GraphQLISODateTime, { nullable: true })
+  @Field(() => DateTimeScalar, { nullable: true })
   signedAt?: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   createdAt!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   updatedAt!: Date;
 
   @Field(() => [CreditReviewModel])
@@ -53,6 +55,6 @@ export class CreateOrderInput {
   @Field(() => Float, { nullable: true })
   totalAmount?: number;
 
-  @Field(() => GraphQLISODateTime, { nullable: true })
+  @Field(() => DateTimeScalar, { nullable: true })
   signedAt?: Date;
 }

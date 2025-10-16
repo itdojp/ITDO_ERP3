@@ -1,6 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, Float, ID, InputType, ObjectType } from '@nestjs/graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { GraphQLScalarType } from 'graphql';
+import { GraphQLDateTime } from 'graphql-scalars';
+
+const DateTimeScalar = GraphQLDateTime as unknown as GraphQLScalarType<Date, string>;
 
 @ObjectType()
 export class CreditReviewModel {
@@ -19,10 +21,10 @@ export class CreditReviewModel {
   @Field({ nullable: true })
   remarks?: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   requestedAt!: Date;
 
-  @Field(() => GraphQLISODateTime, { nullable: true })
+  @Field(() => DateTimeScalar, { nullable: true })
   decidedAt?: Date;
 }
 
