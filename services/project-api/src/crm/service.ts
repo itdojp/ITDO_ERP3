@@ -77,12 +77,27 @@ export class CrmService {
       where.type = filter.type;
     }
     if (filter?.industry) {
-      where.industry = { equals: filter.industry, mode: 'insensitive' };
+      // Prisma's generated types omit QueryMode on string filters, so cast to allow case-insensitive equals.
+      where.industry = {
+        equals: filter.industry,
+        mode: 'insensitive',
+      } as unknown as Prisma.CustomerWhereInput['industry'];
     }
     if (filter?.search) {
       where.OR = [
-        { name: { contains: filter.search, mode: 'insensitive' } },
-        { industry: { contains: filter.search, mode: 'insensitive' } },
+        {
+          // Cast required to opt into case-insensitive contains despite Prisma type omissions.
+          name: {
+            contains: filter.search,
+            mode: 'insensitive',
+          } as unknown as Prisma.CustomerWhereInput['name'],
+        },
+        {
+          industry: {
+            contains: filter.search,
+            mode: 'insensitive',
+          } as unknown as Prisma.CustomerWhereInput['industry'],
+        },
       ];
     }
 

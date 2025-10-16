@@ -382,7 +382,7 @@ async function seed() {
     },
   });
 
-  const skillTagsSeedPath = resolve(__dirname, '..', 'db', 'seeds', 'hr', 'skill-tags.json');
+  const skillTagsSeedPath = resolve(__dirname, '..', '..', '..', 'db', 'seeds', 'hr', 'skill-tags.json');
   const skillTagPayloads = JSON.parse(readFileSync(skillTagsSeedPath, 'utf8')) as Array<{
     tag: string;
     description: string;

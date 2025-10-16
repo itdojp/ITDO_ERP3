@@ -13,6 +13,7 @@
 1. **日次チェック**
    - 09:00 JST までに QuickSight ダッシュボードで評価進捗（完了率/遅延者）を確認
    - `scripts/hr/list-pending-reviews.ts` を実行し、フォローアップが必要な担当者を Slack に通知
+   - スキルタグ推定ジョブ (`npm run hr:skill-tag-sync`) の実行結果を CloudWatch Logs で確認
    - GraphQL `/graphql` で `employees` / `reviewCycles` クエリを実行し、Prisma 上の `Employee` / `ReviewCycle` テーブルと整合しているか確認
    - GraphQL `/graphql` で `reviewCycleReminders(cycleId: ...)` を実行し、Slack/Email リマインドの予定時刻が最新か確認
    - スキルタグ推定 API（`suggestSkillTags(input: { profile: "...", seedTags: [...] })`）でサンプル文章を評価し、推定タグと信頼度を記録

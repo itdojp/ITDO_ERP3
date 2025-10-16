@@ -15,7 +15,7 @@ Phase3 本実装に合わせて CRM / Sales モジュールを本番適用する
 2. `DATABASE_URL` を本番環境の接続文字列に設定し、`npx prisma migrate deploy` を実行
 3. `scripts/ci/run-codex-template-smoke.sh` を実行し、新テンプレートのテンプレ生成が成功することを確認
 4. `api/v1/crm/customers` / `api/v1/sales/quotes` / `api/v1/sales/metrics` を `curl` で実行し、200 応答と想定データが返ることを確認
-5. Slack `#sales-ops` と PagerDuty `Sales Ops` エスカレーションポリシーへリリース開始を共有し、クレジット承認時の通知ルールを再確認
+5. Slack `#sales-ops`（リリース実況）と `#sales-ops-alerts`（CloudWatch アラート受信）および PagerDuty `Sales Ops` エスカレーションポリシーへリリース開始を共有し、クレジット承認時の通知ルールを再確認
 
 ## 3. ロールバック
 - [ ] リリース後 60 分以内の障害は `npx prisma migrate resolve --rolled-back` を利用して直近マイグレーションをロールバック
