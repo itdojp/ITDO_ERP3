@@ -1,6 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, Float, ID, InputType, Int } from '@nestjs/graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { GraphQLScalarType } from 'graphql';
+import { GraphQLDateTime } from 'graphql-scalars';
+
+const ISODateTimeScalar = GraphQLDateTime as unknown as GraphQLScalarType<Date, string>;
 
 @InputType()
 export class CustomerFilterInput {
@@ -70,7 +72,7 @@ export class CreateOpportunityInput {
   @Field(() => Int, { nullable: true })
   probability?: number;
 
-  @Field(() => GraphQLISODateTime, { nullable: true })
+  @Field(() => ISODateTimeScalar, { nullable: true })
   expectedClose?: Date;
 }
 

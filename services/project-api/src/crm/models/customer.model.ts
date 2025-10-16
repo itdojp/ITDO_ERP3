@@ -1,6 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, Float, ID, Int, ObjectType } from '@nestjs/graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { GraphQLScalarType } from 'graphql';
+import { GraphQLDateTime } from 'graphql-scalars';
+
+const DateTimeScalar = GraphQLDateTime as unknown as GraphQLScalarType<Date, string>;
 
 @ObjectType()
 export class ConversationSummaryModel {
@@ -16,7 +18,7 @@ export class ConversationSummaryModel {
   @Field(() => Float)
   confidence!: number;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   createdAt!: Date;
 }
 
@@ -31,10 +33,10 @@ export class InteractionNoteModel {
   @Field(() => String)
   rawText!: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   occurredAt!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   createdAt!: Date;
 
   @Field(() => ConversationSummaryModel, { nullable: true })
@@ -58,7 +60,7 @@ export class ContactModel {
   @Field(() => String, { nullable: true })
   phone?: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   createdAt!: Date;
 }
 
@@ -82,7 +84,7 @@ export class OpportunityModel {
   @Field(() => Int, { nullable: true })
   probability?: number;
 
-  @Field(() => GraphQLISODateTime, { nullable: true })
+  @Field(() => DateTimeScalar, { nullable: true })
   expectedClose?: Date;
 
   @Field(() => [InteractionNoteModel])
@@ -109,10 +111,10 @@ export class CustomerModel {
   @Field(() => [String])
   tags!: string[];
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   createdAt!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => DateTimeScalar)
   updatedAt!: Date;
 
   @Field(() => [ContactModel])

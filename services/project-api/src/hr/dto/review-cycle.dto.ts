@@ -1,8 +1,8 @@
 import { Field, ID, InputType, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { GraphQLScalarType } from 'graphql';
-import { GraphQLISODateTime } from 'graphql-scalars';
+import { GraphQLDateTime } from 'graphql-scalars';
 
-const ISODateTimeScalar = GraphQLISODateTime as GraphQLScalarType<Date, string>;
+const ISODateTimeScalar = GraphQLDateTime as unknown as GraphQLScalarType<Date, string>;
 
 @ObjectType()
 export class ReviewCycleModel {

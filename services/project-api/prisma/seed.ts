@@ -236,11 +236,102 @@ async function seed() {
     },
   ];
 
+  const gammaProject = {
+    code: 'GAMMA-03',
+    name: 'Gamma Compliance Automation',
+    description: 'Automate compliance evidence collection across finance and HR.',
+    status: 'planning',
+    startDate: new Date('2025-05-01'),
+    endDate: new Date('2025-12-31'),
+    plannedValue: 75000,
+    earnedValue: 15000,
+    actualCost: 12000,
+    phases: {
+      create: [
+        {
+          id: 'phase-gamma-design',
+          name: 'Design',
+          sortOrder: 1,
+          startDate: new Date('2025-05-01'),
+          endDate: new Date('2025-06-15'),
+        },
+        {
+          id: 'phase-gamma-automation',
+          name: 'Automation Build',
+          sortOrder: 2,
+          startDate: new Date('2025-06-16'),
+          endDate: new Date('2025-10-31'),
+        },
+      ],
+    },
+    tasks: {
+      create: [
+        {
+          name: 'Compliance Requirement Mapping',
+          phaseId: 'phase-gamma-design',
+          status: 'inProgress',
+          startDate: new Date('2025-05-05'),
+          endDate: new Date('2025-05-25'),
+          effortHours: 120,
+          orderIndex: 1,
+        },
+        {
+          name: 'Evidence Collector Bot',
+          phaseId: 'phase-gamma-automation',
+          status: 'todo',
+          startDate: new Date('2025-07-01'),
+          endDate: new Date('2025-08-31'),
+          effortHours: 200,
+          orderIndex: 2,
+        },
+      ],
+    },
+    risks: {
+      create: [
+        { probability: 35, impact: 3, status: 'new', summary: 'Regulatory change mid-project' },
+      ],
+    },
+    burndown: {
+      create: [
+        { label: 'Sprint 1', planned: 80, actual: 78, orderIndex: 1 },
+        { label: 'Sprint 2', planned: 160, actual: 150, orderIndex: 2 },
+      ],
+    },
+    chatThreads: {
+      create: [
+        {
+          provider: 'Slack',
+          externalThreadId: 'gamma-thread-015',
+          channelName: 'gamma-compliance-weekly',
+          summary: 'Discussed evidence automation scope and dependency on HR data export.',
+          messages: {
+            create: [
+              {
+                author: 'ComplianceLead',
+                content: 'Need integration with HR data export before automation sprint.',
+                postedAt: new Date('2025-05-10T10:00:00Z'),
+              },
+              {
+                author: 'AutomationEngineer',
+                content: 'Prototype bot ready for demo next sprint.',
+                postedAt: new Date('2025-05-10T12:15:00Z'),
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+
   for (const project of projects) {
     await prisma.project.create({
       data: project,
     });
   }
+
+  await prisma.project.create({
+    data: gammaProject,
+  });
 
   const acme = await prisma.customer.create({
     data: {
