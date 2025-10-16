@@ -259,3 +259,59 @@ model OrderAuditLog {
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
+
+model SkillTag {
+  id          String  @id @default(cuid())
+  tag         String  @unique
+  description String
+  category    String
+  weight      Float   @default(0)
+  createdAt   DateTime @default(now())
+
+  employees EmployeeSkillTag[]
+}
+
+model Employee {
+  id        String @id @default(cuid())
+  name      String
+  email     String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  skills      EmployeeSkillTag[]
+  reviewCycles ReviewCycleParticipant[]
+}
+
+model EmployeeSkillTag {
+  id         String @id @default(cuid())
+  employeeId String
+  skillTagId String
+  assignedAt DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  skillTag SkillTag @relation(fields: [skillTagId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, skillTagId])
+}
+
+model ReviewCycle {
+  id        String   @id @default(cuid())
+  cycleName String
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ReviewCycleParticipant[]
+}
+
+model ReviewCycleParticipant {
+  id            String @id @default(cuid())
+  reviewCycleId String
+  employeeId    String
+
+  reviewCycle ReviewCycle @relation(fields: [reviewCycleId], references: [id], onDelete: Cascade)
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewCycleId, employeeId])
+}

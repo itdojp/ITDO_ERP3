@@ -9,7 +9,8 @@ graph TD
   B --> C[Automated Test & AI Review]
   C --> D[Documentation & Knowledge Share]
   D --> E[Deployment & Observability]
-  E -->|Feedback| A
+  E --> F[AI Ops Automation]
+  F -->|Insights| A
 ```
 
 ## 2. ステージ概要
@@ -20,6 +21,7 @@ graph TD
 | `test_and_review` | 自動テスト / AIレビュー | QA / Copilot PR Reviewer | GitHub Actions, LangGraph |
 | `documentation` | ドキュメント更新 | Tech Writer + ChatGPT | Codex CLI Doc, Notion |
 | `deployment` | デプロイ / 監視 | SRE / AI Ops | ArgoCD, Terraform |
+| `ai_ops_phase3` | AI Ops 自動化 | AI Ops リード / プラットフォーム PM | Codex Smoke Insights, LangGraph Verify |
 
 詳細なトリガーや品質ゲートは `ai-devflow.yaml` を参照してください。
 
@@ -59,5 +61,12 @@ stages:
 - `test_and_review` → HR Module CI / Codex Template Smoke で自動 lint + smoke を実施
 - `deployment` → Terraform Compliance・HR Module CI を通じて監視スタック/モジュールを本番へ昇格
 
+## 6. Phase3 AI Ops Automation
+- `ai_ops_phase3` では以下のワークフローを連動させ、AI エージェントからリリースまでのハンドオフを自動化します。
+  - `AI Ops LangGraph Verify`：LangGraph Verify / Agent Builder の検証ステップをまとめ、Codex Smoke の失敗率を添付して Slack `#ai-ops-alerts` に通知。
+  - `AI Ops Auto Handoff`：テンプレート生成 → PR レビュー → デプロイメント承認の手順を GitHub Actions で一括トリガーし、承認状況を Insights レポートへ反映。
+  - `AI Ops Insights Publisher`：Codex Smoke と LangGraph Verify の結果を GitHub Actions Insights へ記録し、`docs/ai/ops-dashboard.md` と PagerDuty へ共有。
+- 詳細な運用手順は新設した [AI Ops Runbook](docs/runbooks/ai-ops.md) を参照してください。
+
 ---
-最終更新: 2025-10-14 / メンテナ担当: AI 開発推進チーム
+最終更新: 2025-10-16 / メンテナ担当: AI 開発推進チーム

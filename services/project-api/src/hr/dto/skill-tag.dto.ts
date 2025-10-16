@@ -1,4 +1,4 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, Float, ObjectType } from '@nestjs/graphql';
 
 @ObjectType()
 export class SkillTagModel {
@@ -11,6 +11,6 @@ export class SkillTagModel {
   @Field()
   category!: string;
 
-  @Field()
+  @Field(() => Float)
   weight!: number;
 }

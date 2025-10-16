@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -20,6 +22,11 @@ async function seed() {
   await prisma.phase.deleteMany();
   await prisma.burndownPoint.deleteMany();
   await prisma.project.deleteMany();
+  await prisma.reviewCycleParticipant.deleteMany();
+  await prisma.reviewCycle.deleteMany();
+  await prisma.employeeSkillTag.deleteMany();
+  await prisma.employee.deleteMany();
+  await prisma.skillTag.deleteMany();
 
   const projects = [
     {
@@ -374,6 +381,95 @@ async function seed() {
       ownerUserId: 'user-crm-specialist',
     },
   });
+
+  const skillTagsSeedPath = resolve(__dirname, '..', '..', '..', 'db', 'seeds', 'hr', 'skill-tags.json');
+  const skillTagPayloads = JSON.parse(readFileSync(skillTagsSeedPath, 'utf8')) as Array<{
+    tag: string;
+    description: string;
+    category: string;
+    weight?: number;
+  }>;
+
+  const skillTagRecords = await Promise.all(
+    skillTagPayloads.map((payload) =>
+      prisma.skillTag.create({
+        data: {
+          tag: payload.tag,
+          description: payload.description,
+          category: payload.category,
+          weight: payload.weight ?? 0,
+        },
+      }),
+    ),
+  );
+
+  const skillTagMap = new Map(skillTagRecords.map((record) => [record.tag, record.id]));
+
+  const employeeSeed = [
+    {
+      name: 'Mina Kato',
+      email: 'mina.kato@itdo.example.com',
+      tags: ['project_management', 'nestjs'],
+    },
+    {
+      name: 'Sara Fujimoto',
+      email: 'sara.fujimoto@itdo.example.com',
+      tags: ['react_ui', 'ai_prompting'],
+    },
+    {
+      name: 'Kenji Morita',
+      email: 'kenji.morita@itdo.example.com',
+      tags: ['hr_policy', 'project_management'],
+    },
+  ];
+
+  const employees = await Promise.all(
+    employeeSeed.map((employee) => {
+      const assignments = employee.tags
+        .map((tag) => skillTagMap.get(tag))
+        .filter((value): value is string => Boolean(value));
+
+      return prisma.employee.create({
+        data: {
+          name: employee.name,
+          email: employee.email,
+          skills: {
+            create: assignments.map((skillTagId) => ({ skillTagId })),
+          },
+        },
+      });
+    }),
+  );
+
+  const reviewCyclesSeed = [
+    {
+      cycleName: 'FY2025-H1 Performance Review',
+      startDate: new Date('2025-04-01'),
+      endDate: new Date('2025-06-30'),
+      participants: employees.map((employee) => employee.id),
+    },
+    {
+      cycleName: 'FY2025-H2 Midpoint Check-in',
+      startDate: new Date('2025-10-01'),
+      endDate: new Date('2025-12-15'),
+      participants: employees.slice(0, 2).map((employee) => employee.id),
+    },
+  ];
+
+  await Promise.all(
+    reviewCyclesSeed.map((cycle) =>
+      prisma.reviewCycle.create({
+        data: {
+          cycleName: cycle.cycleName,
+          startDate: cycle.startDate,
+          endDate: cycle.endDate,
+          participants: {
+            create: cycle.participants.map((employeeId) => ({ employeeId })),
+          },
+        },
+      }),
+    ),
+  );
 }
 
 seed()
