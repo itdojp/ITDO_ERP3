@@ -46,6 +46,15 @@ export class HrService {
 
     const skillTagMap = new Map(tagRecords.map((tag) => [tag.tag, tag.id]));
 
+    const buildSkillAssignments = (tags: string[]) =>
+      tags.map((tag) => {
+        const skillTagId = skillTagMap.get(tag);
+        if (!skillTagId) {
+          throw new NotFoundException(`Skill tag ${tag} not found.`);
+        }
+        return { skillTagId };
+      });
+
     if (input.id) {
       const employee = await this.prisma.employee.update({
         where: { id: input.id },
@@ -54,9 +63,7 @@ export class HrService {
           email: input.email,
           skills: {
             deleteMany: {},
-            create: uniqueTags.map((tag) => ({
-              skillTagId: skillTagMap.get(tag)!,
-            })),
+            create: buildSkillAssignments(uniqueTags),
           },
         },
         include: { skills: { include: { skillTag: true } } },
@@ -70,9 +77,7 @@ export class HrService {
         name: input.name,
         email: input.email,
         skills: {
-          create: uniqueTags.map((tag) => ({
-            skillTagId: skillTagMap.get(tag)!,
-          })),
+          create: buildSkillAssignments(uniqueTags),
         },
       },
       include: { skills: { include: { skillTag: true } } },

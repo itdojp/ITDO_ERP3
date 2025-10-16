@@ -1,6 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Field, ID, InputType, ObjectType } from '@nestjs/graphql';
+import { GraphQLScalarType } from 'graphql';
 import { GraphQLISODateTime } from 'graphql-scalars';
+
+const ISODateTimeScalar = GraphQLISODateTime as GraphQLScalarType<Date, string>;
 
 @ObjectType()
 export class ReviewCycleModel {
@@ -10,10 +12,10 @@ export class ReviewCycleModel {
   @Field()
   cycleName!: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => ISODateTimeScalar)
   startDate!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => ISODateTimeScalar)
   endDate!: Date;
 
   @Field(() => [String])
@@ -25,10 +27,10 @@ export class CreateReviewCycleInput {
   @Field()
   cycleName!: string;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => ISODateTimeScalar)
   startDate!: Date;
 
-  @Field(() => GraphQLISODateTime)
+  @Field(() => ISODateTimeScalar)
   endDate!: Date;
 
   @Field(() => [ID])
