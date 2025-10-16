@@ -41,6 +41,10 @@
 - 自動ハンドオフの承認判断は GitHub pull request のコメント（`@ai-ops` ラベル）に残し、Slack メッセージと紐付ける
 - 月次で KPI サマリを `docs/ai/ops-dashboard.md` に追記し、Issue #305 / #159 にリンクを残す
 
+## 品質基準とハンドオフ
+- 生成コンテンツは Codex Smoke を通過したテンプレートのみを対象とし、最低でも 2 件の自動テスト（lint + unit）成功を確認する。
+- LangGraph Verify の結果 (`reports/ai-ops-verify.md`) を PR に添付し、AI Ops チームが `LG-Verified ✅` ラベルを付与したものだけを自動ハンドオフへ進める。
+- 自動ハンドオフ完了時は PR に `@ai-ops` コメントで承認メモを残し、リリース責任者が 30 分以内にフォローアップを行う。
 ## 権限・Secrets 管理
 - GitHub Actions の `AI Ops` 系ワークフローはデフォルト `GITHUB_TOKEN` (actions:write) を利用。追加で PAT を使用する場合は `AI_OPS_PAT` Secrets に格納し、Scope は `workflow` のみに限定。
 - LangGraph / Codex 関連の API Keys は AWS Secrets Manager `ai/ops/langgraph` / `ai/ops/codex` に保存し、ワークフローからは OIDC ロール経由で取得する。
