@@ -1,0 +1,14 @@
+{
+  "name": "ckm-realtime-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:sse": "node sse.js",
+    "start:redis-consumer": "node xread.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "redis": "^4.7.1"
+  }
+}
