@@ -1,5 +1,14 @@
 const defaultBase = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3001';
 const enableLogging = (process.env.NEXT_PUBLIC_ENABLE_API_LOGGING ?? 'false').toLowerCase() === 'true';
+const defaultCkmUserId = (process.env.NEXT_PUBLIC_CKM_USER_ID ?? 'user-alice').trim();
+
+const buildAuthHeaders = (headers?: HeadersInit): HeadersInit => {
+  const ckmUserId = defaultCkmUserId;
+  return {
+    'X-User-Id': ckmUserId,
+    ...headers,
+  };
+};
 
 export type ApiRequestOptions = RequestInit & {
   path: string;
@@ -29,7 +38,7 @@ export async function apiRequestInternal<T>(options: ApiRequestOptions): Promise
   const url = new URL(path, baseUrl).toString();
   const requestHeaders = {
     'Content-Type': 'application/json',
-    ...headers,
+    ...buildAuthHeaders(headers),
   } satisfies HeadersInit;
 
   if (enableLogging) {
@@ -71,7 +80,7 @@ export async function graphqlRequestInternal<TData, TVars extends Record<string,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...headers,
+      ...buildAuthHeaders(headers),
     },
     body: JSON.stringify({ query, variables }),
     cache: 'no-store',
