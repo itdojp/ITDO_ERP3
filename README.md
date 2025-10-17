@@ -135,6 +135,31 @@ CLI は `--config` で読み込んだ設定を実行前に検証し、不正値�
 
 GitHub Actions には週次スケジュール (`Projects Slack Share Check`) を追加し、サンプルメッセージの生成が失敗しないかを継続的に確認しています。
 
+## 🔄 CKM リアルタイム配信 PoC
+
+CKM チャットのリアルタイム配信を検証するための最小サンプルを `server/` に用意しています。
+
+### SSE サーバ
+```bash
+cd server
+npm install            # 初回のみ
+PORT=4100 npm run start:sse
+```
+- `http://localhost:4100/events` を `curl` などで購読すると 2 秒ごとにタイムスタンプが配信されます。
+- ハートビートは 10 秒間隔で送信され、`X-Accel-Buffering: no` によりバッファリングを抑制しています。
+
+### Redis Streams コンシューマ
+```bash
+# Redis を docker/docker-compose.ckm.yml などで起動しておく
+CKM_REDIS_URL=redis://localhost:7637 \
+CKM_STREAM_KEY=ckm:events \
+CKM_STREAM_GROUP=ckm-demo \
+npm run start:redis-consumer
+```
+- スクリプト起動時に `XGROUP CREATE`（`MKSTREAM` 付き）でコンシューマグループを作成します。
+- 別ターミナルから `redis-cli -u redis://localhost:7637 XADD ckm:events * type message body "hello"` を実行すると、コンシューマが `XREADGROUP` 経由でメッセージを取得し `XACK` します。
+- 複数ノード検証時は `CKM_STREAM_CONSUMER` を変更して複数プロセスを起動してください。
+
 ## 📝 ライセンス
 
 本仕様書は社内利用を前提としています。外部公開の際は事前承認が必要です。
