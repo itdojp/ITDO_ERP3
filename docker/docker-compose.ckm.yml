@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  ckm-db:
+    image: ankane/pgvector:latest
+    container_name: ckm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CKM_DB_USER:-ckm}
+      POSTGRES_PASSWORD: ${CKM_DB_PASSWORD:-ckm}
+      POSTGRES_DB: ${CKM_DB_NAME:-ckm}
+    ports:
+      - "${CKM_DB_PORT:-7432}:5432"
+    volumes:
+      - ckm-db-data:/var/lib/postgresql/data
+
+  ckm-redis:
+    image: redis:7-alpine
+    container_name: ckm-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "${CKM_REDIS_PORT:-7637}:6379"
+    volumes:
+      - ckm-redis-data:/data
+
+volumes:
+  ckm-db-data:
+  ckm-redis-data:

@@ -21,6 +21,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:ckm:diff": "prisma migrate diff --from-empty --to-schema-datamodel prisma/ckm.prisma --script",
     "prisma:db:ckm:execute:init": "prisma db execute --schema prisma/ckm.prisma --file prisma/ckm-migrations/20251017000000_init/migration.sql",
+    "prisma:seed:ckm": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/ckm-seed.ts",
     "prisma:seed": "prisma db seed",
     "db:setup": "npm run prisma:migrate && npm run prisma:seed"
   },
