@@ -18,12 +18,32 @@ Project API は ITDO ERP3 のプロジェクト管理・チャット連携の試
 cd services/project-api
 cp .env.example .env
 npm install
-npm run db:setup     # prisma migrate deploy + seed
+npm run db:setup     # prisma migrate deploy + seed（既存 SQLite 用）
 npm run build        # 型検証と GraphQL スキーマ生成
 npm run start:dev    # http://localhost:3000/api/v1, http://localhost:3000/graphql
 ```
 
-起動時に `app.setGlobalPrefix('api/v1')` が適用されるため、REST エンドポイントには `/api/v1` プレフィックスが付きます。GraphQL Playground は `/graphql` で利用できます。Prisma は SQLite を利用しており、`npm run db:setup` でマイグレーションとシードデータを投入します。`DATABASE_URL` を変更することで、別ファイルの SQLite や他データソースへ切り替え可能です。
+起動時に `app.setGlobalPrefix('api/v1')` が適用されるため、REST エンドポイントには `/api/v1` プレフィックスが付きます。GraphQL Playground は `/graphql` で利用できます。Prisma は既定では SQLite (`DATABASE_URL`) を参照しており、`npm run db:setup` でマイグレーションとシードデータを投入します。別ファイルの SQLite や他データソースへ切り替える場合は `DATABASE_URL` を調整してください。
+
+### CKM チャット用ローカル環境（PostgreSQL + Redis）
+
+CKM モジュールは pgvector 対応 PostgreSQL (`DATABASE_CKM_URL`) と Redis (`CKM_REDIS_URL`) が必要です。ローカル検証はリポジトリ直下の compose ファイルで初期化できます。
+
+```bash
+# リポジトリ直下で実行
+docker compose -f docker/docker-compose.ckm.yml up -d
+
+# DB マイグレーションとサンプルデータ投入
+cd services/project-api
+npm run prisma:generate:ckm
+npm run prisma:db:ckm:execute:init
+npm run prisma:seed:ckm
+
+# Project API を起動（.env に DATABASE_CKM_URL / CKM_REDIS_URL を設定）
+npm run start:dev
+```
+
+既定では PostgreSQL は `localhost:7432`、Redis は `localhost:7637` で待ち受けます。必要に応じて `CKM_DB_PORT` や `CKM_REDIS_PORT` などの環境変数でポートを変更してください。compose で生成したデータは永続化ボリューム `ckm-db-data` / `ckm-redis-data` に保持されます。クリーンアップする場合は `docker compose -f docker/docker-compose.ckm.yml down -v` を利用してください。
 
 ### Chat Summarizer 設定
 
