@@ -6,13 +6,21 @@
   "scripts": {
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "prestart": "npm run prisma:generate",
+    "prestart:dev": "npm run prisma:generate",
     "build": "nest build",
+    "prebuild": "npm run prisma:generate",
     "lint": "eslint --ext .ts src",
     "test": "jest",
+    "pretest": "npm run prisma:generate",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "npm run prisma:generate:default && npm run prisma:generate:ckm",
+    "prisma:generate:default": "prisma generate",
+    "prisma:generate:ckm": "prisma generate --schema prisma/ckm.prisma",
     "prisma:migrate": "prisma migrate deploy",
+    "prisma:migrate:ckm:diff": "prisma migrate diff --from-empty --to-schema-datamodel prisma/ckm.prisma --script",
+    "prisma:db:ckm:execute:init": "prisma db execute --schema prisma/ckm.prisma --file prisma/ckm-migrations/20251017000000_init/migration.sql",
     "prisma:seed": "prisma db seed",
     "db:setup": "npm run prisma:migrate && npm run prisma:seed"
   },
@@ -27,6 +35,8 @@
     "@nestjs/core": "^10.3.0",
     "@nestjs/graphql": "^12.0.0",
     "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/platform-socket.io": "^10.4.20",
+    "@nestjs/websockets": "^10.4.20",
     "@prisma/client": "^5.11.0",
     "apollo-server-express": "^3.12.0",
     "class-transformer": "^0.5.1",
@@ -38,8 +48,10 @@
     "pdfkit": "^0.15.0",
     "pg": "^8.12.0",
     "pgvector": "^0.1.6",
+    "redis": "^4.7.1",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.3.2",

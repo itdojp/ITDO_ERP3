@@ -1,0 +1,275 @@
+generator ckmClient {
+  provider = "prisma-client-js"
+  output   = "../generated/ckm-client"
+}
+
+datasource ckm {
+  provider = "postgresql"
+  url      = env("DATABASE_CKM_URL")
+}
+
+enum CkmWorkspaceRole {
+  OWNER
+  ADMIN
+  MAINTAINER
+  MEMBER
+  GUEST
+  EXTERNAL
+}
+
+enum CkmRoomType {
+  DIRECT
+  GROUP
+  TOPIC
+  BROADCAST
+}
+
+enum CkmRoomRole {
+  OWNER
+  MODERATOR
+  PARTICIPANT
+  VIEWER
+}
+
+enum CkmMessageType {
+  TEXT
+  SYSTEM
+  FILE
+  TASK
+  ANNOUNCEMENT
+}
+
+model CkmWorkspace {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  type        String             @default("team")
+  description String?
+  defaultRole CkmWorkspaceRole   @default(MEMBER)
+  isPrivate   Boolean            @default(false)
+  archivedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  rooms        CkmChatRoom[]
+  memberships  CkmWorkspaceMembership[]
+  auditLogs    CkmAuditLog[]
+
+  @@index([type])
+  @@index([isPrivate])
+}
+
+model CkmWorkspaceMembership {
+  id                String             @id @default(cuid())
+  workspaceId       String
+  memberType        String
+  memberId          String
+  role              CkmWorkspaceRole   @default(MEMBER)
+  status            String             @default("active") // invited / pending / suspended
+  invitedBy         String?
+  notificationLevel String             @default("all")
+  lastSeenAt        DateTime?
+  createdAt         DateTime           @default(now())
+
+  workspace       CkmWorkspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  roomMemberships CkmRoomMember[]
+  ownedRooms      CkmChatRoom[]        @relation("RoomOwner")
+  notificationSettings CkmNotificationSetting[]
+
+  @@unique([workspaceId, memberType, memberId])
+  @@index([memberId])
+}
+
+model CkmChatRoom {
+  id                 String                   @id @default(cuid())
+  workspaceId        String
+  roomType           CkmRoomType
+  title              String
+  topic              String?
+  ownerMembershipId  String
+  isPrivate          Boolean                  @default(false)
+  pinnedMessageId    String?
+  archivedAt         DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  workspace      CkmWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerMembership CkmWorkspaceMembership @relation("RoomOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  members        CkmRoomMember[]
+  threads        CkmChatThread[]
+  messages       CkmChatMessage[]
+  auditLogs      CkmAuditLog[]
+
+  @@index([workspaceId, roomType])
+  @@index([isPrivate])
+}
+
+model CkmRoomMember {
+  id                String                 @id @default(cuid())
+  roomId            String
+  membershipId      String
+  roomRole          CkmRoomRole            @default(PARTICIPANT)
+  lastReadMessageId String?
+  mutedUntil        DateTime?
+  notificationLevel String                 @default("inherit")
+  createdAt         DateTime               @default(now())
+
+  room        CkmChatRoom             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  membership  CkmWorkspaceMembership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, membershipId])
+  @@index([membershipId])
+}
+
+model CkmChatThread {
+  id               String              @id @default(cuid())
+  roomId           String
+  rootMessageId    String?            @unique
+  title            String?
+  status           String              @default("open")
+  linkedTaskSystem String?
+  linkedTaskId     String?
+  summary          String?
+  summaryEmbedding Unsupported("vector(1536)")?
+  summaryUpdatedAt DateTime?
+
+  room        CkmChatRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  messages    CkmChatMessage[]
+  rootMessage CkmChatMessage?  @relation("ThreadRoot", fields: [rootMessageId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, status])
+}
+
+model CkmChatMessage {
+  id              String            @id @default(cuid())
+  roomId          String
+  threadId        String?
+  parentMessageId String?
+  authorId        String
+  messageType     CkmMessageType    @default(TEXT)
+  priority        Int               @default(0)
+  body            String
+  bodyRich        Json?
+  mentionsJson    Json?
+  metadataJson    Json?
+  postedAt        DateTime          @default(now())
+  editedAt        DateTime?
+  deletedAt       DateTime?
+  version         Int               @default(1)
+
+  room            CkmChatRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  thread          CkmChatThread?    @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  threadRoot      CkmChatThread?    @relation("ThreadRoot")
+  parentMessage   CkmChatMessage?   @relation("MessageReplies", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies         CkmChatMessage[]  @relation("MessageReplies")
+  versions        CkmMessageVersion[]
+  attachments     CkmMessageAttachment[]
+  reactions       CkmMessageReaction[]
+  taskLinks       CkmMessageTaskLink[]
+  embedding       CkmMessageEmbedding?
+
+  @@index([roomId, postedAt])
+  @@index([authorId])
+  @@index([threadId])
+}
+
+model CkmMessageVersion {
+  id        String          @id @default(cuid())
+  messageId String
+  version   Int
+  body      String
+  diff      Json?
+  editedBy  String
+  editedAt  DateTime        @default(now())
+
+  message CkmChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, version])
+}
+
+model CkmMessageAttachment {
+  id               String         @id @default(cuid())
+  messageId        String
+  objectStorageKey String
+  fileName         String
+  fileSize         Int
+  mimeType         String
+  checksum         String?
+  uploadedBy       String
+  createdAt        DateTime       @default(now())
+
+  message CkmChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model CkmMessageReaction {
+  id        String         @id @default(cuid())
+  messageId String
+  actorId   String
+  emoji     String
+  createdAt DateTime       @default(now())
+
+  message CkmChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, actorId, emoji])
+}
+
+model CkmMessageTaskLink {
+  id           String   @id @default(cuid())
+  messageId    String
+  taskSystem   String
+  taskId       String
+  direction    String   @default("message_to_task")
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  message CkmChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([taskSystem, taskId])
+}
+
+model CkmMessageEmbedding {
+  messageId       String                      @id
+  embedding       Unsupported("vector(1536)")
+  provider        String                      @default("openai")
+  model           String                      @default("text-embedding-3-small")
+  lastReindexedAt DateTime                    @default(now())
+  status          String                      @default("ready")
+  attempts        Int                         @default(0)
+
+  message CkmChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model CkmNotificationSetting {
+  id           String                  @id @default(cuid())
+  membershipId String
+  channel      String
+  level        String                  @default("mentions")
+  quietHours   Json?
+  digest       Json?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  membership CkmWorkspaceMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, channel])
+}
+
+model CkmAuditLog {
+  id           String        @id @default(cuid())
+  actorId      String
+  workspaceId  String?
+  roomId       String?
+  action       String
+  resourceType String
+  resourceId   String
+  payload      Json?
+  occurredAt   DateTime      @default(now())
+
+  workspace CkmWorkspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  room      CkmChatRoom?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@index([resourceType, resourceId])
+  @@index([actorId, occurredAt])
+}
